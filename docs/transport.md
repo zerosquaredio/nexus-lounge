@@ -24,7 +24,7 @@ is solved by the transport layer described here, not by AT.
 - The terminal session runs over a **WebSocket**: an HTTPS request upgraded to
   a persistent, bidirectional connection.
 - Clients:
-  - **Web terminal:** a browser terminal (e.g. xterm.js) speaking the BBS
+  - **Web terminal:** enig-term, ENiGMA½'s browser terminal, speaking the
     terminal protocol over WebSocket. When the BBS runs behind the hub, the
     hub serves this client ([hub.md](hub.md) §4).
   - **Native client:** a terminal app speaking the same WebSocket protocol.
@@ -32,6 +32,9 @@ is solved by the transport layer described here, not by AT.
   `/cb/...` webhook routes.
 
 ### 2.1 Endpoints
+
+Logical endpoints. ENiGMA½'s actual routes and ports are mapped in
+[enigma_integration.md](enigma_integration.md) §3.3 and §6.
 
 | Path | Purpose |
 |---|---|
@@ -44,12 +47,13 @@ is solved by the transport layer described here, not by AT.
 
 ### 2.2 Terminal protocol
 
-To be specified. Requirements:
+Use ENiGMA½'s existing WebSocket login server: the terminal byte stream
+(telnet-style) carried over WebSocket, as used by enig-term and other
+WebSocket-capable BBS terminals.
 
-- Carries terminal I/O plus control messages (resize, keepalive, session
-  events such as "handoff completed").
-- **UTF-8 on the wire.** Classic ANSI art in CP437 is converted to UTF-8
-  server-side. Clients that can't render UTF-8 are a non-goal for v1.
+- CP437 and ANSI are passed through as-is; enig-term renders CP437 fonts
+  natively, so no UTF-8 conversion is needed.
+- Terminal size and capabilities are negotiated in-band, as on telnet.
 - Keepalive pings so tunnels and proxies don't drop idle sessions.
 
 ## 3. Reachability options
@@ -77,7 +81,7 @@ tooling, or costs extra. Browsers can only speak HTTP/WebSocket.
 
 ## 4. Optional transport: SSH
 
-- Sysops who can expose a port may enable an SSH listener.
+- Sysops who can expose a port may enable ENiGMA½'s SSH login server.
 - SSH sessions get the same terminal experience; authentication uses the
   bound SSH key ([attestation.md](attestation.md) §3.2) after an initial
   OAuth login via browser handoff.
@@ -85,8 +89,10 @@ tooling, or costs extra. Browsers can only speak HTTP/WebSocket.
 
 ## 5. Telnet
 
-Not supported for authenticated sessions; it is plaintext. May be revisited
-as a read-only guest mode for retro clients.
+ENiGMA½ includes a telnet server, and sysops may keep it for retro clients.
+Telnet is plaintext, so **AT login is not offered over telnet**
+([enigma_integration.md](enigma_integration.md) §3.4). Sysops should restrict
+telnet to guest or local use.
 
 ## 6. Backlog: peer-to-peer
 
@@ -102,7 +108,5 @@ Not in v1. A possible future direction:
 
 ## 7. Open questions
 
-- Terminal protocol framing: a custom JSON/binary protocol, or an existing one
-  (e.g. ttyd's protocol, SSH-over-WebSocket)?
-- Whether the web terminal should be served by each BBS when not behind the hub,
-  or always loaded from a canonical project URL.
+- Whether enig-term should be served by each BBS when not behind the hub
+  (ENiGMA½ can already do this), or always loaded from a canonical project URL.

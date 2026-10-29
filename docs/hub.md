@@ -94,7 +94,10 @@ that subdomain.
 
 To keep the hub from becoming general web hosting (and attractive for
 phishing or malware), it forwards **only** the BBS endpoints defined in
-[transport.md](transport.md) §2.1:
+[transport.md](transport.md) §2.1. Paths below are logical; for ENiGMA½ the
+OAuth, handoff, and verifier routes live under `/_enig/atproto/` and
+`/_enig/verify/` ([enigma_integration.md](enigma_integration.md) §3.3), and
+the hub forwards those prefixes only.
 
 | Path | Forwarded? | Notes |
 |---|---|---|
@@ -109,7 +112,8 @@ phishing or malware), it forwards **only** the BBS endpoints defined in
 | Anything else | No | 404 |
 
 Serving the web terminal from the hub means users always run a known client,
-and a BBS cannot serve arbitrary pages under the hub domain.
+and a BBS cannot serve arbitrary pages under the hub domain. The hub serves
+a pinned release of enig-term, configured to connect to the BBS's `/ws`.
 
 ### 4.1 Handle verification
 

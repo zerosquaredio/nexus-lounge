@@ -24,6 +24,9 @@ published to AT so Bluesky users, the hub, and any directory can read it.
   as `@coolbbs.hub.example` ([hub.md](hub.md) §2).
 - The BBS writes to this account directly over outbound HTTPS, never through
   the hub ([hub.md](hub.md) §1.1).
+- In ENiGMA½, a publishing module holds this session, and the event scheduler
+  drives listing and status updates
+  ([enigma_integration.md](enigma_integration.md) §7).
 - The BBS server holds this account's OAuth session.
   - Unlike user logins (identity scope only), this session needs **write**
     access to the BBS's own repo.

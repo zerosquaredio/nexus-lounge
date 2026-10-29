@@ -15,6 +15,9 @@ database. Nothing is written to users' AT repositories, so nothing is public
 unless the BBS chooses to publish it. The BBS's own public output (listings,
 announcements, events, status) is covered in [publishing.md](publishing.md).
 
+This spec is BBS-neutral. How it maps onto ENiGMA½ (login type, routes,
+groups as v1 attestations) is in [enigma_integration.md](enigma_integration.md).
+
 The design separates two concerns:
 
 | Concern | Question | Mechanism |
@@ -222,8 +225,6 @@ interface as future verifiers, so the plugin system is in use from day one.
 
 ## 10. Open questions
 
-- Implementation language (Go vs. TypeScript, which has the most mature AT
-  OAuth library).
 - Attestation expiry defaults per verifier.
 - Grandfathering behavior when the global policy changes: per-change
   sysop choice, or a fixed rule?

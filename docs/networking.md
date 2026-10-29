@@ -9,6 +9,10 @@ BBSes can connect to each other to share message boards, files, and games,
 in the tradition of FidoNet-style networks. Sysops agree to peer, each BBS
 logs into the other as a peer, and the two exchange data over a WebSocket.
 
+In ENiGMA½, peering is implemented as a scanner/tosser message network
+module alongside the existing FidoNet/binkp and ActivityPub ones
+([enigma_integration.md](enigma_integration.md) §7).
+
 Networking is planned in phases:
 
 | Phase | Capability |

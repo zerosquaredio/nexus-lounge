@@ -5,9 +5,11 @@ identity.
 
 ## Architecture in brief
 
-- **BBS:** a standalone server run by a sysop, often behind a home firewall.
-  Serves a terminal over HTTPS/WebSocket. Uses AT for user login and for
-  publishing its own public records, both via direct outbound HTTPS.
+- **BBS:** [ENiGMA½](https://github.com/NuSkooler/enigma-bbs) with AT
+  Protocol modules ([enigma_integration.md](enigma_integration.md)), run by a
+  sysop, often behind a home firewall. Serves a terminal over WebSocket
+  (enig-term in the browser) and optionally SSH. Uses AT for user login and
+  for publishing its own public records, both via direct outbound HTTPS.
 - **Hub (optional):** a standalone public server that relays *inbound*
   traffic (terminal sessions, OAuth callbacks, webhooks) to BBSes over tunnels
   the BBSes open outward, plus a directory, BBS handles, and observed status.
@@ -16,6 +18,7 @@ identity.
 
 | Doc | Covers |
 |---|---|
+| [enigma_integration.md](enigma_integration.md) | How the specs map onto ENiGMA½: login type, routes, groups as attestations, transport, upstream strategy |
 | [attestation.md](attestation.md) | User authentication (AT OAuth), credential binding, attestations, access policies, verifier plugins |
 | [transport.md](transport.md) | HTTPS/WebSocket transport, tunnels and reachability, optional SSH, P2P backlog |
 | [hub.md](hub.md) | Optional central hub: tunnel relay, sysop registration, routing, directory |
@@ -32,6 +35,8 @@ identity.
 | **BBS** | **Bulletin Board Server**: this project's server, run by a sysop. (Traditionally "Bulletin Board System"; the server reading parallels AT's PDS.) |
 | **Hub** | The optional public server that relays inbound traffic to BBSes over tunnels and provides the directory and BBS handles ([hub.md](hub.md)) |
 | **Sysop** | The person who runs a BBS |
+| **ENiGMA½** | The open-source Node.js BBS software this project builds on |
+| **enig-term** | ENiGMA½'s browser terminal (CP437 fonts, ANSI), connecting over WebSocket |
 | **Attestation** | A record that a verifier vouched for a DID ([attestation.md](attestation.md) §4) |
 | **Verifier** | A plugin that checks something about a user and issues attestations ([attestation.md](attestation.md) §6) |
 | **Tunnel** | An outbound connection from a BBS that lets inbound traffic reach it without opening firewall ports ([transport.md](transport.md) §3) |
