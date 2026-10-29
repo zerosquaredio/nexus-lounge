@@ -1,6 +1,7 @@
 # BBS Design Docs
 
-A terminal-style BBS that uses the AT Protocol for identity.
+A terminal-style BBS (Bulletin Board Server) that uses the AT Protocol for
+identity.
 
 ## Architecture in brief
 
@@ -19,3 +20,32 @@ A terminal-style BBS that uses the AT Protocol for identity.
 | [transport.md](transport.md) | HTTPS/WebSocket transport, tunnels and reachability, optional SSH, P2P backlog |
 | [hub.md](hub.md) | Optional central hub: tunnel relay, sysop registration, routing, directory |
 | [publishing.md](publishing.md) | The BBS's own AT account and public records: listing, events, status, announcements |
+| [at_communities.md](at_communities.md) | Where AT development happens: code hosting, shared schemas, community, developer references |
+
+## Glossary
+
+### Project terms
+
+| Term | Meaning |
+|---|---|
+| **BBS** | **Bulletin Board Server**: this project's server, run by a sysop. (Traditionally "Bulletin Board System"; the server reading parallels AT's PDS.) |
+| **Hub** | The optional public server that relays inbound traffic to BBSes over tunnels and provides the directory and BBS handles ([hub.md](hub.md)) |
+| **Sysop** | The person who runs a BBS |
+| **Attestation** | A record that a verifier vouched for a DID ([attestation.md](attestation.md) §4) |
+| **Verifier** | A plugin that checks something about a user and issues attestations ([attestation.md](attestation.md) §6) |
+| **Tunnel** | An outbound connection from a BBS that lets inbound traffic reach it without opening firewall ports ([transport.md](transport.md) §3) |
+
+### AT Protocol terms
+
+| Term | Meaning |
+|---|---|
+| **PDS** | **Personal Data Server**: hosts users' accounts, their data repositories, and their login (OAuth authorization server). Accounts can move between PDSes. |
+| **DID** | Decentralized Identifier: an account's permanent ID (e.g. `did:plc:abc123`). Members are keyed by DID. |
+| **Handle** | An account's human-readable name (e.g. `@alice.bsky.social`). Display only; can change. |
+| **Repo** | An account's public, signed store of records, hosted on its PDS |
+| **Lexicon** | A schema defining record types and API methods |
+| **NSID** | Namespaced identifier for a Lexicon, a reversed domain (e.g. `com.yourbbs.listing`) |
+| **XRPC** | AT's HTTPS-based API convention (`/xrpc/<NSID>`) |
+| **Relay / firehose** | The relay aggregates repo changes from all PDSes into a stream, the firehose |
+| **Jetstream** | A lightweight JSON version of the firehose |
+| **AppView** | A service that indexes records from the firehose to serve an application (e.g. Bluesky's timelines) |
