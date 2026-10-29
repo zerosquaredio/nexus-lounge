@@ -101,6 +101,7 @@ phishing or malware), it forwards **only** the BBS endpoints defined in
 | `/` | No | Served by the hub: BBS info page plus the **hub-provided web terminal** |
 | `/.well-known/atproto-did` | No | Served by the hub: returns the BBS account's DID for handle verification (§4.1) |
 | `/ws` | Yes | Terminal WebSocket |
+| `/peer` | Yes | BBS-to-BBS peering WebSocket ([networking.md](networking.md) §2) |
 | `/oauth/client-metadata.json` | Yes | Response validated as JSON |
 | `/oauth/callback` | Yes | Responses limited to redirects or minimal pages |
 | `/login/<code>` | Yes | Browser handoff landing |

@@ -36,6 +36,7 @@ is solved by the transport layer described here, not by AT.
 | Path | Purpose |
 |---|---|
 | `/ws` | Terminal session (WebSocket) |
+| `/peer` | BBS-to-BBS peering (WebSocket; [networking.md](networking.md)) |
 | `/oauth/client-metadata.json` | AT OAuth client metadata (the `client_id`) |
 | `/oauth/callback` | AT OAuth redirect target |
 | `/login/<code>` | Browser handoff landing page ([attestation.md](attestation.md) §7.1) |

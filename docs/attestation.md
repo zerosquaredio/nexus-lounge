@@ -199,6 +199,7 @@ It is used by AT OAuth (§3.1) and by any verifier needing a browser
 | `sysop-approval` | New users land in a limited area until the sysop approves them | Early |
 | `vouch` | An existing member vouches for a new one | Optional |
 | `account-host` | Account must be hosted on a specific server (requires running our own PDS). Check the OAuth issuer on **every** login, since accounts can migrate. | Later, if needed |
+| `peer-attested` | Honors attestations issued by a trusted peer BBS, for shared membership in clusters ([networking.md](networking.md) §8) | Later |
 | `stripe-card` | Payment method on file via Stripe Checkout | Later |
 | `id-check` | Identity verification via a provider (e.g. Stripe Identity) | Later |
 

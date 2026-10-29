@@ -20,6 +20,7 @@ identity.
 | [transport.md](transport.md) | HTTPS/WebSocket transport, tunnels and reachability, optional SSH, P2P backlog |
 | [hub.md](hub.md) | Optional central hub: tunnel relay, sysop registration, routing, directory |
 | [publishing.md](publishing.md) | The BBS's own AT account and public records: listing, events, status, announcements |
+| [networking.md](networking.md) | BBS-to-BBS peering: shared boards, files, and games; clusters of BBSes acting as one |
 | [at_communities.md](at_communities.md) | Where AT development happens: code hosting, shared schemas, community, developer references |
 
 ## Glossary
