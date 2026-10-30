@@ -1,7 +1,18 @@
-# BBS Design Docs
+# Nexus Lounge Design Docs
 
-A terminal-style BBS (Bulletin Board Server) that uses the AT Protocol for
-identity.
+**Nexus Lounge** is a terminal-style BBS (Bulletin Board Server) network that
+uses the AT Protocol for identity.
+
+## Names and domains
+
+| Use | Value | Changeable? |
+|---|---|---|
+| Project name | Nexus Lounge | Yes |
+| Record type names (NSIDs) | `io.zerosquared.bbs.*` | **No.** Shared by every BBS, hub, and directory |
+| Test hub | `*.hub.zerosquared.io` | Yes; any hub can use its own domain |
+| Public domain | Not yet chosen | Yes |
+
+`zerosquared.io` is registered at Gandi; its DNS is hosted by WordPress.com.
 
 ## Architecture in brief
 
@@ -54,7 +65,7 @@ identity.
 | **Handle** | An account's human-readable name (e.g. `@alice.bsky.social`). Display only; can change. |
 | **Repo** | An account's public, signed store of records, hosted on its PDS |
 | **Lexicon** | A schema defining record types and API methods |
-| **NSID** | Namespaced identifier for a Lexicon, a reversed domain (e.g. `com.yourbbs.listing`) |
+| **NSID** | Namespaced identifier for a Lexicon, a reversed domain (e.g. `io.zerosquared.bbs.listing`) |
 | **XRPC** | AT's HTTPS-based API convention (`/xrpc/<NSID>`) |
 | **Relay / firehose** | The relay aggregates repo changes from all PDSes into a stream, the firehose |
 | **Jetstream** | A lightweight JSON version of the firehose |

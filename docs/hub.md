@@ -85,7 +85,13 @@ that subdomain.
 ## 3. Routing
 
 - Wildcard DNS: `*.hub.example` → hub.
-- Wildcard TLS certificate on the hub.
+- TLS certificates, either:
+  - **on-demand** (default): the hub obtains a certificate for each BBS
+    subdomain on first use, using ordinary HTTP validation, after checking the
+    name is registered. Works with any DNS provider that allows a wildcard
+    record; or
+  - **wildcard**: one certificate for `*.hub.example`, which requires a DNS
+    provider with an API for DNS-01 validation.
 - The hub selects the target tunnel by the request's `Host` header.
 - If the BBS's tunnel is not connected, the hub returns a status page using
   the BBS's latest status ([publishing.md](publishing.md) §3.3).
@@ -140,7 +146,7 @@ DID.
 - Any other directory can be built from the same public records; the hub's
   directory is not privileged.
 - Optional: expose the directory as XRPC methods (e.g.
-  `com.yourbbs.directory.list`) under a `did:web` for the hub, so AT clients
+  `io.zerosquared.bbs.directory.list`) under a `did:web` for the hub, so AT clients
   can call it directly or via their account server's service proxying
   (`atproto-proxy` header, with service auth). References: the atproto.com
   specs (Lexicon, XRPC, service proxying, service auth) and the
@@ -154,8 +160,8 @@ its own AT account ([publishing.md](publishing.md) §3.3).
 
 ## 7. Trust and privacy
 
-- **The hub can read traffic in v1.** TLS terminates at the hub (wildcard
-  certificate). This must be stated plainly to sysops and users, as with
+- **The hub can read traffic in v1.** TLS terminates at the hub (the hub
+  holds the certificates, on-demand or wildcard). This must be stated plainly to sysops and users, as with
   Cloudflare Tunnel.
 - Future options for end-to-end privacy:
   - TLS passthrough by SNI, with each BBS holding its own certificate.

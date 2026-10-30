@@ -275,7 +275,7 @@ Confirm which is right before using `AS` in rules.
 | Implements | The BBS's own AT account (OAuth with write scopes); Bluesky announcement posts; events; listing and status records ([publishing.md](publishing.md)); event-scheduler jobs for updates |
 | Track | Split: **generic Bluesky announcement posting goes upstream**; the **listing and status records are project-specific** (our record types), so fork-only |
 | Config | `atproto.publishing.*` |
-| Depends on | F1; project domain chosen (for record type names) |
+| Depends on | F1; record type names (`io.zerosquared.bbs.*`, decided) |
 | Done when | Announcements appear on Bluesky; listing and status records are published and updated on schedule; invite notifications are delivered or handed to the sysop |
 
 **Invite notifications** (for F6 invites), in order of preference:
@@ -307,8 +307,8 @@ avoid the BBS account looking like a spam bot.
 | Implements | Tunnel relay, sysop registration, routing, allowed endpoints, handle verification, directory, observed status, serving enig-term ([hub.md](hub.md)). Planned in detail in [hub_development_plan.md](hub_development_plan.md). |
 | Track | **This repo** (`hub/`) |
 | Config | Hub's own config |
-| Depends on | F10; project domain |
-| Done when | A BBS behind a home firewall registers, gets `name.hub.example`, and users can connect and log in through it |
+| Depends on | F10; test hub domain (`hub.zerosquared.io`, decided) |
+| Done when | A BBS behind a home firewall registers, gets `name.hub.zerosquared.io`, and users can connect and log in through it |
 
 ### F12. Peering (networking phase 1)
 
@@ -417,7 +417,6 @@ In order, each small and independently reviewable:
 - **Node version.** Plain `require()` of the ESM-only library needs Node
   22.12+; ENiGMA½ currently allows `>=22`. Use `import()`, or propose raising
   the minimum.
-- **Project domain.** Needed before F9, F11, and any published record types.
 - **Persistent login for enig-term users.** Addressed by F14 without enig-term
   changes, if the cookie approach holds up in testing.
 - **Bluesky DM reach and permissions** (F9). DMs often won't be delivered

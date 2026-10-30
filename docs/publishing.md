@@ -35,11 +35,15 @@ published to AT so Bluesky users, the hub, and any directory can read it.
 
 ## 3. Record types
 
-The NSID root `com.yourbbs` is a placeholder until the project domain is
-chosen. Final Lexicon schemas will live in a `lexicons/` directory; the
-fields below are drafts.
+Record types use the NSID root **`io.zerosquared.bbs`**, under the
+project-controlled domain `zerosquared.io` (authority `bbs.zerosquared.io`).
+The root is deliberately independent of the project name (Nexus Lounge), so a
+rename doesn't affect published records. Final Lexicon schemas will live in a
+`lexicons/` directory; the fields below are drafts. When the schemas are
+published, a DNS TXT record on `bbs.zerosquared.io` will point to where they
+are hosted, per AT's Lexicon resolution rules (to be confirmed at that time).
 
-### 3.1 Listing: `com.yourbbs.listing`
+### 3.1 Listing: `io.zerosquared.bbs.listing`
 
 One record per BBS (record key `self`), in the BBS's repo.
 
@@ -68,14 +72,14 @@ Status comes from two sources:
 
 | Kind | Record | Published by | Purpose |
 |---|---|---|---|
-| **Declared** | `com.yourbbs.status` in the BBS's repo | BBS / sysop tools | Planned maintenance, notices |
-| **Observed** | `com.yourbbs.observedStatus` in the hub's repo | Hub | Tunnel connected or disconnected |
+| **Declared** | `io.zerosquared.bbs.status` in the BBS's repo | BBS / sysop tools | Planned maintenance, notices |
+| **Observed** | `io.zerosquared.bbs.observedStatus` in the hub's repo | Hub | Tunnel connected or disconnected |
 
 The split exists because a crashed BBS can't post its own outage. Status
 records live on the account host, not the BBS machine, so they remain readable
 while the BBS is offline.
 
-`com.yourbbs.status` (record key `self`, overwritten on change):
+`io.zerosquared.bbs.status` (record key `self`, overwritten on change):
 
 | Field | Type | Notes |
 |---|---|---|
@@ -84,7 +88,7 @@ while the BBS is offline.
 | `until` | datetime | Optional expected end |
 | `updatedAt` | datetime | |
 
-`com.yourbbs.observedStatus` (in the hub's repo, one record per BBS):
+`io.zerosquared.bbs.observedStatus` (in the hub's repo, one record per BBS):
 
 | Field | Type | Notes |
 |---|---|---|
@@ -118,7 +122,6 @@ are mirrored to Bluesky from the BBS account.
 
 ## 6. Open questions
 
-- Project domain for the NSID root.
 - Whether BBS accounts should be created by the hub (hub-hosted PDS) or
   brought by the sysop.
 - Exact OAuth permission scopes for the BBS account.

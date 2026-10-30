@@ -49,7 +49,7 @@ Being authenticated never implies being admitted. Code must not treat
    (e.g. `alice.bsky.social`).
 2. BBS resolves handle → DID → PDS → authorization server.
 3. BBS starts an OAuth request and displays a short URL in the terminal:
-   `Open https://yourbbs.net/login/7F3K in a browser to approve`
+   `Open https://coolbbs.hub.example/_enig/atproto/login/7F3K in a browser to approve`
 4. User approves on their own account host, which redirects to the BBS web
    callback.
 5. The callback matches the request to the waiting terminal session and
@@ -225,7 +225,7 @@ interface as future verifiers, so the plugin system is in use from day one.
 - Bans are keyed by DID. Combined with a payment or ID verifier, a banned
   person who returns under a new account must verify again.
 - Optional cosmetic badge: verified members may be given a handle under the
-  BBS domain (e.g. `alice.yourbbs.net`). This is for display only; the
+  BBS domain (e.g. `alice.coolbbs.example`). This is for display only; the
   attestation table remains the authority.
 - Collect the minimum PII needed; it stays inside the plugin that requires it.
 
