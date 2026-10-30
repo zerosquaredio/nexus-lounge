@@ -18,6 +18,7 @@ identity.
 
 | Doc | Covers |
 |---|---|
+| [development_plan.md](development_plan.md) | Features, delivery tracks (upstream / fork / mods / this repo), configuration model, milestones, PR sequence |
 | [enigma_integration.md](enigma_integration.md) | How the specs map onto ENiGMA½: login type, routes, groups as attestations, transport, upstream strategy |
 | [attestation.md](attestation.md) | User authentication (AT OAuth), credential binding, attestations, access policies, verifier plugins |
 | [transport.md](transport.md) | HTTPS/WebSocket transport, tunnels and reachability, optional SSH, P2P backlog |
@@ -34,7 +35,9 @@ identity.
 |---|---|
 | **BBS** | **Bulletin Board Server**: this project's server, run by a sysop. (Traditionally "Bulletin Board System"; the server reading parallels AT's PDS.) |
 | **Hub** | The optional public server that relays inbound traffic to BBSes over tunnels and provides the directory and BBS handles ([hub.md](hub.md)) |
-| **Sysop** | The person who runs a BBS |
+| **Sysop** | A person who runs a BBS. In ENiGMA½: root plus members of the `sysops` group |
+| **Root** | User #1, permanently a sysop, with a few root-only powers (e.g. reading all private mail) |
+| **Provisional user** | An authenticated user admitted with limited access until approved ([attestation.md](attestation.md) §5) |
 | **ENiGMA½** | The open-source Node.js BBS software this project builds on |
 | **enig-term** | ENiGMA½'s browser terminal (CP437 fonts, ANSI), connecting over WebSocket |
 | **Attestation** | A record that a verifier vouched for a DID ([attestation.md](attestation.md) §4) |

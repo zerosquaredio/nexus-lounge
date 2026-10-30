@@ -182,9 +182,10 @@ Implements [transport.md](transport.md) and [hub.md](hub.md).
 
 ## 8. Open questions
 
-- Persistent login for enig-term users: pass a token from the browser into the
-  terminal session (would need enig-term support), or require OAuth each
-  time.
+- Persistent login for enig-term users: planned as web sign-in with a session
+  cookie read on the WebSocket connection, without enig-term changes
+  ([development_plan.md](development_plan.md) F14). To be confirmed in
+  testing.
 - Whether upstream will accept AT login, and in what shape.
 - Username derivation rules for handles (length limits, allowed characters,
   collisions).

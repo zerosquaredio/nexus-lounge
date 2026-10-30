@@ -151,6 +151,11 @@ Policy changes:
   are **grandfathered** (keep access) or must re-verify.
 - Users who lack a required attestation are offered the matching verifiers'
   flows instead of a bare "access denied."
+- **Provisional access:** optionally, users who are authenticated but don't
+  meet the global policy are admitted with a limited role (`provisional`)
+  instead of being refused. They see only areas explicitly opened to that
+  role until promoted, manually by the sysop or automatically by rules (e.g.
+  account age plus post count).
 
 ## 6. Verifier plugin interface
 
@@ -198,6 +203,7 @@ It is used by AT OAuth (§3.1) and by any verifier needing a browser
 | Verifier | Description | Phase |
 |---|---|---|
 | `open` | Any authenticated AT account | v1 |
+| `invite` | Sysop invites a specific handle; the invite is bound to that DID, so there is no secret to leak. Grants the invite's groups on first login. | Early |
 | `invite-code` | Sysop-issued single-use or limited-use codes, redeemed on first login | v1 / early |
 | `sysop-approval` | New users land in a limited area until the sysop approves them | Early |
 | `vouch` | An existing member vouches for a new one | Optional |
