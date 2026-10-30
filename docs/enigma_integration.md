@@ -106,8 +106,23 @@ AT login.
 
 ### 3.5 OAuth library
 
-`@atproto/oauth-client-node` may be ESM-only. ENiGMA½ is CommonJS, so load it
-with dynamic `import()`. **Verify before starting.**
+Verified 2026-10-29 (spike on `spike/atproto-oauth`, Node 24.19,
+`@atproto/oauth-client-node` 0.5.13):
+
+- The library is **ESM-only** (`"type": "module"`, no CommonJS build).
+- Plain `require()` from ENiGMA½'s CommonJS code **works**, via Node's
+  built-in `require(esm)` support (unflagged since Node 22.12). Dynamic
+  `import()` also works.
+- A real authorization request against `bsky.social` succeeded using a
+  loopback development client (`http://localhost` client ID, no hosted
+  metadata or keys), returning an approval URL. Loopback clients are the way
+  to develop locally before the BBS has a public HTTPS address.
+- ENiGMA½'s `engines` field allows Node `>=22`. Node 22.0–22.11 lacks
+  unflagged `require(esm)`, so either use `import()` or propose raising the
+  minimum to `>=22.12`.
+- The library warns when no `requestLock` is configured (concurrent token
+  refreshes can revoke a session). ENiGMA½ runs as a single process, so an
+  in-process lock is sufficient.
 
 ## 4. Credentials (subsequent logins)
 
