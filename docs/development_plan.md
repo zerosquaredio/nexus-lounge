@@ -304,7 +304,7 @@ avoid the BBS account looking like a spam bot.
 
 | | |
 |---|---|
-| Implements | Tunnel relay, sysop registration, routing, allowed endpoints, handle verification, directory, observed status, serving enig-term ([hub.md](hub.md)) |
+| Implements | Tunnel relay, sysop registration, routing, allowed endpoints, handle verification, directory, observed status, serving enig-term ([hub.md](hub.md)). Planned in detail in [hub_development_plan.md](hub_development_plan.md). |
 | Track | **This repo** (`hub/`) |
 | Config | Hub's own config |
 | Depends on | F10; project domain |
