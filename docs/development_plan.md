@@ -68,7 +68,7 @@ Proposed new `config.hjson` settings, modeled on the existing top-level
 `activityPub` block. Names are proposals until agreed with the maintainer.
 
 ```hjson
-atproto: {
+atProto: {
     enabled: false                  //  master switch for all AT features
 
     oauth: {
@@ -120,7 +120,7 @@ users: {
 contentServers: {
     web: {
         handlers: {
-            atproto: { enabled: false } //  OAuth metadata and callback routes
+            atProto: { enabled: false } //  OAuth metadata and callback routes
         }
     }
 }
@@ -140,17 +140,17 @@ and what "done" means.
 |---|---|
 | Implements | Dev environment, library spike, maintainer contact |
 | Status | Dev environment done (Ubuntu VM, `~/dev/enigma-bbs`, tests passing). OAuth spike done ([enigma_integration.md](enigma_integration.md) §3.5). Maintainer discussion **not yet opened**. |
-| Done when | The maintainer has seen the proposal and answered the questions in [enigma_integration.md](enigma_integration.md) §8 (core vs. `mods/`, dependency, database, names, PR split) |
+| Done when | The maintainer has seen the proposal and answered the questions in [enigma_integration.md](enigma_integration.md) §8 (welcome in core, dependency, PR split) |
 
 ### F1. AT identity library
 
 | | |
 |---|---|
-| Implements | `core/atproto/`: handle and DID resolution; a callback-style adapter around `@atproto/oauth-client-node` (Promises stay inside the adapter), with SQLite-backed state and session stores and an in-process refresh lock; library loaded with `import()` at startup only when enabled, so Node 22 stays the minimum ([enigma_integration.md](enigma_integration.md) §3.6) |
+| Implements | `core/atproto/`: handle and DID resolution; a callback-style adapter around `@atproto/oauth-client-node` (Promises stay inside the adapter), with state and session stores in a separate `atproto` database (set up like ActivityPub's) and an in-process refresh lock; library loaded with `import()` at startup only when enabled, so Node 22 stays the minimum ([enigma_integration.md](enigma_integration.md) §3.6) |
 | Track | **Upstream** |
-| Config | `atproto.enabled`, `atproto.oauth.*` |
+| Config | `atProto.enabled`, `atProto.oauth.*` |
 | Depends on | F0 |
-| Done when | Unit tests cover resolution and store behavior; nothing loads when `atproto.enabled` is false; `npm test` passes |
+| Done when | Unit tests cover resolution and store behavior; the OAuth library is not loaded when `atProto.enabled` is false (the empty database is still created, as ActivityPub's is); `npm test` passes |
 
 ### F2. Browser handoff service
 
@@ -168,7 +168,7 @@ and what "done" means.
 |---|---|
 | Implements | `atproto` login type in `authenticateFactor1`; member DID stored as a user property and used for lookup; username derived from handle with collision handling; first-login user creation; `atprotoLogin` menu module (enter handle, show handoff URL, wait); web handler for client metadata and callback under `/_enig/atproto/`; secure-connection check (ACS `SC`); loopback mode for development |
 | Track | **Upstream** |
-| Config | `atproto.login.*`, `contentServers.web.handlers.atproto.enabled`, menu template entries (commented out) |
+| Config | `atProto.login.*`, `contentServers.web.handlers.atProto.enabled`, menu template entries (commented out) |
 | Depends on | F1, F2 |
 | Done when | A user can log in with a Bluesky account from enig-term and SSH; logging in again finds the same user by DID after a handle change; AT login is refused on telnet; root cannot be claimed by any DID other than `rootDid`; tests cover username derivation, the root safeguard, and the login path; sysop docs written |
 
@@ -179,7 +179,7 @@ Bluesky account."
 such as reading all private mail. On a fresh install, the first AT login would
 otherwise become root. F3 therefore supports two setups:
 
-- `atproto.login.rootDid` names the sysop's DID; only that DID can create
+- `atProto.login.rootDid` names the sysop's DID; only that DID can create
   user #1, and AT login refuses to create user #1 for anyone else.
 - Or the sysop creates root locally with `oputil` and links their DID to it
   (an `oputil user` subcommand to set the DID property).
@@ -215,7 +215,7 @@ support in terminals). The smoother sign-in-first flow is F14.
 |---|---|
 | Implements | Verifier interface ([attestation.md](attestation.md) §6); v1 attestations as groups ([enigma_integration.md](enigma_integration.md) §5); verifiers `open`, `invite`, `inviteCode`, `sysopApproval`; provisional access; global policy checked after AT login; users without a qualifying attestation are offered the matching verifier flow |
 | Track | `open` and `sysopApproval` go **upstream with F3**. The **verifier framework, `invite`, `inviteCode`, and provisional access** are proposed upstream; fork-only if declined |
-| Config | `atproto.admission.*` |
+| Config | `atProto.admission.*` |
 | Depends on | F3; F9 for sending invite notifications |
 | Done when | Each verifier adds the expected groups; invites work only for the invited DID; provisional users can reach only areas opened to them; policy changes take effect without restart; invite codes are single- or limited-use as configured |
 
@@ -274,7 +274,7 @@ Confirm which is right before using `AS` in rules.
 |---|---|
 | Implements | The BBS's own AT account (OAuth with write scopes); Bluesky announcement posts; events; listing and status records ([publishing.md](publishing.md)); event-scheduler jobs for updates |
 | Track | Split: **generic Bluesky announcement posting goes upstream**; the **listing and status records are project-specific** (our record types), so fork-only |
-| Config | `atproto.publishing.*` |
+| Config | `atProto.publishing.*` |
 | Depends on | F1; record type names (`io.zerosquared.bbs.*`, decided) |
 | Done when | Announcements appear on Bluesky; listing and status records are published and updated on schedule; invite notifications are delivered or handed to the sysop |
 
@@ -331,7 +331,7 @@ in detail until F12 is in use.
 |---|---|
 | Implements | A start page with "Sign in with Bluesky": OAuth in the same tab, then a session cookie for the BBS host; the page opens enig-term, whose WebSocket connection carries the cookie, and the BBS logs the user in directly, skipping the handle prompt. Later visits log in with one click. Solves persistent login for enig-term users ([enigma_integration.md](enigma_integration.md) §8). |
 | Track | **Upstream**, as a follow-up PR to F3 |
-| Config | `atproto.webSignIn.*` |
+| Config | `atProto.webSignIn.*` |
 | Depends on | F3; web and WebSocket servers reachable under one host name (direct, tunnel, or hub) |
 | Done when | A signed-in browser user reaches the BBS main menu without a login prompt; connections from other sites' pages are refused; logout and OAuth revocation invalidate the cookie |
 
@@ -392,7 +392,7 @@ list entry), because ENiGMA½'s `isSysOp()` actually means "is root."
 
 In order, each small and independently reviewable:
 
-1. `atproto` config block and the `core/atproto/` library (F1). Inert until
+1. `atProto` config block and the `core/atproto/` library (F1). Inert until
    enabled.
 2. Browser handoff service (F2).
 3. AT login type, login menu module, and web handler (F3), with docs and
