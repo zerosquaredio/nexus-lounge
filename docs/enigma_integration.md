@@ -1,7 +1,7 @@
 # ENiGMA½ Integration Spec
 
 Status: Draft
-Last updated: 2026-10-29
+Last updated: 2026-11-01
 
 ## 1. Decision
 
@@ -118,11 +118,31 @@ Verified 2026-10-29 (spike on `spike/atproto-oauth`, Node 24.19,
   metadata or keys), returning an approval URL. Loopback clients are the way
   to develop locally before the BBS has a public HTTPS address.
 - ENiGMA½'s `engines` field allows Node `>=22`. Node 22.0–22.11 lacks
-  unflagged `require(esm)`, so either use `import()` or propose raising the
-  minimum to `>=22.12`.
+  unflagged `require(esm)`, so we load the library with `import()` (§3.6).
 - The library warns when no `requestLock` is configured (concurrent token
   refreshes can revoke a session). ENiGMA½ runs as a single process, so an
   in-process lock is sufficient.
+
+### 3.6 Code conventions for `core/atproto/`
+
+Decided 2026-11-01. The goal is PRs that need no changes to ENiGMA½'s
+existing policies.
+
+- **Callback adapter.** `CONTRIBUTING.md` bans Promises and `async`/`await`
+  in production code, but the OAuth library's API is Promise-only. Promises
+  stay inside `core/atproto/`, which exposes only callback-style functions to
+  the rest of ENiGMA½. ENiGMA½ already wraps Promise-based libraries this way
+  (binkp, nntp, `bso_lock`).
+- **Stay on Node 22.** The library is loaded with `import()`, which works on
+  every Node 22 release, during a startup step that runs only when
+  `atproto.enabled` is true. No change to `engines` or `mise.toml`, and no
+  `UPGRADE.md` entry. If upstream later raises the minimum to 22.12, switching
+  to `require()` is a one-line change inside the adapter.
+- **Layout follows ActivityPub:** `core/atproto/` with snake_case files
+  (`settings.js`, `const.js`, `util.js`, ...), tests in
+  `test/atproto_*.test.js`, a top-level `atproto` config block plus
+  `contentServers.web.handlers.atproto`, new keys in `core/config/schema.js`
+  and the regenerated `misc/config.schema.json`.
 
 ## 4. Credentials (subsequent logins)
 
@@ -186,7 +206,35 @@ Implements [transport.md](transport.md) and [hub.md](hub.md).
   cookie read on the WebSocket connection, without enig-term changes
   ([development_plan.md](development_plan.md) F14). To be confirmed in
   testing.
-- Whether upstream will accept AT login, and in what shape.
+- Questions for the maintainer (F0). These can't be settled from the code:
+  1. **Welcome in core?** ActivityPub is the precedent: it lives in
+     `core/activitypub/`, off by default, with its own config, database, and
+     tests, and the maintainer wrote nearly all of it (124 of 138 commits).
+     Would AT login be welcome in core the same way, and would they rather
+     review our PRs or shape parts of it themselves? This decides how much of
+     the plan goes upstream versus staying in our fork.
+  2. **Dependency:** we propose `@atproto/oauth-client-node` as a regular
+     dependency, loaded only when `atproto.enabled` is true, the same way
+     `enigma-vamiga` and `v86` are installed for everyone but loaded only when
+     their doors are used. Sysops who don't use AT pay only disk space (about
+     5 MB). Alternatives are worse: npm `optionalDependencies` are still
+     installed by default, and an unlisted, manually installed package isn't
+     pinned by the lockfile and is pruned by the next `npm install`. Is that
+     acceptable?
+  3. **Database:** a separate `atproto` database file, like ActivityPub's, is
+     the natural fit, but `database.js` opens every database at startup. Open
+     it only when enabled (our preference, so nothing loads when off), or put
+     the tables in an existing database?
+  4. **Names** that end up in sysops' configs and user records, and are
+     breaking changes to rename later: config key `atproto` (the protocol's
+     spelling) or `atProto` (matching `activityPub`); user property
+     `atproto_did`; login type `atproto`.
+  5. **PR split:** F1 on its own is code nothing calls yet. One PR per
+     feature, F1 and F3 together as one "AT login" PR, or a draft PR showing
+     the whole path first?
+
+  For information, not a question: the Promise adapter and staying on Node 22
+  (§3.6).
 - Username derivation rules for handles (length limits, allowed characters,
   collisions).
 - Where the `/peer` listener lives (§7).

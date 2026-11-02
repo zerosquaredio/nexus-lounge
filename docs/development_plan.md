@@ -1,7 +1,7 @@
 # Development Plan
 
 Status: Draft
-Last updated: 2026-10-29
+Last updated: 2026-11-01
 
 This plan breaks the work into features, says where each one is delivered
 (upstream ENiGMA½, our fork, or this repo), and defines how sysops enable it.
@@ -140,13 +140,13 @@ and what "done" means.
 |---|---|
 | Implements | Dev environment, library spike, maintainer contact |
 | Status | Dev environment done (Ubuntu VM, `~/dev/enigma-bbs`, tests passing). OAuth spike done ([enigma_integration.md](enigma_integration.md) §3.5). Maintainer discussion **not yet opened**. |
-| Done when | The maintainer has seen the proposal and we know their preferences on config naming, module layout, and dependency policy |
+| Done when | The maintainer has seen the proposal and answered the questions in [enigma_integration.md](enigma_integration.md) §8 (core vs. `mods/`, dependency, database, names, PR split) |
 
 ### F1. AT identity library
 
 | | |
 |---|---|
-| Implements | `core/atproto/`: handle and DID resolution; a wrapper around `@atproto/oauth-client-node` with SQLite-backed state and session stores and an in-process refresh lock; lazy loading |
+| Implements | `core/atproto/`: handle and DID resolution; a callback-style adapter around `@atproto/oauth-client-node` (Promises stay inside the adapter), with SQLite-backed state and session stores and an in-process refresh lock; library loaded with `import()` at startup only when enabled, so Node 22 stays the minimum ([enigma_integration.md](enigma_integration.md) §3.6) |
 | Track | **Upstream** |
 | Config | `atproto.enabled`, `atproto.oauth.*` |
 | Depends on | F0 |
