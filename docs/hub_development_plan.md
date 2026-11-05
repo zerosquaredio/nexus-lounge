@@ -203,7 +203,7 @@ can't read traffic ([hub.md](hub.md) §7). Research item.
 ### H11. Hosted BBS accounts (later)
 
 A PDS running beside the hub to create BBS AT accounts automatically at
-registration ([hub.md](hub.md) §1.2, [publishing.md](publishing.md) §6).
+registration ([hub.md](hub.md) §1.2, [publishing.md](publishing.md) §7).
 
 ## 5. Milestones
 

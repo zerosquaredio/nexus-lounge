@@ -1,7 +1,7 @@
 # Hub Spec
 
 Status: Draft
-Last updated: 2026-10-29
+Last updated: 2026-11-04
 
 ## 1. Overview
 
@@ -43,7 +43,7 @@ connects to Bluesky's infrastructure only as a client (e.g. reading
 Jetstream).
 
 If the project later hosts BBS accounts itself ([publishing.md](publishing.md)
-§6), a standard PDS runs as a **separate** service alongside the hub, routed by
+§7), a standard PDS runs as a **separate** service alongside the hub, routed by
 hostname behind one reverse proxy:
 
 ```
@@ -140,13 +140,37 @@ DID.
 ## 5. Directory
 
 - The hub indexes BBS public records from the AT network (via Jetstream),
-  filtered to the project's record types ([publishing.md](publishing.md) §3).
-- It presents a browsable BBS list with name, description, status, and
-  upcoming events.
+  filtered to the project's record types ([publishing.md](publishing.md) §3),
+  plus the Bluesky posts of registered BBS accounts.
 - Any other directory can be built from the same public records; the hub's
   directory is not privileged.
-- Optional: expose the directory as XRPC methods (e.g.
-  `io.zerosquared.bbs.directory.list`) under a `did:web` for the hub, so AT clients
+
+### 5.1 What visitors see
+
+| Item | Source |
+|---|---|
+| BBSes connected now | The hub's own tunnel state (§6). BBSes not using the hub have only their declared status, plus an optional reachability check |
+| Name, description, how to connect, banner | `listing` record |
+| Rules and membership requirements | `listing` record (`rules`, `admission`); directory can filter by admission policy |
+| Status and notices | `status` and `observedStatus` records |
+| Stats | `stats` record, or live counts sent over the tunnel; **every stat off by default**, enabled per stat by the sysop ([publishing.md](publishing.md) §3.5) |
+| Advertisements | `ad` records, rotated by the hub with expiry and fairness between BBSes |
+| Upcoming events | Community calendar-event records |
+| Recent public posts and updates | The BBS account's Bluesky posts, including bridged boards |
+
+ANSI art is shown wherever a record carries it (banners, ads), using the web
+terminal's renderer, with the plain-text fallback otherwise
+([publishing.md](publishing.md) §3.7).
+
+The hub could also publish recent BBS updates as a Bluesky custom feed, so
+Bluesky users can follow them in their normal app (see the
+`bluesky-social/feed-generator` starter).
+
+### 5.2 XRPC
+
+- Optional: expose the directory as XRPC methods under a `did:web` for the
+  hub. Names follow AT's verb-first convention (e.g.
+  `io.zerosquared.bbs.directory.listBbses`), so AT clients
   can call it directly or via their account server's service proxying
   (`atproto-proxy` header, with service auth). References: the atproto.com
   specs (Lexicon, XRPC, service proxying, service auth) and the
@@ -188,3 +212,7 @@ its own AT account ([publishing.md](publishing.md) §3.3).
   of each BBS having its own `client_id`.
 - Subdomain naming rules (reserved names, reclaiming abandoned names).
 - Whether to support custom domains for BBSes behind the hub.
+- Whether visitors reach the directory as a web page at the hub's root, as a
+  BBS-style terminal front door (menus, BBS list, jump into a BBS), or both.
+  A terminal front door means the hub runs a small BBS-style app.
+- What counts as an "active" BBS (recent posts, users online, or connected).

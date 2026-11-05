@@ -143,7 +143,8 @@ Goals:
   the cluster survives a node going offline.
 - **Failover:** the cluster's listing advertises multiple node URLs; clients
   and the hub fall back to another node when one is down. This needs a
-  listing-record change (multiple `url`s, a cluster ID).
+  listing-record change (a cluster ID; the listing already allows several
+  `endpoints`).
 
 Hard problems to solve before building:
 
