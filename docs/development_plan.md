@@ -1,7 +1,7 @@
 # Development Plan
 
 Status: Draft
-Last updated: 2026-11-03
+Last updated: 2026-11-04
 
 This plan breaks the work into features, says where each one is delivered
 (upstream ENiGMA½, our fork, or this repo), and defines how sysops enable it.
@@ -139,7 +139,7 @@ and what "done" means.
 | | |
 |---|---|
 | Implements | Dev environment, library spike, maintainer contact |
-| Status | Dev environment done (Ubuntu VM, `~/dev/enigma-bbs`, tests passing). OAuth spike done ([enigma_integration.md](enigma_integration.md) §3.5). Maintainer discussion **not yet opened**. |
+| Status | Dev environment done (Ubuntu VM, `~/dev/enigma-bbs`, tests passing). OAuth spike done ([enigma_integration.md](enigma_integration.md) §3.5). Maintainer discussion **deferred** until a proof of concept works (§5.2). |
 | Done when | The maintainer has seen the proposal and answered the questions in [enigma_integration.md](enigma_integration.md) §8 (welcome in core, dependency, PR split) |
 
 ### F1. AT identity library
@@ -386,12 +386,16 @@ list entry), because ENiGMA½'s `isSysOp()` actually means "is root."
 | `master` | Mirrors upstream exactly; never committed to directly |
 | `feature/<name>` | One per upstream PR, branched from `master` |
 | `atproto-login` | Current working branch for M1; split into feature branches for PRs |
+| `pr/<nn>-<name>` (tags) | Annotated tags on `atproto-login` marking where each planned PR (§5.2) is complete; `nn` is its number in that list. A PR branch is cut from `master` with the commits up to its tag. Moved if the piece changes later |
 | `integration` | Our distribution: upstream plus every feature (including fork-only), used to run our own BBS |
 | `spike/*` | Throwaway experiments; never merged or pushed |
 
 ### 5.2 Planned upstream PRs
 
-In order, each small and independently reviewable:
+We are developing independently first, to get a working proof of concept
+before contacting the maintainer or opening PRs (decided 2026-11-04). The
+work is still structured so that these PRs can be cut from it later. In
+order, each small and independently reviewable:
 
 1. `atProto` config block and the `core/atproto/` library (F1). Inert until
    enabled.
@@ -410,8 +414,10 @@ In order, each small and independently reviewable:
 ## 6. Risks and open questions
 
 - **Maintainer acceptance.** Effectively a single maintainer; preferences on
-  naming, structure, and scope may reshape the PR list. Mitigated by opening
-  the discussion before PR 1.
+  naming, structure, and scope may reshape the PR list. Mitigated by
+  following existing conventions (ActivityPub's in particular) and opening
+  the discussion before PR 1; developing a proof of concept first means some
+  rework if the maintainer asks for a different shape.
 - **Dependency weight.** `@atproto/oauth-client-node` adds 34 packages
   (~38 MB in `node_modules`). Lazy loading keeps the cost off sysops who
   don't enable it, but upstream may still prefer it as an optional dependency.
