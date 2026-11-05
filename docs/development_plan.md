@@ -157,9 +157,10 @@ and what "done" means.
 
 | | |
 |---|---|
-| Implements | Generic "open this URL to continue" flow: a waiting terminal session gets a short code and URL; completion in the browser resumes the session. Timeout and cancel. ([attestation.md](attestation.md) §7.1) |
+| Implements | Generic "open this URL to continue" flow: a waiting terminal session gets a short code and URL; completion in the browser resumes the session. Timeout and cancel. `core/browser_handoff.js`, landing route `/_enig/handoff/<code>`, registered only when a feature that uses handoffs asks for it ([attestation.md](attestation.md) §7.1) |
+| Status | Implemented on the fork's `atproto-login` branch (2026-11-04); 26 new tests, full suite passing apart from one upstream test that also fails on upstream `master` |
 | Track | **Upstream.** Generic; usable by any future feature needing a browser step |
-| Config | Uses the existing web server; no new settings beyond F3's |
+| Config | Uses the existing web server; one new rate-limit default, `contentServers.web.rateLimits.handoffGet`, alongside the existing ones |
 | Depends on | Web server enabled |
 | Done when | Tests for code issue, completion, expiry, and cancel; a session cannot be completed twice |
 

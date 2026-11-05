@@ -49,7 +49,7 @@ Being authenticated never implies being admitted. Code must not treat
    (e.g. `alice.bsky.social`).
 2. BBS resolves handle → DID → PDS → authorization server.
 3. BBS starts an OAuth request and displays a short URL in the terminal:
-   `Open https://coolbbs.hub.example/_enig/atproto/login/7F3K in a browser to approve`
+   `Open https://coolbbs.hub.example/_enig/handoff/7F3K-9QXM in a browser to approve`
 4. User approves on their own account host, which redirects to the BBS web
    callback.
 5. The callback matches the request to the waiting terminal session and
@@ -184,7 +184,24 @@ A generic flow for steps that a terminal can't do:
 
 1. A terminal session requests a handoff and receives a short code and URL.
 2. The URL is displayed; the session waits (with timeout and cancel).
-3. Completion in the browser resolves the waiting session with a result.
+3. Opening the URL asks the requesting feature for the page to send the
+   browser to (e.g. the OAuth approval page). This happens on open, not when
+   the handoff is created, because such pages often expire within minutes.
+4. Completion in the browser resolves the waiting session with a result.
+   Each handoff ends exactly once: completed, failed, timed out, or
+   cancelled.
+
+Codes are 8 characters from Crockford's base32 (no I, L, O, or U), shown as
+`7F3K-9QXM`, about 40 bits; typed input is accepted in any case, with or
+without the dash. The code appears only in the landing URL (served with
+`no-store` and `no-referrer`); the browser step is matched back to the
+session by a separate 128-bit id. Opens per link and requests per address
+are limited.
+
+Whoever opens the link first chooses which account approves, so the
+requesting feature must check the outcome: AT login (F3) accepts the
+approval only if the DID matches the handle the member typed in the
+terminal.
 
 It is used by AT OAuth (§3.1) and by any verifier needing a browser
 (payment, ID check).

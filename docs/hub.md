@@ -101,9 +101,10 @@ that subdomain.
 To keep the hub from becoming general web hosting (and attractive for
 phishing or malware), it forwards **only** the BBS endpoints defined in
 [transport.md](transport.md) §2.1. Paths below are logical; for ENiGMA½ the
-OAuth, handoff, and verifier routes live under `/_enig/atproto/` and
-`/_enig/verify/` ([enigma_integration.md](enigma_integration.md) §3.3), and
-the hub forwards those prefixes only.
+OAuth, handoff, and verifier routes live under `/_enig/atproto/`,
+`/_enig/handoff/`, and `/_enig/verify/`
+([enigma_integration.md](enigma_integration.md) §3.3), and the hub forwards
+those prefixes only.
 
 | Path | Forwarded? | Notes |
 |---|---|---|
@@ -223,6 +224,16 @@ Shortlist from an initial survey (2026-11-04; not yet verified hands-on):
 | **Hubs Community Edition** (Hubs Foundation; MPL-2.0) | Released regularly in 2026; runs in any browser and on Quest via WebXR; room chat and spatial voice; avatars and scenes (glTF/GLB) served from our own server | Server is Elixir and needs Kubernetes; login is email-only, so AT OAuth means patching its server (an unmerged OpenID Connect PR is a template); no direct messages |
 | **Overte** (High Fidelity descendant; Apache-2.0) | Strongest open desktop and PC VR option; released October 2026 | Large C++ codebase; no browser or Quest client; AT login means changing its account server |
 | **Build on Networked-Aframe or Hyperfy** (MIT / GPL-3.0) | Cleanest identity design (AT OAuth and DIDs from the start); Node, like ENiGMA½ | Most work; voice via LiveKit or Janus; chat and DMs built by us |
+
+**Current favorite: Overte**, for its visual quality (a native renderer
+using the PC's graphics card, versus Hubs' browser and standalone-headset
+limits). It needs no browser or standalone Quest support if it isn't the
+only way in: Overte would be the high-detail client, and the hub's web page
+a simple 2D view of who is around, both reading the same presence data and
+avatars from people's AT accounts. Next steps: try the Overte client on
+Windows in a public world; then run its server on the VM (Docker) to see how
+its accounts work and where AT login fits. VRM avatar support is to be
+checked.
 
 Ruled out for now: Vircadia (rewrite not production-ready), JanusWeb
 (stagnant), Third Room (paused since 2023, but a good design reference for

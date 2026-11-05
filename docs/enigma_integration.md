@@ -95,7 +95,7 @@ Implements [attestation.md](attestation.md) §3.
 |---|---|
 | OAuth client metadata | `/_enig/atproto/client-metadata.json` |
 | OAuth callback | `/_enig/atproto/callback` |
-| Browser handoff landing | `/_enig/atproto/login/<code>` |
+| Browser handoff landing | `/_enig/handoff/<code>` (generic, shared with verifiers; F2) |
 | Verifier callbacks and webhooks | `/_enig/verify/<verifier-id>/...` |
 
 ### 3.4 Secure connections only
