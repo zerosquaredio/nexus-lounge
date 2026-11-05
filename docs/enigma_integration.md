@@ -1,7 +1,7 @@
 # ENiGMA½ Integration Spec
 
 Status: Draft
-Last updated: 2026-11-01
+Last updated: 2026-11-05
 
 ## 1. Decision
 
@@ -93,7 +93,8 @@ Implements [attestation.md](attestation.md) §3.
 
 | Logical endpoint ([transport.md](transport.md) §2.1) | ENiGMA½ route |
 |---|---|
-| OAuth client metadata | `/_enig/atproto/client-metadata.json` |
+| OAuth client metadata | `/_enig/atproto/client-metadata.json` (public mode) |
+| OAuth public signing key (JWKS) | `/_enig/atproto/jwks.json` (public mode) |
 | OAuth callback | `/_enig/atproto/callback` |
 | Browser handoff landing | `/_enig/handoff/<code>` (generic, shared with verifiers; F2) |
 | Verifier callbacks and webhooks | `/_enig/verify/<verifier-id>/...` |

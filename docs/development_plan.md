@@ -1,7 +1,7 @@
 # Development Plan
 
 Status: Draft
-Last updated: 2026-11-04
+Last updated: 2026-11-05
 
 This plan breaks the work into features, says where each one is delivered
 (upstream ENiGMA½, our fork, or this repo), and defines how sysops enable it.
@@ -73,9 +73,10 @@ atProto: {
 
     oauth: {
         //  loopback: development only, no public URL needed (F1)
-        //  public:   production; metadata served at publicUrl (F3)
+        //  public:   production (F3); identified by the web server's own
+        //  https:// base URL (contentServers.web.overrideUrlPrefix behind a
+        //  proxy or the hub), so there is no separate URL setting
         clientMode: loopback
-        publicUrl: ""               //  F3; e.g. https://coolbbs.hub.example
         //  the scope is always "atproto" (identity only) and is not a setting
     }
 
@@ -169,8 +170,9 @@ and what "done" means.
 | | |
 |---|---|
 | Implements | `atproto` login type in `authenticateFactor1`; member DID stored as a user property and used for lookup; username derived from handle with collision handling; first-login user creation; `atprotoLogin` menu module (enter handle, show handoff URL, wait); web handler for client metadata and callback under `/_enig/atproto/`; secure-connection check (ACS `SC`); public client mode (client metadata, signing keys) alongside F1's loopback mode |
+| Status | **Done** (2026-11-05) on the fork's `atproto-login` branch, in four commits (login core, login screen and callback, public client mode, sysop docs), tagged `pr/03-atproto-login` and pushed. 42 new tests. Logged in live with a real Bluesky account over SSH, first in loopback mode and then in public mode through a Cloudflare quick tunnel: first login created the sysop via `rootDid`, a later login found the same user by DID. enig-term not yet tried |
 | Track | **Upstream** |
-| Config | `atProto.login.*`, `atProto.oauth.clientMode: public`, `atProto.oauth.publicUrl`, `contentServers.web.handlers.atProto.enabled`, menu template entries (commented out) |
+| Config | `atProto.login.*`, `atProto.oauth.clientMode: public` (uses `contentServers.web.overrideUrlPrefix`; no separate URL setting), `contentServers.web.handlers.atProto.enabled`, menu template entries (commented out) |
 | Depends on | F1, F2 |
 | Done when | A user can log in with a Bluesky account from enig-term and SSH; logging in again finds the same user by DID after a handle change; AT login is refused on telnet; root cannot be claimed by any DID other than `rootDid`; tests cover username derivation, the root safeguard, and the login path; sysop docs written |
 
