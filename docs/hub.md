@@ -143,7 +143,11 @@ DID.
   filtered to the project's record types ([publishing.md](publishing.md) §3),
   plus the Bluesky posts of registered BBS accounts.
 - Any other directory can be built from the same public records; the hub's
-  directory is not privileged.
+  directory is not privileged. Apps can also skip the hub and read the
+  records from the AT network directly.
+- **Interfaces:** a web page at the hub's root first. A terminal interface
+  (a BBS-style front door with menus and a BBS list) is planned for later;
+  its design is open.
 
 ### 5.1 What visitors see
 
@@ -166,15 +170,77 @@ The hub could also publish recent BBS updates as a Bluesky custom feed, so
 Bluesky users can follow them in their normal app (see the
 `bluesky-social/feed-generator` starter).
 
-### 5.2 XRPC
+### 5.2 API for apps
 
-- Optional: expose the directory as XRPC methods under a `did:web` for the
-  hub. Names follow AT's verb-first convention (e.g.
-  `io.zerosquared.bbs.directory.listBbses`), so AT clients
-  can call it directly or via their account server's service proxying
-  (`atproto-proxy` header, with service auth). References: the atproto.com
-  specs (Lexicon, XRPC, service proxying, service auth) and the
-  `bluesky-social/feed-generator` starter.
+For non-browser clients (a desktop or VR app, another directory). JSON is
+the format, as in AT's own APIs; graphics are never embedded in it.
+
+1. **Lookups (XRPC).** JSON queries under a `did:web` for the hub, named
+   with AT's verb-first convention (e.g.
+   `io.zerosquared.bbs.directory.listBbses`, `getBbs`). Long lists are paged
+   with cursors; responses are cacheable (ETags), so apps download only
+   what changed. AT clients can call them directly or via their account
+   server's service proxying (`atproto-proxy` header, with service auth).
+2. **Graphics by URL.** The JSON links to files the app downloads once and
+   caches. ANSI art is offered both as the original file (so an app can
+   render it itself, e.g. as a VR texture at its own resolution, including
+   animation) and as a pre-rendered PNG ([publishing.md](publishing.md)
+   §3.7).
+3. **Snapshot.** The whole directory as one compressed file, one JSON object
+   per line, refreshed every few minutes, for an app's first load.
+4. **Live updates (later).** A WebSocket stream of changes (status, posts,
+   BBSes connecting) for apps that stay open, in the style of Jetstream.
+
+Binary formats (CBOR, Protocol Buffers) were considered and not chosen: the
+text is small once compressed, images dominate the bytes, and JSON keeps the
+API usable from any AT library.
+
+References: the atproto.com specs (Lexicon, XRPC, service proxying, service
+auth) and the `bluesky-social/feed-generator` starter.
+
+### 5.3 Social space (future, possibly a separate project)
+
+A shared space attached to the hub where people appear as avatars while
+they use BBSes or other connected services, reachable from VR headsets and
+desktop apps.
+
+- Identity is the person's AT DID, as everywhere else in the project.
+- Clients download avatars and environment graphics from the hub (or from
+  the person's own AT account).
+- In-room chat, person-to-person messages, and possibly voice.
+- **Presence is opt-in.** Showing that someone is "hanging out", or which
+  BBS they are on, is member activity, so it follows the same rule as
+  triggered posts ([publishing.md](publishing.md) §5): off unless the person
+  turns it on.
+- Prefer adapting existing open-source social VR software to building one.
+  None of the candidates supports AT login today, so that integration is
+  ours to write in every case.
+
+Shortlist from an initial survey (2026-11-04; not yet verified hands-on):
+
+| Candidate | Why | Costs |
+|---|---|---|
+| **Hubs Community Edition** (Hubs Foundation; MPL-2.0) | Released regularly in 2026; runs in any browser and on Quest via WebXR; room chat and spatial voice; avatars and scenes (glTF/GLB) served from our own server | Server is Elixir and needs Kubernetes; login is email-only, so AT OAuth means patching its server (an unmerged OpenID Connect PR is a template); no direct messages |
+| **Overte** (High Fidelity descendant; Apache-2.0) | Strongest open desktop and PC VR option; released October 2026 | Large C++ codebase; no browser or Quest client; AT login means changing its account server |
+| **Build on Networked-Aframe or Hyperfy** (MIT / GPL-3.0) | Cleanest identity design (AT OAuth and DIDs from the start); Node, like ENiGMA½ | Most work; voice via LiveKit or Janus; chat and DMs built by us |
+
+Ruled out for now: Vircadia (rewrite not production-ready), JanusWeb
+(stagnant), Third Room (paused since 2023, but a good design reference for
+identity, chat, and DMs on a federated network), iR Engine (CPAL license,
+unclear ownership), Webaverse (appears dead), Resonite (core is closed),
+OpenSimulator (old stack, non-glTF avatars).
+
+Related work:
+
+- **Avatars:** VRM 1.0 (built on glTF 2.0), with plain GLB as the fallback.
+- **at3d.app:** an early draft of AT record types for 3D identity, including
+  VRM avatars stored in the person's own AT account, models, scenes, and
+  world discovery. No presence record. Worth following or helping shape
+  rather than defining our own avatar records.
+- **WorldMesh:** a small three.js project with a pull request adding AT
+  login; useful as reference code only.
+- No AT record type exists for live presence or rooms; presence would be a
+  hub service, with any published records under `io.zerosquared.bbs.*`.
 
 ## 6. Status monitoring
 
@@ -212,7 +278,7 @@ its own AT account ([publishing.md](publishing.md) §3.3).
   of each BBS having its own `client_id`.
 - Subdomain naming rules (reserved names, reclaiming abandoned names).
 - Whether to support custom domains for BBSes behind the hub.
-- Whether visitors reach the directory as a web page at the hub's root, as a
-  BBS-style terminal front door (menus, BBS list, jump into a BBS), or both.
-  A terminal front door means the hub runs a small BBS-style app.
+- Design of the terminal front door (§5): how the directory, banners, and
+  ads are shown in a terminal. The hub would run a small BBS-style app.
+- Which open-source social VR software to adapt for the social space (§5.3).
 - What counts as an "active" BBS (recent posts, users online, or connected).
