@@ -1,7 +1,7 @@
 # Development Plan
 
 Status: Draft
-Last updated: 2026-11-01
+Last updated: 2026-11-03
 
 This plan breaks the work into features, says where each one is delivered
 (upstream ENiGMA½, our fork, or this repo), and defines how sysops enable it.
@@ -72,11 +72,11 @@ atProto: {
     enabled: false                  //  master switch for all AT features
 
     oauth: {
-        //  loopback: development only, no public URL needed
-        //  public:   production; metadata served at publicUrl
-        clientMode: public
-        publicUrl: ""               //  e.g. https://coolbbs.hub.example
-        scope: atproto              //  identity only
+        //  loopback: development only, no public URL needed (F1)
+        //  public:   production; metadata served at publicUrl (F3)
+        clientMode: loopback
+        publicUrl: ""               //  F3; e.g. https://coolbbs.hub.example
+        //  the scope is always "atproto" (identity only) and is not a setting
     }
 
     login: {
@@ -146,9 +146,10 @@ and what "done" means.
 
 | | |
 |---|---|
-| Implements | `core/atproto/`: handle and DID resolution; a callback-style adapter around `@atproto/oauth-client-node` (Promises stay inside the adapter), with state and session stores in a separate `atproto` database (set up like ActivityPub's) and an in-process refresh lock; library loaded with `import()` at startup only when enabled, so Node 22 stays the minimum ([enigma_integration.md](enigma_integration.md) §3.6) |
+| Implements | `core/atproto/`: a callback-style adapter around `@atproto/oauth-client-node` (Promises stay inside the adapter) exposing handle and DID resolution, authorize, callback, restore, and revoke; state and session stores in a separate `atproto` database (set up like ActivityPub's); library loaded with `import()` at startup only when enabled, so Node 22 stays the minimum ([enigma_integration.md](enigma_integration.md) §3.6). Resolution (with two-way handle verification) and the in-process refresh lock come from the library rather than our own code. Loopback client only; public mode is F3 |
+| Status | Implemented on the fork's `atproto-login` branch (2026-11-03); 39 new tests, full suite passing; checked live against bsky.social in loopback mode |
 | Track | **Upstream** |
-| Config | `atProto.enabled`, `atProto.oauth.*` |
+| Config | `atProto.enabled`, `atProto.oauth.clientMode` (`loopback` only) |
 | Depends on | F0 |
 | Done when | Unit tests cover resolution and store behavior; the OAuth library is not loaded when `atProto.enabled` is false (the empty database is still created, as ActivityPub's is); `npm test` passes |
 
@@ -166,9 +167,9 @@ and what "done" means.
 
 | | |
 |---|---|
-| Implements | `atproto` login type in `authenticateFactor1`; member DID stored as a user property and used for lookup; username derived from handle with collision handling; first-login user creation; `atprotoLogin` menu module (enter handle, show handoff URL, wait); web handler for client metadata and callback under `/_enig/atproto/`; secure-connection check (ACS `SC`); loopback mode for development |
+| Implements | `atproto` login type in `authenticateFactor1`; member DID stored as a user property and used for lookup; username derived from handle with collision handling; first-login user creation; `atprotoLogin` menu module (enter handle, show handoff URL, wait); web handler for client metadata and callback under `/_enig/atproto/`; secure-connection check (ACS `SC`); public client mode (client metadata, signing keys) alongside F1's loopback mode |
 | Track | **Upstream** |
-| Config | `atProto.login.*`, `contentServers.web.handlers.atProto.enabled`, menu template entries (commented out) |
+| Config | `atProto.login.*`, `atProto.oauth.clientMode: public`, `atProto.oauth.publicUrl`, `contentServers.web.handlers.atProto.enabled`, menu template entries (commented out) |
 | Depends on | F1, F2 |
 | Done when | A user can log in with a Bluesky account from enig-term and SSH; logging in again finds the same user by DID after a handle change; AT login is refused on telnet; root cannot be claimed by any DID other than `rootDid`; tests cover username derivation, the root safeguard, and the login path; sysop docs written |
 
