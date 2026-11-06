@@ -203,7 +203,8 @@ auth) and the `bluesky-social/feed-generator` starter.
 
 A shared space attached to the hub where people appear as avatars while
 they use BBSes or other connected services, reachable from VR headsets and
-desktop apps.
+desktop apps. The longer-range design (stages, transport policy, avatars,
+hub federation) is in [cyberspace_framework.md](cyberspace_framework.md).
 
 - Identity is the person's AT DID, as everywhere else in the project.
 - Clients download avatars and environment graphics from the hub (or from

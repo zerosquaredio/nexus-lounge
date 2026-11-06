@@ -1,7 +1,7 @@
 # Development Plan
 
 Status: Draft
-Last updated: 2026-11-05
+Last updated: 2026-11-06
 
 This plan breaks the work into features, says where each one is delivered
 (upstream ENiGMA½, our fork, or this repo), and defines how sysops enable it.
@@ -169,7 +169,7 @@ and what "done" means.
 
 | | |
 |---|---|
-| Implements | `atproto` login type in `authenticateFactor1`; member DID stored as a user property and used for lookup; username derived from handle with collision handling; first-login user creation; `atprotoLogin` menu module (enter handle, show handoff URL, wait); web handler for client metadata and callback under `/_enig/atproto/`; secure-connection check (ACS `SC`); public client mode (client metadata, signing keys) alongside F1's loopback mode |
+| Implements | `atproto` login type in `authenticateFactor1`; member DID stored as a user property and used for lookup; username derived from handle with collision handling; first-login user creation (since F4: an application form after first login); `atprotoLogin` menu module (enter handle, show handoff URL, wait); web handler for client metadata and callback under `/_enig/atproto/`; secure-connection check (originally ACS `SC`; since F4 the module's own check, with a message); public client mode (client metadata, signing keys) alongside F1's loopback mode |
 | Status | **Done** (2026-11-05) on the fork's `atproto-login` branch, in four commits (login core, login screen and callback, public client mode, sysop docs), tagged `pr/03-atproto-login` and pushed. 42 new tests. Logged in live with a real Bluesky account over SSH, first in loopback mode and then in public mode through a Cloudflare quick tunnel: first login created the sysop via `rootDid`, a later login found the same user by DID. enig-term not yet tried |
 | Track | **Upstream** |
 | Config | `atProto.login.*`, `atProto.oauth.clientMode: public` (uses `contentServers.web.overrideUrlPrefix`; no separate URL setting), `contentServers.web.handlers.atProto.enabled`, menu template entries (commented out) |
@@ -197,11 +197,22 @@ support in terminals). The smoother sign-in-first flow is F14.
 
 | | |
 |---|---|
-| Implements | System-wide list of accepted login types, so a sysop can disable password logins (AT-only board), or disable AT. Login menus hide options that aren't allowed. |
-| Track | **Upstream.** Small and generic |
-| Config | `users.allowedAuthFactor1Types` |
+| Implements | System-wide list of accepted login types, so a sysop can disable password logins (AT-only board), or disable AT. Refused types get a message (`loginAttemptLoginTypeNotAllowed`, `LOGINTYPE` art) rather than a disconnect, and aren't counted as failed logins. Menus show all options; sysops remove the ones they don't want. Also, with F3: new AT users apply after logging in (below) |
+| Status | **Done** (2026-11-06) on the fork's `atproto-login` branch, in two commits (the setting; then AT users applying after login), tagged `pr/04-allowed-login-types` and pushed. Tested live on an AT-only board over telnet and SSH: password login and apply refused or redirected, a fresh board's sysop created through Bluesky login and the application form via `rootDid`. Found on the way: config arrays merge with the defaults, so `allowedAuthFactor1Types` is now in `replacePaths` |
+| Track | **Upstream.** Small and generic. The application flow belongs with F3's PR, so the split may move when PRs are cut |
+| Config | `users.allowedAuthFactor1Types`; menu entries `atprotoApplication`, `newUserApplication`'s `config.atProtoLogin` |
 | Depends on | F3 (to be useful), but the setting itself is independent |
 | Done when | With password removed from the list, password login and new-user signup are refused with a clear message; default list preserves current behavior |
+
+**AT users apply after logging in.** First AT login no longer creates a user
+silently. An account with no user yet goes on to the new user application
+(`atprotoApplication`: no password fields, handle shown, username suggested
+from the handle), with the proven identity kept on the session for 30
+minutes. On AT-only boards, "apply" goes to AT login first, so nobody applies
+without proving their account. The `atprotoLogin` menu is no longer gated by
+`acs: SC`, which refused silently; it tells telnet callers to use SSH
+(`atProto.login.secureConnectionsOnly`). Login matrix order: login, bluesky
+login, apply.
 
 ### F5. SSH keys for AT users
 

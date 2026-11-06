@@ -1,7 +1,9 @@
 # Nexus Lounge Design Docs
 
 **Nexus Lounge** is a terminal-style BBS (Bulletin Board Server) network that
-uses the AT Protocol for identity.
+uses the AT Protocol for identity. It is the first piece of the
+[Cyberspace Framework](cyberspace_framework.md), a longer-range plan for a
+shared, cyberpunk-styled space across BBSes, chats, games, and VR worlds.
 
 ## Names and domains
 
@@ -29,6 +31,7 @@ uses the AT Protocol for identity.
 
 | Doc | Covers |
 |---|---|
+| [cyberspace_framework.md](cyberspace_framework.md) | The long-range vision: hubs and leaves, shared spaces, transport policy, leaf identity, avatars, federation |
 | [development_plan.md](development_plan.md) | Features, delivery tracks (upstream / fork / mods / this repo), configuration model, milestones, PR sequence |
 | [hub_development_plan.md](hub_development_plan.md) | Hub features H0–H11, architecture (Caddy, frp, TypeScript control plane), milestones, testing, deployment |
 | [enigma_integration.md](enigma_integration.md) | How the specs map onto ENiGMA½: login type, routes, groups as attestations, transport, upstream strategy |
@@ -47,6 +50,8 @@ uses the AT Protocol for identity.
 |---|---|
 | **BBS** | **Bulletin Board Server**: this project's server, run by a sysop. (Traditionally "Bulletin Board System"; the server reading parallels AT's PDS.) |
 | **Hub** | The optional public server that relays inbound traffic to BBSes over tunnels and provides the directory and BBS handles ([hub.md](hub.md)) |
+| **Leaf** | Any endpoint people reach through a hub: a BBS today; later chats, games, VR worlds ([cyberspace_framework.md](cyberspace_framework.md)) |
+| **Cyberspace Framework** | The long-range vision this project is the first piece of: a shared, cyberpunk-styled space across leaves and hubs ([cyberspace_framework.md](cyberspace_framework.md)) |
 | **Sysop** | A person who runs a BBS. In ENiGMA½: root plus members of the `sysops` group |
 | **Root** | User #1, permanently a sysop, with a few root-only powers (e.g. reading all private mail) |
 | **Provisional user** | An authenticated user admitted with limited access until approved ([attestation.md](attestation.md) §5) |
