@@ -218,8 +218,11 @@ without going to Bluesky
 - **Leaf-vouched identities:** accept short-lived statements signed by a
   registered BBS's DID ("this session is user 42, `alice`, on coolbbs"), and
   show those users as `alice@coolbbs`, so password-only users can take part
-  in the common space in a limited way (vision §6.4). Per-BBS opt-in by the
-  hub admin. Needs a small BBS-side piece to issue the statements.
+  in the common space in a limited way (vision §6.4). Opt-in on both sides:
+  the sysop chooses whether their BBS vouches at all, and the hub admin
+  chooses which BBSes' vouched users to accept and what they may do, per
+  feature (for example chat but not voice). Needs a small BBS-side piece to
+  issue the statements, off by default.
 
 Groundwork for the common space (vision stage 2); scheduled with it.
 
