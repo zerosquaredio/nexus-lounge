@@ -14,7 +14,7 @@ published to AT so Bluesky users, the hub, and any directory can read it.
 
 - Each BBS has its **own AT account and DID**, separate from the sysop's
   personal account. This applies to every kind of leaf, not only BBSes
-  ([cyberspace_framework.md](cyberspace_framework.md) §6.1).
+  ([Cyberspace Framework vision](https://github.com/zerosquaredio/cyberspace-framework/blob/main/docs/vision.md) §6.1).
   - Keeps the sysop's identity separate from the BBS's public voice.
   - Lets a BBS be handed to a new sysop.
 - The account can be **any existing AT account**, including an ordinary
@@ -228,7 +228,7 @@ upload), and whether the member's opt-in is required.
 - ~~Whether BBS accounts should be created by the hub (hub-hosted PDS) or
   brought by the sysop.~~ The sysop's choice; either way the DID is a
   `did:plc` whose rotation key the sysop holds
-  ([cyberspace_framework.md](cyberspace_framework.md) §6.1, proposed
+  ([Cyberspace Framework vision](https://github.com/zerosquaredio/cyberspace-framework/blob/main/docs/vision.md) §6.1, proposed
   2026-11-06).
 - Exact OAuth permission scopes for the BBS account. They name the record
   types, so they are settled when the names are.
