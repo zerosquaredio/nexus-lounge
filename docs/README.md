@@ -74,3 +74,10 @@ shared, cyberpunk-styled space across BBSes, chats, games, and VR worlds.
 | **Relay / firehose** | The relay aggregates repo changes from all PDSes into a stream, the firehose |
 | **Jetstream** | A lightweight JSON version of the firehose |
 | **AppView** | A service that indexes records from the firehose to serve an application (e.g. Bluesky's timelines) |
+
+## License
+
+Code is under the [BSD 2-Clause License](../LICENSE), matching ENiGMA½. Docs
+are under [CC BY 4.0](https://creativecommons.org/licenses/by/4.0/). Running
+your own BBS or hub, open or closed, is fine; improvements sent back are very
+welcome ([CONTRIBUTING.md](../CONTRIBUTING.md)).
