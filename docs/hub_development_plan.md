@@ -200,10 +200,28 @@ which the allowlist must include once F14 defines it.
 TLS passthrough by SNI, or end-to-end encryption inside the tunnel, so the hub
 can't read traffic ([hub.md](hub.md) §7). Research item.
 
-### H11. Hosted BBS accounts (later)
+### H11. Hosted accounts (later)
 
 A PDS running beside the hub to create BBS AT accounts automatically at
 registration ([hub.md](hub.md) §1.2, [publishing.md](publishing.md) §7).
+The same PDS can create **user** accounts, so "sign up at the hub" gives
+someone a real, portable AT account (handle like `alice.hub.example`)
+without going to Bluesky
+([vision](https://github.com/zerosquaredio/cyberspace-framework/blob/main/docs/vision.md)
+§6.3). Sysops of hosted BBS accounts still hold their DID's rotation key
+(vision §6.1).
+
+### H12. User profiles and vouched identities (later)
+
+- **Profiles:** a small hub profile per user, keyed by DID and created at
+  first AT login. No separate hub registration and no passwords.
+- **Leaf-vouched identities:** accept short-lived statements signed by a
+  registered BBS's DID ("this session is user 42, `alice`, on coolbbs"), and
+  show those users as `alice@coolbbs`, so password-only users can take part
+  in the common space in a limited way (vision §6.4). Per-BBS opt-in by the
+  hub admin. Needs a small BBS-side piece to issue the statements.
+
+Groundwork for the common space (vision stage 2); scheduled with it.
 
 ## 5. Milestones
 
@@ -214,7 +232,7 @@ registration ([hub.md](hub.md) §1.2, [publishing.md](publishing.md) §7).
 | **HM2** Self-service | H3, H4, H5 | Sysops register themselves, get handles, and users connect in the browser |
 | **HM3** Discovery | H6, H7 | Observed status and a public directory |
 | **HM4** Public launch | H8 | Operations and moderation in place; open to outside sysops |
-| Later | H9, H10, H11 | Sysop verification, end-to-end privacy, hosted accounts |
+| Later | H9, H10, H11, H12 | Sysop verification, end-to-end privacy, hosted accounts, user profiles and vouched identities |
 
 ### 5.1 Dependencies on the BBS plan
 

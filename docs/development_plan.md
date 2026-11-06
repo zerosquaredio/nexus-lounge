@@ -380,13 +380,26 @@ plus members of the `sysops` group. Most sysop features check "root or
 `sysops`", but a few are root-only (reading all private mail, editing any BBS
 list entry), because ENiGMA½'s `isSysOp()` actually means "is root."
 
+### F16. Link AT to an existing account
+
+| | |
+|---|---|
+| Implements | Existing password users connect their account to an AT identity, so either login works afterwards ([Cyberspace Framework vision](https://github.com/zerosquaredio/cyberspace-framework/blob/main/docs/vision.md) §6.3). Two ways in: "link Bluesky account" in user settings (logged in with a password; approve in the browser, as for AT login), and "I already have an account here" offered after AT login when no user has that DID (enter username and password once, instead of applying). Plus the `oputil user` subcommand for sysops to set or clear a user's DID (noted under F3). Unlinking |
+| Track | **Upstream.** Generic; a follow-up to F3 |
+| Config | Menu entries (commented out in the templates, as for AT login); no new settings expected |
+| Depends on | F3, F4 (the application step it sits before) |
+| Done when | A password user links their Bluesky account from settings and then logs in with either; an AT login with an unlinked DID can claim an existing account with its password; one DID can't be linked to two users; failed password attempts count as failed logins; tests cover each path |
+
+Needed for existing boards joining a hub: their users keep their accounts
+and gain AT identity, rather than applying again.
+
 ## 4. Milestones
 
 | Milestone | Features | Outcome |
 |---|---|---|
 | **M0** Groundwork | F0 | Environment ready, library verified, maintainer contacted |
 | **M1** Log in with Bluesky | F1, F2, F3 | Upstream PRs open for the core AT login |
-| **M2** Access control | F4, F5, F6, F14 | AT-only boards, SSH for AT users, invites, provisional access, one-click web sign-in |
+| **M2** Access control | F4, F5, F6, F14, F16 | AT-only boards, SSH for AT users, invites, provisional access, one-click web sign-in, existing users linking their AT identity |
 | **M3** Public presence | F9, F10, F11 | Publishing (including invite notifications), tunnels, and the hub |
 | **M4** Networking | F12 | Shared boards between BBSes |
 | Later | F7, F8, F13, F15 | Paid verification, attestation table, clusters, in-BBS user manager |
@@ -424,6 +437,8 @@ order, each small and independently reviewable:
 8. Bluesky announcement posting and invite notifications (F9, generic part).
 9. Multiple SSH keys per user (F5), as a separate proposal.
 10. In-BBS user manager (F15), as a separate proposal.
+11. Link AT to an existing account (F16), as a follow-up to the AT login
+    PRs (3 and 4).
 
 ## 6. Risks and open questions
 
