@@ -218,11 +218,28 @@ login, apply.
 
 | | |
 |---|---|
-| Implements | AT users add an SSH key through ENiGMA½'s existing SSH key config, then log in over SSH without OAuth |
-| Track | Works with **existing** upstream code once F3 creates the user. **Multiple keys per user** is a separate upstream proposal |
-| Config | Existing `loginServers.ssh.*` |
+| Implements | AT users add an SSH key through ENiGMA½'s existing SSH key config, then log in over SSH without OAuth. Also: after logging in, callers who connected as a new user name are offered the SSH key their client proved (below) |
+| Status | **Done** (2026-11-07) on the fork's `atproto-login` branch, in one commit, tagged `pr/05-ssh-key-offer` and pushed. 11 new tests. Tested live: connected as `new` with a key, logged in with Bluesky, saved the offered key, then connected as that user and was logged straight in |
+| Track | The offer goes **upstream** with the AT login PRs. **Multiple keys per user** is a separate upstream proposal |
+| Config | Existing `loginServers.ssh.*` and `users.allowedAuthFactor1Types` (list `sshPubKey` on AT-only boards); menu `fullLoginSequenceSshKeyOffer`, art `SSHKEYOFR` |
 | Depends on | F3 |
 | Done when | An AT-created user can register a key and log in over SSH |
+
+**Offering the key a caller connected with.** AT login over SSH needs a
+browser every time. Most SSH clients try the user's keys before anything
+else, so a caller connecting as `new` has often proven a key already. The
+SSH server now checks the signature of such an attempt (ssh2 leaves that to
+the application) and keeps the key on the connection. After the welcome
+screen, a logged-in caller is asked whether to save it, with the user name
+to connect as next time; yes replaces any saved key. The menu skips itself
+when no key was proven, the key is already saved, or `sshPubKey` isn't an
+allowed login type.
+
+One behavior change: OpenSSH starts with the `none` method, and accepting it
+meant clients never offered a key. For new user names, `none` is now refused
+when SSH keys are allowed, so the client tries its keys first. Clients
+without keys go on to keyboard-interactive or password as before, with no
+extra prompt. SyncTERM's behavior with this is not yet checked.
 
 ### F6. Admission and verifiers (v1)
 
@@ -430,14 +447,15 @@ order, each small and independently reviewable:
 3. AT login type, login menu module, and web handler (F3), with docs and
    commented-out menu template entries.
 4. Allowed login types setting (F4).
-5. Web sign-in (F14).
-6. Verifier framework, DID-bound invites, invite codes, and provisional
+5. Offering callers the SSH key they connected with (F5).
+6. Web sign-in (F14).
+7. Verifier framework, DID-bound invites, invite codes, and provisional
    access (F6), if the maintainer wants them.
-7. Docs: running behind a tunnel (F10).
-8. Bluesky announcement posting and invite notifications (F9, generic part).
-9. Multiple SSH keys per user (F5), as a separate proposal.
-10. In-BBS user manager (F15), as a separate proposal.
-11. Link AT to an existing account (F16), as a follow-up to the AT login
+8. Docs: running behind a tunnel (F10).
+9. Bluesky announcement posting and invite notifications (F9, generic part).
+10. Multiple SSH keys per user (F5), as a separate proposal.
+11. In-BBS user manager (F15), as a separate proposal.
+12. Link AT to an existing account (F16), as a follow-up to the AT login
     PRs (3 and 4).
 
 ## 6. Risks and open questions
