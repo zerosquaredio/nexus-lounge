@@ -64,6 +64,7 @@ shared, cyberpunk-styled space across BBSes, chats, games, and VR worlds.
 
 | Term | Meaning |
 |---|---|
+| **AT Protocol vs. Bluesky** | AT is the general network: identity, repos of records, and sync. Bluesky is one app on it, with its own record types (`app.bsky.*`); ours sit alongside them the same way. Records are public, so private and live traffic (Bluesky's DMs, our terminal sessions and chat) runs on separate services ([vision](https://github.com/zerosquaredio/cyberspace-framework/blob/main/docs/vision.md) §2.1) |
 | **PDS** | **Personal Data Server**: hosts users' accounts, their data repositories, and their login (OAuth authorization server). Accounts can move between PDSes. |
 | **DID** | Decentralized Identifier: an account's permanent ID (e.g. `did:plc:abc123`). Members are keyed by DID. |
 | **Handle** | An account's human-readable name (e.g. `@alice.bsky.social`). Display only; can change. |
