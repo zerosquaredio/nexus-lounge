@@ -362,8 +362,9 @@ in detail until F12 is in use.
 | | |
 |---|---|
 | Implements | A start page with "Sign in with Bluesky": OAuth in the same tab, then a session cookie for the BBS host; the page opens enig-term, whose WebSocket connection carries the cookie, and the BBS logs the user in directly, skipping the handle prompt. Later visits log in with one click. Solves persistent login for enig-term users ([enigma_integration.md](enigma_integration.md) §8). |
+| Status | **Done** (2026-11-07) on the fork's `atproto-login` branch, in one commit, tagged `pr/07-web-sign-in` and pushed. 37 new tests. Tested live with enig-term 0.3.1 and a Bluesky test account, through an SSH tunnel on `127.0.0.1`: sign-in, a one-click login (also after a restart), a same-site page at another origin ignored, sign-out, and revoking the board at the account host (`bsky.social/account`, Apps) signing the browser out |
 | Track | **Upstream**, as a follow-up PR to F3 |
-| Config | `atProto.webSignIn.*` |
+| Config | `atProto.webSignIn.*` (`enabled`, `sessionDays`, `allowedOrigins`), `loginServers.webSocket.firstMenuSignedIn`; menu `webSignInConnected` |
 | Depends on | F3; web and WebSocket servers reachable under one host name (direct, tunnel, or hub) |
 | Done when | A signed-in browser user reaches the BBS main menu without a login prompt; connections from other sites' pages are refused; logout and OAuth revocation invalidate the cookie |
 
@@ -381,6 +382,65 @@ Design points:
 - Cookie is `Secure` and `HttpOnly` with a configurable lifetime.
 - Behind the hub, the cookie is set by the BBS's own callback for the BBS's
   subdomain, never by the hub.
+
+**Design** (2026-11-07, before coding):
+
+- **Start page**, `GET /_enig/signin` on the web server. Signed out: a
+  handle field and "Sign in with Bluesky". Signed in: "Continue as
+  @handle" (opens enig-term at `/_enig/ws-term/?connect=1`) and "Sign out".
+- **Sign-in**, `POST /_enig/signin`: starts OAuth with `state` naming a
+  web sign-in flow (the callback tells it apart from terminal handoffs),
+  sets a short-lived flow cookie (`SameSite=Lax`, so it comes back on the
+  redirect from the account host), and redirects to the account host. The
+  existing callback, for a web sign-in state, checks the flow cookie
+  matches (so a sign-in can't be finished in another browser), creates a
+  session, sets the session cookie, and redirects to enig-term.
+- **Session cookie**: a random token; only its hash is stored, with the
+  DID and expiry, in the AT database next to the OAuth sessions, so
+  restarts keep people signed in. `HttpOnly`, `Secure`, `SameSite=Lax`,
+  host-only (so it reaches the WebSocket on another port of the same host).
+  Lax rather than Strict: browsers still never send it on WebSocket
+  connections or POSTs other sites start, and the start page recognizes a
+  browser arriving from a link.
+  Lifetime `atProto.webSignIn.sessionDays`. One per browser; a DID can
+  have several.
+- **WebSocket**: on upgrade, the cookie is honored only if `Origin` is one
+  of the board's own web origins (or `atProto.webSignIn.allowedOrigins`).
+  Connections from other origins are still accepted, as today, but
+  anonymous, so third-party web clients keep working and cross-site
+  hijacking gets nothing. A valid session is then checked against the AT
+  OAuth session, refreshing it, so access revoked at the account host ends
+  the web session; then the caller starts at
+  `loginServers.webSocket.firstMenuSignedIn` instead of the matrix.
+- **That menu** (module `atproto_web_sign_in`) proves nothing itself: it
+  hands the identity to the AT login flow (`identityProven`), so linked
+  users are logged in, unknown DIDs link or apply, and account states,
+  2FA and `allowedAuthFactor1Types` all apply as for AT login. Any failure
+  falls back to the matrix.
+- **Sign out**, `POST /_enig/signout`: deletes the session and clears the
+  cookie. Logging off the BBS does not sign the browser out.
+- Off by default (`atProto.webSignIn.enabled`); needs AT login and the web
+  handler. Routes rate limited like the AT callback.
+
+Dev test setup: the SSH tunnel serves the web server and the `ws://`
+listener both on `127.0.0.1` (enig-term allows `ws://` for loopback), so
+page and WebSocket share the cookie without certificates.
+
+**What was built** follows the design above, with these findings from
+testing:
+
+- With `Referrer-Policy: no-referrer`, browsers send `Origin: null` even on
+  a page's own form posts, so the sign-in pages use `same-origin`.
+- A menu with no form is moved on to its `next` by ThemeManager
+  (`runtime.autoNext`), which raced the login. The web sign-in menu
+  overrides `autoNextMenu()`, as `message_base_offline_export.js` does, so
+  only a completed login moves the caller on.
+- Revocation surfaces as the library's `TokenRefreshError` ("Invalid
+  refresh token"); then all of that DID's web sessions end. Other errors,
+  such as the account host being unreachable, only send that one
+  connection to the usual login.
+- A signed-in connection still follows `atProto.login.secureConnectionsOnly`,
+  so the dev setup (plain `ws://`) turns it off.
 
 ### F15. In-BBS user manager (candidate)
 
@@ -430,11 +490,16 @@ in) is not counted as a failed login; and if an operator removes a user's
 SSH key with `oputil` during their session, the session still counts the
 key when unlinking.
 
-Found in upstream's SSH key menu while testing, possible small upstream
-fixes: its action bar puts three items in a toggle view, which only draws
-two, so "cancel" never shows; after removing a key it says password login
-"remains available" even where passwords aren't allowed; and it lets a
-user remove their only way to log in.
+Found in the SSH key menu while testing. Upstream bugs, fixed on the
+fork's `feature/ssh-key-config-actions` branch (from upstream `master`)
+and offered upstream as
+[NuSkooler/enigma-bbs#987](https://github.com/NuSkooler/enigma-bbs/pull/987)
+(2026-11-07): the action bar was a toggle
+view, which keeps only two items, so "cancel" never showed; and the
+status box drew over two lines of the art. Ours to fix with F4/F5, since
+upstream always allows passwords: after removing a key it says password
+login "remains available" even where passwords aren't allowed, and it lets
+a user remove their only way to log in.
 
 ## 4. Milestones
 
