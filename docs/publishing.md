@@ -36,19 +36,22 @@ published to AT so Bluesky users, the hub, and any directory can read it.
 
 ## 3. Record types
 
-Record types use the NSID root **`io.zerosquared.bbs`**, under the
-project-controlled domain `zerosquared.io` (authority `bbs.zerosquared.io`).
+Record types use the Cyberspace Framework's NSID root **`nexus.cyberspace`**,
+under the project domain `cyberspace.nexus`, grouped by role: `leaf.*` for
+records in a BBS's (or other leaf's) repo, `hub.*` for records in a hub's
+repo ([vision](https://github.com/zerosquaredio/cyberspace-framework/blob/main/docs/vision.md) §2.2).
 The root is deliberately independent of the project name (Nexus Lounge), so a
-rename doesn't affect published records. Final Lexicon schemas will live in a
-`lexicons/` directory; the fields below are drafts. When the schemas are
-published, a DNS TXT record at `_lexicon.bbs.zerosquared.io` will name the DID
-of the project account that holds them, per AT's Lexicon resolution rules
-(to be confirmed against the current spec at that time).
+rename doesn't affect published records. Final Lexicon schemas will live in
+the cyberspace-framework repo's `lexicons/` directory; the fields below are
+drafts. When the schemas are published, DNS TXT records at
+`_lexicon.leaf.cyberspace.nexus` and `_lexicon.hub.cyberspace.nexus` will
+name the DID of the project account that holds them, per AT's Lexicon
+resolution rules (to be confirmed against the current spec at that time).
 
 **Names and fields are permanent once published** (§3.8), so the drafts below
 must be reviewed before anything is published under them.
 
-### 3.1 Listing: `io.zerosquared.bbs.listing`
+### 3.1 Listing: `nexus.cyberspace.leaf.listing`
 
 One record per BBS (record key `self`), in the BBS's repo.
 
@@ -79,14 +82,14 @@ Status comes from two sources:
 
 | Kind | Record | Published by | Purpose |
 |---|---|---|---|
-| **Declared** | `io.zerosquared.bbs.status` in the BBS's repo | BBS / sysop tools | Planned maintenance, notices |
-| **Observed** | `io.zerosquared.bbs.observedStatus` in the hub's repo | Hub | Tunnel connected or disconnected |
+| **Declared** | `nexus.cyberspace.leaf.status` in the BBS's repo | BBS / sysop tools | Planned maintenance, notices |
+| **Observed** | `nexus.cyberspace.hub.observedStatus` in the hub's repo | Hub | Tunnel connected or disconnected |
 
 The split exists because a crashed BBS can't post its own outage. Status
 records live on the account host, not the BBS machine, so they remain readable
 while the BBS is offline.
 
-`io.zerosquared.bbs.status` (record key `self`, overwritten on change):
+`nexus.cyberspace.leaf.status` (record key `self`, overwritten on change):
 
 | Field | Type | Notes |
 |---|---|---|
@@ -95,7 +98,7 @@ while the BBS is offline.
 | `until` | datetime | Optional expected end |
 | `updatedAt` | datetime | |
 
-`io.zerosquared.bbs.observedStatus` (in the hub's repo, one record per BBS):
+`nexus.cyberspace.hub.observedStatus` (in the hub's repo, one record per BBS):
 
 | Field | Type | Notes |
 |---|---|---|
@@ -110,7 +113,7 @@ anyone who follows it. Posts can be written by the sysop or triggered by
 events (§5). The hub shows a BBS's recent posts on its directory page
 ([hub.md](hub.md) §5).
 
-### 3.5 Stats: `io.zerosquared.bbs.stats`
+### 3.5 Stats: `nexus.cyberspace.leaf.stats`
 
 **Every public stat is off by default**; the sysop turns on each one
 individually. With none enabled, no stats record is published.
@@ -130,7 +133,7 @@ One record per BBS (record key `self`), overwritten periodically (e.g. every
 Live counts for a hub-connected BBS could instead go to the hub over the
 tunnel ([hub.md](hub.md) §5).
 
-### 3.6 Advertisements: `io.zerosquared.bbs.ad`
+### 3.6 Advertisements: `nexus.cyberspace.leaf.ad`
 
 Ads the hub rotates on its directory and front door, kept separate from posts
 so the hub can control rotation, fairness between BBSes, and expiry.
@@ -176,10 +179,10 @@ banners, ads, the hub's directory and front door, and status pages.
 - Value lists such as `state` and `admission.policy` are open lists of known
   values, not closed enums, so new values can be added later.
 - The schemas are published from a long-lived project account (a `did:plc`
-  with a recovery key the project holds), and `zerosquared.io` must stay
+  with a recovery key the project holds), and `cyberspace.nexus` must stay
   registered for as long as the records matter.
 - **During development, nothing is published under the final names.** Test
-  records use the prefix `io.zerosquared.bbs.dev.*` or throwaway accounts, so
+  records use the prefix `nexus.cyberspace.dev.*` or throwaway accounts, so
   the real names are first used once the shapes are final.
 
 ## 4. Board bridging (optional)
@@ -231,14 +234,16 @@ upload), and whether the member's opt-in is required.
   ([Cyberspace Framework vision](https://github.com/zerosquaredio/cyberspace-framework/blob/main/docs/vision.md) §6.1, proposed
   2026-11-06).
 - Exact OAuth permission scopes for the BBS account. They name the record
-  types, so they are settled when the names are.
-- Name structure: flat (`io.zerosquared.bbs.listing`) or grouped by area
-  (e.g. `io.zerosquared.bbs.hub.observedStatus`). Each group needs its own
-  `_lexicon` DNS record.
+  types (now decided), so they can be written out with F9.
+- ~~Name structure: flat or grouped by area.~~ Grouped by role
+  (`nexus.cyberspace.leaf.*`, `.hub.*`); each group has its own `_lexicon`
+  DNS record (decided 2026-11-06).
 - Record key for `observedStatus`: the BBS's DID, or a generated key with the
   DID in `subject`.
 - Confirm the community calendar-event schema (believed to be
   `community.lexicon.calendar.event`) and that it is stable.
 - Stats: a periodic record (§3.5), live counts over the tunnel, or both.
-- Who holds the `zerosquared.io` domain and the project account if the
-  project is handed to a community.
+- ~~Who holds the project domain if the project is handed to a
+  community.~~ The names use `cyberspace.nexus`, registered for the
+  framework rather than a personal domain, so it can be transferred. The
+  project account goes with it.

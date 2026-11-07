@@ -290,7 +290,7 @@ Confirm which is right before using `AS` in rules.
 | Implements | The BBS's own AT account (OAuth with write scopes); Bluesky announcement posts; events; listing and status records ([publishing.md](publishing.md)); event-scheduler jobs for updates |
 | Track | Split: **generic Bluesky announcement posting goes upstream**; the **listing and status records are project-specific** (our record types), so fork-only |
 | Config | `atProto.publishing.*` |
-| Depends on | F1; record type names (`io.zerosquared.bbs.*`, decided) |
+| Depends on | F1; record type names (`nexus.cyberspace.*`, decided) |
 | Done when | Announcements appear on Bluesky; listing and status records are published and updated on schedule; invite notifications are delivered or handed to the sysop |
 
 **Invite notifications** (for F6 invites), in order of preference:
@@ -322,8 +322,8 @@ avoid the BBS account looking like a spam bot.
 | Implements | Tunnel relay, sysop registration, routing, allowed endpoints, handle verification, directory, observed status, serving enig-term ([hub.md](hub.md)). Planned in detail in [hub_development_plan.md](hub_development_plan.md). |
 | Track | **This repo** (`hub/`) |
 | Config | Hub's own config |
-| Depends on | F10; test hub domain (`hub.zerosquared.io`, decided) |
-| Done when | A BBS behind a home firewall registers, gets `name.hub.zerosquared.io`, and users can connect and log in through it |
+| Depends on | F10; test hub domain (`hub.cyberspace.nexus`, decided) |
+| Done when | A BBS behind a home firewall registers, gets `name.hub.cyberspace.nexus`, and users can connect and log in through it |
 
 ### F12. Peering (networking phase 1)
 

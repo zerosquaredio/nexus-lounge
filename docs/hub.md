@@ -178,7 +178,7 @@ the format, as in AT's own APIs; graphics are never embedded in it.
 
 1. **Lookups (XRPC).** JSON queries under a `did:web` for the hub, named
    with AT's verb-first convention (e.g.
-   `io.zerosquared.bbs.directory.listBbses`, `getBbs`). Long lists are paged
+   `nexus.cyberspace.hub.listLeaves`, `getLeaf`). Long lists are paged
    with cursors; responses are cacheable (ETags), so apps download only
    what changed. AT clients can call them directly or via their account
    server's service proxying (`atproto-proxy` header, with service auth).
@@ -252,7 +252,7 @@ Related work:
 - **WorldMesh:** a small three.js project with a pull request adding AT
   login; useful as reference code only.
 - No AT record type exists for live presence or rooms; presence would be a
-  hub service, with any published records under `io.zerosquared.bbs.*`.
+  hub service, with any published records under `nexus.cyberspace.hub.*`.
 
 ## 6. Status monitoring
 

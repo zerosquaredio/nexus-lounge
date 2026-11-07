@@ -10,11 +10,13 @@ shared, cyberpunk-styled space across BBSes, chats, games, and VR worlds.
 | Use | Value | Changeable? |
 |---|---|---|
 | Project name | Nexus Lounge | Yes |
-| Record type names (NSIDs) | `io.zerosquared.bbs.*` | **No.** Shared by every BBS, hub, and directory |
-| Test hub | `*.hub.zerosquared.io` | Yes; any hub can use its own domain |
+| Record type names (NSIDs) | `nexus.cyberspace.*` ([vision](https://github.com/zerosquaredio/cyberspace-framework/blob/main/docs/vision.md) §2.2) | **No.** Shared by every BBS, hub, and directory |
+| Test hub | `*.hub.cyberspace.nexus` | Yes; any hub can use its own domain |
 | Public domain | Not yet chosen | Yes |
 
-`zerosquared.io` is registered at Gandi; its DNS is hosted by WordPress.com.
+`cyberspace.nexus` is the Cyberspace Framework's domain, registered at Gandi
+with DNS on Gandi LiveDNS. It is kept separate from personal domains so it
+can be handed to a community later.
 
 ## Architecture in brief
 
@@ -70,7 +72,7 @@ shared, cyberpunk-styled space across BBSes, chats, games, and VR worlds.
 | **Handle** | An account's human-readable name (e.g. `@alice.bsky.social`). Display only; can change. |
 | **Repo** | An account's public, signed store of records, hosted on its PDS |
 | **Lexicon** | A schema defining record types and API methods |
-| **NSID** | Namespaced identifier for a Lexicon, a reversed domain (e.g. `io.zerosquared.bbs.listing`) |
+| **NSID** | Namespaced identifier for a Lexicon, a reversed domain (e.g. `nexus.cyberspace.leaf.listing`) |
 | **XRPC** | AT's HTTPS-based API convention (`/xrpc/<NSID>`) |
 | **Relay / firehose** | The relay aggregates repo changes from all PDSes into a stream, the firehose |
 | **Jetstream** | A lightweight JSON version of the firehose |

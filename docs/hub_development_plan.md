@@ -28,7 +28,7 @@ BBS-side work is in [development_plan.md](development_plan.md).
 ```
                           ┌───────────────────────── Hub VPS ─────────────────────────┐
  users ── HTTPS/WSS ──>   │  Edge (Caddy)  ──>  Tunnel server (frps)  <── tunnel ──── │ ── BBS agent (frpc)
- *.hub.zerosquared.io     │  on-demand TLS      per-BBS routing                       │    on sysop's machine
+ *.hub.cyberspace.nexus   │  on-demand TLS      per-BBS routing                       │    on sysop's machine
                           │  allowlist                │                               │
                           │      │                    │ auth hooks                    │
                           │      └──────>  Control plane (hub app)  <─────────────────┤
@@ -43,7 +43,7 @@ BBS-side work is in [development_plan.md](development_plan.md).
 
 | Component | Role | Implementation |
 |---|---|---|
-| **Edge** | Public HTTPS on 443; TLS for `*.hub.zerosquared.io`; routes by host and path; enforces the endpoint allowlist; rate limits | **Caddy** with **on-demand TLS**: a certificate per BBS subdomain on first use, via HTTP validation, after Caddy asks the control plane whether the name is registered. Needs only a wildcard DNS record, no DNS API. Wildcard certificates (DNS-01) remain an option for hubs whose DNS provider has an API. |
+| **Edge** | Public HTTPS on 443; TLS for `*.hub.cyberspace.nexus`; routes by host and path; enforces the endpoint allowlist; rate limits | **Caddy** with **on-demand TLS**: a certificate per BBS subdomain on first use, via HTTP validation, after Caddy asks the control plane whether the name is registered. Needs only a wildcard DNS record, no DNS API. Wildcard certificates (DNS-01) remain an option for hubs whose DNS provider has an API. |
 | **Tunnel server** | Accepts outbound tunnels from BBS agents and forwards requests down them | **frp** (`frps`), to be confirmed by spike H0.2 |
 | **Tunnel agent** | Runs next to the BBS; connects out to the hub; forwards to the BBS's local web and WebSocket ports | **frp** (`frpc`) with a generated config |
 | **Control plane** | Sysop registration (AT OAuth), BBS registry, tunnel tokens, handle verification, hub pages, observed status, directory, admin tools | **TypeScript** (Node.js), using the official AT libraries |
@@ -77,7 +77,7 @@ hub/
 Hub configuration (`hub/deploy/hub.yaml`, proposed):
 
 ```yaml
-domain: hub.zerosquared.io       # BBSes get <name>.hub.zerosquared.io
+domain: hub.cyberspace.nexus       # BBSes get <name>.hub.cyberspace.nexus
 tls:
   mode: onDemand                 # onDemand (HTTP validation) or wildcard (DNS-01)
   askUrl: http://control:8080/tls/allowed   # Caddy asks before issuing a certificate
@@ -94,7 +94,7 @@ registration:
   reservedNames: [www, api, admin, hub, status, mail]
   maxBbsPerSysop: 3
 atproto:
-  oauthClientUrl: https://hub.zerosquared.io/oauth/client-metadata.json
+  oauthClientUrl: https://hub.cyberspace.nexus/oauth/client-metadata.json
   hubAccountDid: ""              # hub's own AT account, publishes observed status
 limits:
   requestsPerMinutePerBbs: 600
@@ -113,9 +113,9 @@ and WebSocket ports; [enigma_integration.md](enigma_integration.md) §6).
 
 | | |
 |---|---|
-| Implements | VPS; DNS records `hub` and `*.hub` → VPS in WordPress.com's DNS settings for `zerosquared.io`; three spikes: **H0.1** Caddy on-demand TLS with an `ask` endpoint; **H0.2** frp evaluation (subdomain and path routing, WebSocket, server plugin hooks able to reject a proxy that claims another subdomain or a disallowed path); **H0.3** Jetstream consumer filtered to our record types |
-| Depends on | VPS. **To confirm first:** WordPress.com accepts a wildcard record for `*.hub` (it currently has a catch-all that sends every subdomain to the website). Fallback: delegate `hub.zerosquared.io` with NS records to a DNS provider with an API. |
-| Done when | A test BBS on the VM is reachable at `test.hub.zerosquared.io` through frp with a valid certificate; an unregistered name gets no certificate; the frp plugin hook can veto a proxy |
+| Implements | VPS; DNS records `hub` and `*.hub` → VPS in Gandi LiveDNS for `cyberspace.nexus`; three spikes: **H0.1** Caddy on-demand TLS with an `ask` endpoint; **H0.2** frp evaluation (subdomain and path routing, WebSocket, server plugin hooks able to reject a proxy that claims another subdomain or a disallowed path); **H0.3** Jetstream consumer filtered to our record types |
+| Depends on | VPS. Gandi LiveDNS accepts wildcard records and has an API, so DNS-01 wildcard certificates are also possible later. |
+| Done when | A test BBS on the VM is reachable at `test.hub.cyberspace.nexus` through frp with a valid certificate; an unregistered name gets no certificate; the frp plugin hook can veto a proxy |
 
 ### H1. Edge and routing
 
@@ -149,15 +149,15 @@ Note: before H3 exists, HM1 registers BBSes with the admin CLI only.
 |---|---|
 | Implements | `/.well-known/atproto-did` answered by the hub for each subdomain from the registry ([hub.md](hub.md) §4.1); registering the BBS's own AT account DID |
 | Depends on | H3 |
-| Done when | A BBS account can set its handle to `name.hub.zerosquared.io` and Bluesky verifies it; deleting the registration stops verification immediately |
+| Done when | A BBS account can set its handle to `name.hub.cyberspace.nexus` and Bluesky verifies it; deleting the registration stops verification immediately |
 
 ### H5. Hub-served pages
 
 | | |
 |---|---|
-| Implements | Per-BBS info page at `/` (name, description, status, connect button); pinned enig-term release served by the hub and pointed at `wss://name.hub.zerosquared.io/ws`; offline page when the tunnel is down |
+| Implements | Per-BBS info page at `/` (name, description, status, connect button); pinned enig-term release served by the hub and pointed at `wss://name.hub.cyberspace.nexus/ws`; offline page when the tunnel is down |
 | Depends on | H1, H3; H6 for live status |
-| Done when | Users can open `https://name.hub.zerosquared.io`, see the BBS, and connect in the browser; enig-term files match the pinned SHA-256 |
+| Done when | Users can open `https://name.hub.cyberspace.nexus`, see the BBS, and connect in the browser; enig-term files match the pinned SHA-256 |
 
 Coordinate with BBS-side F14 (web sign-in): the sign-in callback and cookie
 belong to the BBS, so the info page links to the BBS's own sign-in route,
@@ -168,7 +168,7 @@ which the allowlist must include once F14 defines it.
 | | |
 |---|---|
 | Implements | Track agent connect and disconnect (frp server plugin events or frps admin API); publish `observedStatus` records from the hub's AT account ([publishing.md](publishing.md) §3.3); feed the offline page |
-| Depends on | H2; hub AT account; record type names (`io.zerosquared.bbs.*`) |
+| Depends on | H2; hub AT account; record type names (`nexus.cyberspace.*`) |
 | Done when | Stopping a BBS's agent updates its observed status within a minute, publicly readable on AT |
 
 ### H7. Directory
@@ -231,7 +231,7 @@ Groundwork for the common space (vision stage 2); scheduled with it.
 | Milestone | Features | Outcome |
 |---|---|---|
 | **HM0** Groundwork | H0 | Domain, VPS, and spikes done; tunnel choice confirmed |
-| **HM1** Reachable | H1, H2, minimal H3 (admin CLI) | The VM's ENiGMA½ is reachable at `test.hub.zerosquared.io`, with AT login working through the hub |
+| **HM1** Reachable | H1, H2, minimal H3 (admin CLI) | The VM's ENiGMA½ is reachable at `test.hub.cyberspace.nexus`, with AT login working through the hub |
 | **HM2** Self-service | H3, H4, H5 | Sysops register themselves, get handles, and users connect in the browser |
 | **HM3** Discovery | H6, H7 | Observed status and a public directory |
 | **HM4** Public launch | H8 | Operations and moderation in place; open to outside sysops |
@@ -268,10 +268,10 @@ Groundwork for the common space (vision stage 2); scheduled with it.
 - **Tunnel software:** frp, pending spike H0.2. If its plugin hooks can't
   enforce subdomain and path ownership, fall back to rathole/chisel plus
   enforcement in Caddy, or a custom tunnel.
-- **Public domain:** the test hub uses `hub.zerosquared.io`; a separate
-  Nexus Lounge domain may replace it for public launch. Since BBS handles
-  (`name.hub.zerosquared.io`) depend on the hub domain, moving hubs later means
-  BBS accounts change handles; plan the switch before HM4 if it's coming.
+- ~~**Public domain.**~~ The hub uses `hub.cyberspace.nexus` (decided
+  2026-11-06, before any BBS has a handle). BBS handles
+  (`name.hub.cyberspace.nexus`) depend on the hub domain, so it should not
+  change once BBSes register.
 - **Hub as OAuth client for BBSes**, instead of each BBS having its own
   ([hub.md](hub.md) §9). Currently assumed no.
 - **SSH through the hub** (not in v1; frp can forward TCP, but it needs a

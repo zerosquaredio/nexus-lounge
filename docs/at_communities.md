@@ -41,8 +41,8 @@ There is no official AT Protocol marketplace or app store.
 
 ## Before going public
 
-- **Project domain: decided.** Record type names use `io.zerosquared.bbs.*`
-  under `zerosquared.io`, which the project controls; the test hub runs at
-  `*.hub.zerosquared.io`. Renaming record types after BBSes start publishing
-  them is painful, so `zerosquared.io` must stay renewed. A separate public
+- **Project domain: decided.** Record type names use `nexus.cyberspace.*`
+  under `cyberspace.nexus`, which the project controls; the test hub runs at
+  `*.hub.cyberspace.nexus`. Renaming record types after BBSes start publishing
+  them is painful, so `cyberspace.nexus` must stay renewed. A separate public
   domain for Nexus Lounge may be registered later.
