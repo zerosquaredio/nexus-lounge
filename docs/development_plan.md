@@ -401,14 +401,40 @@ list entry), because ENiGMA½'s `isSysOp()` actually means "is root."
 
 | | |
 |---|---|
-| Implements | Existing password users connect their account to an AT identity, so either login works afterwards ([Cyberspace Framework vision](https://github.com/zerosquaredio/cyberspace-framework/blob/main/docs/vision.md) §6.3). Two ways in: "link Bluesky account" in user settings (logged in with a password; approve in the browser, as for AT login), and "I already have an account here" offered after AT login when no user has that DID (enter username and password once, instead of applying). Plus the `oputil user` subcommand for sysops to set or clear a user's DID (noted under F3). Unlinking |
+| Implements | Existing password users connect their account to an AT identity, so either login works afterwards ([Cyberspace Framework vision](https://github.com/zerosquaredio/cyberspace-framework/blob/main/docs/vision.md) §6.3). Two ways in: "link Bluesky account" in user settings (logged in with a password; approve in the browser, as for AT login), and "I already have an account here" offered after AT login when no user has that DID (enter username and password once, instead of applying). Plus the `oputil user` subcommand for sysops to set or clear a user's DID (noted under F3), and unlinking from settings |
+| Status | **Done** (2026-11-07) on the fork's `atproto-login` branch, in one commit, tagged `pr/06-link-at-account` and pushed. 18 new tests. Tested live: an AT login with an unlinked DID claimed a password user; from the settings screen, a user linked a Bluesky account (then logged in with it) and unlinked one, and unlinking with no other way to log in, or with a wrong password, was refused |
 | Track | **Upstream.** Generic; a follow-up to F3 |
-| Config | Menu entries (commented out in the templates, as for AT login); no new settings expected |
+| Config | Menus `atprotoLinkAccount` (after AT login; set as `linkAccount` in the AT login menu's config) and `userAtProtoConfig` (settings, command `AT`, commented out in the main menu template); art `ATLINK`, `ATCFG`; no new settings |
 | Depends on | F3, F4 (the application step it sits before) |
 | Done when | A password user links their Bluesky account from settings and then logs in with either; an AT login with an unlinked DID can claim an existing account with its password; one DID can't be linked to two users; failed password attempts count as failed logins; tests cover each path |
 
 Needed for existing boards joining a hub: their users keep their accounts
 and gain AT identity, rather than applying again.
+
+**What was built.** After AT login with a DID no user has, the caller is
+asked whether they already have an account here. Yes takes their user name
+and password once, through the normal password login (so wrong passwords
+count as failed logins and lock out as usual), then links the DID and logs
+them in; no goes on to apply. An account with two-factor authentication is
+refused there, because the link would be saved before the second factor:
+it logs in with its password and links from settings instead.
+
+The settings screen links by proving the AT identity in the browser, as AT
+login does, and unlinks with the user's password or a saved SSH key, so
+they keep a way to log in. Linking replaces any DID the user had; a DID
+already linked to another user is refused everywhere, including `oputil
+user atproto USERNAME DID|clear`.
+
+Two gaps, left for later: a wrong password when unlinking (already logged
+in) is not counted as a failed login; and if an operator removes a user's
+SSH key with `oputil` during their session, the session still counts the
+key when unlinking.
+
+Found in upstream's SSH key menu while testing, possible small upstream
+fixes: its action bar puts three items in a toggle view, which only draws
+two, so "cancel" never shows; after removing a key it says password login
+"remains available" even where passwords aren't allowed; and it lets a
+user remove their only way to log in.
 
 ## 4. Milestones
 
@@ -448,15 +474,14 @@ order, each small and independently reviewable:
    commented-out menu template entries.
 4. Allowed login types setting (F4).
 5. Offering callers the SSH key they connected with (F5).
-6. Web sign-in (F14).
-7. Verifier framework, DID-bound invites, invite codes, and provisional
+6. Linking an AT identity to an existing account (F16).
+7. Web sign-in (F14).
+8. Verifier framework, DID-bound invites, invite codes, and provisional
    access (F6), if the maintainer wants them.
-8. Docs: running behind a tunnel (F10).
-9. Bluesky announcement posting and invite notifications (F9, generic part).
-10. Multiple SSH keys per user (F5), as a separate proposal.
-11. In-BBS user manager (F15), as a separate proposal.
-12. Link AT to an existing account (F16), as a follow-up to the AT login
-    PRs (3 and 4).
+9. Docs: running behind a tunnel (F10).
+10. Bluesky announcement posting and invite notifications (F9, generic part).
+11. Multiple SSH keys per user (F5), as a separate proposal.
+12. In-BBS user manager (F15), as a separate proposal.
 
 ## 6. Risks and open questions
 
