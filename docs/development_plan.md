@@ -589,7 +589,7 @@ a user remove their only way to log in.
 |---|---|
 | `master` | Mirrors upstream exactly; never committed to directly |
 | `feature/<name>` | One per upstream PR, branched from `master` |
-| `atproto-login` | Current working branch for M1; split into feature branches for PRs |
+| `atproto-login` | Current working branch, and the fork's default branch on GitHub (since 2026-11-07), so visitors see our work first; split into feature branches for PRs. One commit on it is fork-only: the README note that the fork is part of the Cyberspace Framework (`2b0f7c83`), left out when cutting PR branches |
 | `pr/<nn>-<name>` (tags) | Annotated tags on `atproto-login` marking where each planned PR (§5.2) is complete; `nn` is its number in that list. A PR branch is cut from `master` with the commits up to its tag. Moved if the piece changes later |
 | `integration` | Our distribution: upstream plus every feature (including fork-only), used to run our own BBS |
 | `spike/*` | Throwaway experiments; never merged or pushed |
