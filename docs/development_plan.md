@@ -246,8 +246,9 @@ extra prompt. SyncTERM's behavior with this is not yet checked.
 | | |
 |---|---|
 | Implements | Verifier interface ([attestation.md](attestation.md) §6); v1 attestations as groups ([enigma_integration.md](enigma_integration.md) §5); verifiers `open`, `invite`, `inviteCode`, `sysopApproval`; provisional access; global policy checked after AT login; users without a qualifying attestation are offered the matching verifier flow |
+| Status | **Done** (2026-11-07) on the fork's `atproto-login` branch, in one commit, tagged `pr/08-admission` and pushed. 27 new tests. Tested live over SSH with the Bluesky test account on a board admitting by invite and code only: a wrong code and no code refused on the form, a real code (typed in lower case without dashes) admitted the account active with the code's groups and `verified-invite-code`, one use taken; with `["open"]` the code field is hidden |
 | Track | `open` and `sysopApproval` go **upstream with F3**. The **verifier framework, `invite`, `inviteCode`, and provisional access** are proposed upstream; fork-only if declined |
-| Config | `atProto.admission.*` |
+| Config | `atProto.admission.policy` (`open`, `invite`, `invite-code`, `sysop-approval`), `atProto.admission.provisionalGroup`; `oputil atproto invite …` and `invite-code …`; `ET9`/`TL10` in `atprotoApplication` |
 | Depends on | F3; F9 for sending invite notifications |
 | Done when | Each verifier adds the expected groups; invites work only for the invited DID; provisional users can reach only areas opened to them; policy changes take effect without restart; invite codes are single- or limited-use as configured |
 
@@ -279,6 +280,74 @@ users.
 Note: ENiGMA½'s ACS docs list account status `AS` values as `0=inactive,
 1=active`, but the code defines `disabled 0, inactive 1, active 2, locked 3`.
 Confirm which is right before using `AS` in rules.
+
+**Design** (2026-11-07, before coding). Admission applies when an AT
+identity with no user yet applies (after AT login or web sign-in); existing
+users are never re-checked, so they are grandfathered.
+
+- **Policy**, `atProto.admission.policy`: an ordered list of verifier ids.
+  The first that admits the applicant decides. Default `["open"]`, which is
+  today's behavior. Read per application, so changes need no restart.
+- **Verifiers** (v1), each a small module registered by id in
+  `core/atproto/admission/`, with one call: given the applicant (DID,
+  handle, any invite code they entered), admit or not, with the groups to
+  add, the account status, and a `ref`:
+  - `open`: anyone.
+  - `invite`: an invite made for this DID (below).
+  - `invite-code`: a valid code the applicant entered.
+  - `sysop-approval`: admitted, but `inactive` until the sysop activates
+    them (ENiGMA½'s existing activation).
+  The framework is the upstream proposal; F7's payment and ID verifiers
+  plug into it later, adding browser steps then.
+- **Attestations as groups:** an admitted user joins `verified-<id>` (e.g.
+  `verified-invite`) as well as their normal groups, so ACS can tell how
+  someone got in (`GM[verified-invite]`).
+- **Provisional access:** with `atProto.admission.provisionalGroup` set
+  (e.g. `provisional`), an applicant no verifier admits is created in that
+  group only, instead of `users.defaultGroups`, rather than refused.
+  Default areas are `GM[users]`, so they see only what is opened to them.
+  Promotion: manual (`oputil user group`), or ACS rules as above. Without
+  it, they are refused, and told about invite codes if the policy takes
+  them.
+- **Closed boards:** `allowNewUsers: false` (or `general.closedSystem`)
+  now means invitation only: `invite` and `invite-code` still admit, every
+  other verifier refuses. `rootDid` is unchanged.
+- **Invites** (DID-bound): `oputil atproto invite add HANDLE [--groups
+  g1,g2] [--days N]` resolves the handle to its DID and stores the invite
+  (groups default `users.defaultGroups`), with `list` and `revoke`. Used
+  once, when the invitee's user is created. Nothing secret: only that DID
+  can use it. The sysop tells the invitee themselves until F9 sends it.
+- **Invite codes:** `oputil atproto invite-code add [--uses N] [--groups
+  ...] [--days N]` prints a new code once; only its hash is stored, with
+  uses left, expiry and groups; `list` and `revoke`. The applicant enters
+  it in a new optional field of the AT application form (`ATNUA`), shown
+  only when the policy has `invite-code`; it is checked, and used up, when
+  the user is created.
+- **Storage:** `invite` and `invite_code` tables in `atproto.sqlite3`
+  (schema 3).
+- **Not in v1:** in-BBS management (F15), sending invites (F9), the
+  attestation table with expiry and revocation (F8), re-verifying existing
+  users when the policy is raised.
+
+**What was built** follows the design, with these details settled while
+building it:
+
+- The ids are kebab-case, as in [attestation.md](attestation.md) §8
+  (`invite-code`, `sysop-approval`), and `open` admits into
+  `verified-open` too, for consistency.
+- `invite` and `invite-code` start the account active even with
+  `users.requireActivation`: the sysop chose them in advance.
+- Invites and codes are taken (a conditional update) before the user is
+  created and given back if creating it fails, so two applicants can't
+  both have the last use.
+- Once no code could admit anyone, applying is refused up front ("This
+  board is invitation only"), not on the form.
+- ENiGMA½ orders focus by view id, so the code field uses ids 9/10 (the
+  password fields' ids, unused in the AT form) to sit before the apply
+  bar; a hidden field is skipped with `acceptsFocus`.
+- `atProto.admission.policy` is in `replacePaths`: config arrays merge
+  with the defaults by index, so an empty policy would turn back into
+  `["open"]`.
 
 ### F7. Payment and ID verifiers
 
