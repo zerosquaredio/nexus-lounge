@@ -44,6 +44,10 @@ Logical endpoints. ENiGMA½'s actual routes and ports are mapped in
 | `/oauth/callback` | AT OAuth redirect target |
 | `/login/<code>` | Browser handoff landing page ([attestation.md](attestation.md) §7.1) |
 | `/cb/<verifier-id>/...` | Verifier callbacks and webhooks |
+| `/assets/...` | Graphics and 3D assets the BBS offers to a hub's shared space ([hub.md](hub.md) §5.3) |
+
+The tunnel carries all of these, so a home-based BBS needs no open ports.
+Direct ports (SSH, telnet) are an optional extra a sysop may open.
 
 ### 2.2 Terminal protocol
 

@@ -30,6 +30,7 @@ The hub relays only traffic that must reach the BBS from outside:
 | Terminal sessions (WebSocket) | Users |
 | OAuth callback and client metadata | Users' browsers and account servers |
 | Verifier webhooks | Payment or verification providers |
+| Graphics and 3D assets the BBS offers to the hub's shared space | The hub, and through it users' clients (§4, §5.3) |
 
 A BBS with its own public address or tunnel loses nothing AT-related by not
 using the hub; it gives up only the directory listing and a hub-issued handle.
@@ -116,6 +117,7 @@ those prefixes only.
 | `/oauth/callback` | Yes | Responses limited to redirects or minimal pages |
 | `/login/<code>` | Yes | Browser handoff landing |
 | `/cb/<verifier-id>/...` | Yes | Verifier callbacks and webhooks |
+| `/assets/...` | Yes | Graphics and 3D assets the BBS offers to the shared space (§5.3): images, ANSI art, glTF/GLB, VRM. Only allowed content types, within size limits; the hub caches them so they stay available while the BBS is offline |
 | Anything else | No | 404 |
 
 Serving the web terminal from the hub means users always run a known client,
@@ -208,7 +210,10 @@ hub federation) is in [Cyberspace Framework vision](https://github.com/zerosquar
 
 - Identity is the person's AT DID, as everywhere else in the project.
 - Clients download avatars and environment graphics from the hub (or from
-  the person's own AT account).
+  the person's own AT account). Assets a BBS contributes (its room, sign,
+  or decorations) reach the hub over the BBS's tunnel (`/assets/`, §4),
+  so a home-based BBS can contribute them without opening any port; the
+  hub serves them to clients from its cache.
 - In-room chat, person-to-person messages, and possibly voice.
 - **Presence is opt-in.** Showing that someone is "hanging out", or which
   BBS they are on, is member activity, so it follows the same rule as
@@ -288,8 +293,13 @@ The hub supports both ways of running a BBS:
 
 - **Hosted (co-located):** on a server with a public address, reached
   directly or through the hub's front door.
-- **Home-based:** behind a home firewall, reaching the hub only by its
-  outbound tunnel.
+- **Home-based:** behind a home firewall, reaching the hub by its outbound
+  tunnel. The tunnel is the baseline and needs no open ports. A sysop may
+  also open ports themselves, for example SSH or telnet for callers who
+  prefer them, and list those in the BBS's `endpoints`
+  ([publishing.md](publishing.md) §3.1); that is optional. Anything the
+  hub itself needs from the BBS, including assets for the shared space,
+  goes over the tunnel.
 
 ## 7. Trust and privacy
 
