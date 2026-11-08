@@ -398,8 +398,8 @@ avoid the BBS account looking like a spam bot.
 | Implements | Mostly configuration of existing settings: public URL, `wsTerm.endpoint`, trusted proxy headers, path routing for the web and WebSocket ports ([enigma_integration.md](enigma_integration.md) §6). Hub registration client if needed |
 | Track | **Upstream docs PR** for tunnel setup (ENiGMA½ already ships an ngrok dev helper in `dev_util/ngrok`). Hub registration client is fork-only |
 | Config | Existing web and WebSocket settings; hub settings TBD |
-| Depends on | F3; F11 for the hub part |
-| Done when | A BBS on the VM is reachable through a tunnel with AT login working end to end |
+| Depends on | F3; F11 for the hub part; a VPS (the dev VM is never exposed to the internet) |
+| Done when | A hosted test BBS on the VPS (e.g. `test.cyberspace.nexus`, behind Caddy) works end to end over the internet: AT login in `public` mode, enig-term over `wss://`, and web sign-in. The home-based model is tested with the hub (F11) |
 
 ### F11. Hub
 
@@ -570,6 +570,16 @@ upstream always allows passwords: after removing a key it says password
 login "remains available" even where passwords aren't allowed, and it lets
 a user remove their only way to log in.
 
+### F17. Ready-made BBS images
+
+| | |
+|---|---|
+| Implements | Framework-standard images so anyone can start a BBS quickly: a Docker image (and Compose file) and a VM image, with ENiGMA½ from the fork, AT login, web sign-in and enig-term set up, sensible admission defaults, the hub agent, and a first-run setup that asks for the board name, the sysop's Bluesky handle (`rootDid`), and hosted or home-based. Runs on a server, a home VM, a spare machine, or someone's own computer, and need not be up all the time ([hub.md](hub.md) §6) |
+| Track | **This repo** (or a small `images` repo of its own). Builds on ENiGMA½'s own Docker image |
+| Config | The image's first-run settings; publishes the listing's `hours` if the sysop gives them |
+| Depends on | F10 (hosted), F11 (home-based, through the hub) |
+| Done when | Someone with no ENiGMA½ experience starts a board from the image, signs in as its sysop with Bluesky, and it appears on the hub, in both models |
+
 ## 4. Milestones
 
 | Milestone | Features | Outcome |
@@ -577,7 +587,7 @@ a user remove their only way to log in.
 | **M0** Groundwork | F0 | Environment ready, library verified, maintainer contacted |
 | **M1** Log in with Bluesky | F1, F2, F3 | Upstream PRs open for the core AT login |
 | **M2** Access control | F4, F5, F6, F14, F16 | AT-only boards, SSH for AT users, invites, provisional access, one-click web sign-in, existing users linking their AT identity |
-| **M3** Public presence | F9, F10, F11 | Publishing (including invite notifications), tunnels, and the hub |
+| **M3** Public presence | F9, F10, F11, F17 | Publishing (including invite notifications), tunnels, the hub, and ready-made BBS images, for hosted and home-based boards |
 | **M4** Networking | F12 | Shared boards between BBSes |
 | Later | F7, F8, F13, F15 | Paid verification, attestation table, clusters, in-BBS user manager |
 

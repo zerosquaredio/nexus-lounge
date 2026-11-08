@@ -274,6 +274,23 @@ The hub can observe whether each BBS's tunnel is connected. Because a crashed
 BBS cannot report its own outage, the hub publishes **observed status** from
 its own AT account ([publishing.md](publishing.md) §3.3).
 
+**Part-time BBSes are normal** (decided 2026-11-07). A BBS run from a home
+VM, a spare machine, or someone's own computer need not be up all the time,
+like the dial-up boards that opened only in the evening. Its registration,
+handle, and space on the hub stay while it is away. Its page, directory
+entry, and (later) its place in the social space show whether it is
+connected now, when it was last seen, and its regular hours if the sysop
+publishes them (the listing's `hours`, [publishing.md](publishing.md) §3.1).
+Being offline is not an outage: only a board that is down during its own
+hours, or has no hours, is shown as unexpectedly down.
+
+The hub supports both ways of running a BBS:
+
+- **Hosted (co-located):** on a server with a public address, reached
+  directly or through the hub's front door.
+- **Home-based:** behind a home firewall, reaching the hub only by its
+  outbound tunnel.
+
 ## 7. Trust and privacy
 
 - **The hub can read traffic in v1.** TLS terminates at the hub (the hub

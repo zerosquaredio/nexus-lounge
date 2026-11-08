@@ -155,7 +155,7 @@ Note: before H3 exists, HM1 registers BBSes with the admin CLI only.
 
 | | |
 |---|---|
-| Implements | Per-BBS info page at `/` (name, description, status, connect button); pinned enig-term release served by the hub and pointed at `wss://name.hub.cyberspace.nexus/ws`; offline page when the tunnel is down |
+| Implements | Per-BBS info page at `/` (name, description, status, connect button); pinned enig-term release served by the hub and pointed at `wss://name.hub.cyberspace.nexus/ws`; offline page when the tunnel is down, showing when the BBS was last seen and its regular hours (listing `hours`), since part-time boards are normal ([hub.md](hub.md) §6) |
 | Depends on | H1, H3; H6 for live status |
 | Done when | Users can open `https://name.hub.cyberspace.nexus`, see the BBS, and connect in the browser; enig-term files match the pinned SHA-256 |
 
@@ -249,9 +249,18 @@ Groundwork for the common space (vision stage 2); scheduled with it.
 
 - **Local:** control plane unit tests; frps and frpc in containers on the VM
   with Caddy's internal CA instead of public certificates.
-- **Staging:** the real domain on the VPS, with the VM's ENiGMA½ as the test
-  BBS. End-to-end tests: connect through enig-term, AT login, allowlist
-  enforcement, agent reconnect, status changes.
+- **Staging:** the real domain on the VPS. The personal dev VM is never
+  exposed to the internet, not even through a tunnel, so the test BBSes
+  are:
+  - **hosted:** an ENiGMA½ container on the VPS (the F10 test board);
+  - **home-based:** an ENiGMA½ in a throwaway VM or container, used for
+    nothing else, that only connects outward to the hub. Later, the
+    ready-made images (development plan F17).
+
+  End-to-end tests: connect through enig-term, AT login, allowlist
+  enforcement, agent reconnect, status changes, and a part-time board:
+  stop the home-based board's agent and check its page still exists,
+  shows it offline with when it was last seen, and its hours.
 - **Security tests:** an agent trying to claim another subdomain or a
   disallowed path is refused; non-allowlisted paths never reach a BBS.
 

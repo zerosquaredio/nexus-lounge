@@ -62,7 +62,8 @@ One record per BBS (record key `self`), in the BBS's repo.
 | `endpoints` | object[] | Ways to connect, each `{ protocol, uri }`; protocol is an open list (`web`, `ssh`, `telnet`, …), e.g. `https://coolbbs.hub.example`, `ssh://bbs.example:8889` |
 | `tags` | string[] | Optional topics |
 | `rules` | string | Optional; the BBS's rules, as plain text |
-| `admission` | object | `policy`: open list of values (`open`, `invite`, `inviteCode`, `sysopApproval`, `verified`, …) a directory can filter on; `howToJoin`: plain-text explanation |
+| `admission` | object | `policy`: open list of values (`open`, `invite`, `invite-code`, `sysop-approval`, `verified`, …; the verifier ids ENiGMA½ uses) a directory can filter on; `howToJoin`: plain-text explanation |
+| `hours` | object | Optional; when a part-time BBS is usually up ([hub.md](hub.md) §6): `timezone` (IANA, e.g. `America/Los_Angeles`), `weekly`: `{ days, from, to }[]` (days `mon`…`sun`, times `HH:MM`), and `note`, plain text such as "most evenings". Absent: meant to be always up |
 | `banner` | ANSI art (§3.7) | Optional |
 | `sysop` | DID | Optional; the sysop's personal DID, if they choose to disclose it |
 | `createdAt` | datetime | |
