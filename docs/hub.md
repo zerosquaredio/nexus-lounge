@@ -217,6 +217,10 @@ hub federation) is in [Cyberspace Framework vision](https://github.com/zerosquar
 - Prefer adapting existing open-source social VR software to building one.
   None of the candidates supports AT login today, so that integration is
   ours to write in every case.
+- **Start from something we fully control and can fork** (decided
+  2026-11-07): the core 3D layer must let us replace its login with AT
+  identity and run every part of it ourselves. Closed platforms can still
+  appear as optional leaves.
 
 Shortlist from an initial survey (2026-11-04; not yet verified hands-on):
 
@@ -239,8 +243,18 @@ checked.
 Ruled out for now: Vircadia (rewrite not production-ready), JanusWeb
 (stagnant), Third Room (paused since 2023, but a good design reference for
 identity, chat, and DMs on a federated network), iR Engine (CPAL license,
-unclear ownership), Webaverse (appears dead), Resonite (core is closed),
-OpenSimulator (old stack, non-glTF avatars).
+unclear ownership), Webaverse (appears dead), OpenSimulator (old stack,
+non-glTF avatars).
+
+Resonite (Yellow Dog Man Studios) is polished, with a busy community, but
+not a candidate for the core: its source is closed, and accounts, contacts,
+messaging, saved items and the world directory run on the company's cloud.
+So its login can't be replaced with AT identity, and hubs can't run its
+directory themselves. Its headless server software is available only to
+Patreon supporters, and is downloaded and logged in with Steam and
+Resonite accounts (checked 2026-11-07). It could still be an optional leaf:
+a Resonite world listed in the hub directory, with a visitor's AT identity
+linked through a browser handoff that the world checks with a web request.
 
 Related work:
 
