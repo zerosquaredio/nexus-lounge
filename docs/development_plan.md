@@ -198,7 +198,7 @@ support in terminals). The smoother sign-in-first flow is F14.
 | | |
 |---|---|
 | Implements | System-wide list of accepted login types, so a sysop can disable password logins (AT-only board), or disable AT. Refused types get a message (`loginAttemptLoginTypeNotAllowed`, `LOGINTYPE` art) rather than a disconnect, and aren't counted as failed logins. Menus show all options; sysops remove the ones they don't want. Also, with F3: new AT users apply after logging in (below) |
-| Status | **Done** (2026-11-06) on the fork's `atproto-login` branch, in two commits (the setting; then AT users applying after login), tagged `pr/04-allowed-login-types` and pushed. Tested live on an AT-only board over telnet and SSH: password login and apply refused or redirected, a fresh board's sysop created through Bluesky login and the application form via `rootDid`. Found on the way: config arrays merge with the defaults, so `allowedAuthFactor1Types` is now in `replacePaths` |
+| Status | **Done** (2026-11-06) on the fork's `atproto-login` branch, in two commits (the setting; then AT users applying after login), tagged `pr/04-allowed-login-types` and pushed. Tested live on an AT-only board over telnet and SSH: password login and apply refused or redirected, a fresh board's sysop created through Bluesky login and the application form via `rootDid`. Found on the way: config arrays merge with the defaults, so `allowedAuthFactor1Types` is now in `replacePaths`. A later fix belongs with this PR, so include it when cutting the branch: `5218e636` (2026-11-07), the SSH key screen refuses to remove the user's only way to log in and says truthfully what is left |
 | Track | **Upstream.** Small and generic. The application flow belongs with F3's PR, so the split may move when PRs are cut |
 | Config | `users.allowedAuthFactor1Types`; menu entries `atprotoApplication`, `newUserApplication`'s `config.atProtoLogin` |
 | Depends on | F3 (to be useful), but the setting itself is independent |
@@ -565,10 +565,11 @@ and offered upstream as
 [NuSkooler/enigma-bbs#987](https://github.com/NuSkooler/enigma-bbs/pull/987)
 (2026-11-07): the action bar was a toggle
 view, which keeps only two items, so "cancel" never showed; and the
-status box drew over two lines of the art. Ours to fix with F4/F5, since
-upstream always allows passwords: after removing a key it says password
-login "remains available" even where passwords aren't allowed, and it lets
-a user remove their only way to log in.
+status box drew over two lines of the art. Ours, since upstream always
+allows passwords, and fixed in `5218e636` (2026-11-07, with F4): after
+removing a key it said password login "remains available" even where
+passwords aren't allowed, and it let a user remove their only way to log
+in.
 
 ### F17. Ready-made BBS images
 
