@@ -47,7 +47,8 @@ Logical endpoints. ENiGMA½'s actual routes and ports are mapped in
 | `/assets/...` | Graphics and 3D assets the BBS offers to a hub's shared space ([hub.md](hub.md) §5.3) |
 
 The tunnel carries all of these, so a home-based BBS needs no open ports.
-Direct ports (SSH, telnet) are an optional extra a sysop may open.
+Direct ports (SSH, telnet) are an optional extra a sysop may open, as is a
+direct `https://` source for assets; the tunnel stays the default.
 
 ### 2.2 Terminal protocol
 

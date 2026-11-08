@@ -213,7 +213,12 @@ hub federation) is in [Cyberspace Framework vision](https://github.com/zerosquar
   the person's own AT account). Assets a BBS contributes (its room, sign,
   or decorations) reach the hub over the BBS's tunnel (`/assets/`, §4),
   so a home-based BBS can contribute them without opening any port; the
-  hub serves them to clients from its cache.
+  hub serves them to clients from its cache. The tunnel is the default. A
+  BBS with its own public address may instead name a direct `https://`
+  URL for its assets, if that is more efficient (large files, a CDN); the
+  hub then fetches from there, with the same type and size checks, and
+  still serves clients from its cache, so clients never depend on the BBS
+  being up or reveal their addresses to it.
 - In-room chat, person-to-person messages, and possibly voice.
 - **Presence is opt-in.** Showing that someone is "hanging out", or which
   BBS they are on, is member activity, so it follows the same rule as
