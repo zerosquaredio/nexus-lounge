@@ -68,6 +68,18 @@ send no heartbeats by default, and a dishonest one could stop them anyway.
 Restart the tunnel server to cut it; every other BBS reconnects within
 seconds.
 
+## Connecting a BBS
+
+A sysop registers on the hub's site and runs the tunnel agent with the
+config it gives them. On the BBS (ENiGMA½), the settings for running behind
+the hub are in its docs, under
+[Behind a Proxy, Tunnel or Hub](https://github.com/zerosquaredio/enigma-bbs/blob/atproto-login/website/src/content/docs/servers/contentservers/atproto-handler.md#behind-a-proxy-tunnel-or-hub):
+in short, `contentServers.web.overrideUrlPrefix` set to
+`https://name.<domain>`, and `proxied: true` for the web and WebSocket
+servers. For the BBS's listing to appear under its name in the directory,
+give the BBS's own Bluesky account on the hub's site; the listing then
+names the hub address by itself.
+
 ## End-to-end test
 
 `test/e2e.sh` runs the whole hub on one machine in front of a real ENiGMA½
