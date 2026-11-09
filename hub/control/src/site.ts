@@ -16,7 +16,10 @@ import { HubError } from './errors.ts';
 import { agentConfig } from './generate.ts';
 import { esc, page } from './html.ts';
 import type { Bbs, Registry } from './registry.ts';
-import { labelForHost } from './rules.ts';
+import type { AtClient } from './atproto.ts';
+import type { Directory, DirectoryEntry } from './directory.ts';
+import type { Listing } from './listing.ts';
+import { isDid, labelForHost } from './rules.ts';
 import { CallbackPath, SessionDays, type Identity, type WebSession } from './signin.ts';
 import { clientConfig, fileFor, policy, WebTermPath, type WebTerm } from './webterm.ts';
 
@@ -34,6 +37,9 @@ export interface SiteDeps {
     signin: SignInLike;
     //  the hub's copy of enig-term, if it serves one
     webterm?: WebTerm | null;
+    //  BBS listings from the AT network, and looking up accounts
+    directory?: Directory | null;
+    at?: AtClient | null;
     log?: (line: string) => void;
     now?: () => number;
 }
@@ -146,7 +152,7 @@ export function createSite(deps: SiteDeps): Server {
 
     function landing(error?: string): string {
         return page(
-            'Nexus Lounge hub',
+            'Register your BBS',
             `<p>Run a BBS? Register it here, and it gets an address under
 <code>${esc(config.domain)}</code>, reachable from anywhere without opening any ports.</p>
 ${error ? `<p class="error">${esc(error)}</p>` : ''}
@@ -156,7 +162,8 @@ ${error ? `<p class="error">${esc(error)}</p>` : ''}
 <button>Sign in</button>
 </form>
 <p class="hint">Signing in only tells the hub who you are. It can't post or read anything in your account,
-and it keeps no access to it afterwards.</p>`
+and it keeps no access to it afterwards.</p>
+<p><a href="/">Back to the directory</a></p>`
         );
     }
 
@@ -173,7 +180,17 @@ and it keeps no access to it afterwards.</p>`
                       bbs.name
                   )}"><button>New token</button></form>`
                 : '';
-        return `<tr><td><strong>${esc(bbs.name)}</strong>.${esc(config.domain)}</td><td>${esc(status)}</td><td>${actions}</td></tr>`;
+        const directory = deps.directory;
+        const listed = !directory
+            ? ''
+            : directory.forBbs(bbs)
+              ? '<br><span class="dim">listed in the directory</span>'
+              : bbs.bbsDid
+                ? `<br><span class="dim">not listed yet: its listing must name https://${esc(bbs.name)}.${esc(
+                      config.domain
+                  )}</span>`
+                : '<br><span class="dim">not listed: no Bluesky account given for it</span>';
+        return `<tr><td><strong>${esc(bbs.name)}</strong>.${esc(config.domain)}${listed}</td><td>${esc(status)}</td><td>${actions}</td></tr>`;
     }
 
     function dashboard(who: WebSession, error?: string, values: Record<string, string> = {}): string {
@@ -203,12 +220,30 @@ ${error ? `<p class="error">${esc(error)}</p>` : ''}
 <input type="text" id="webPort" name="webPort" value="${esc(values.webPort ?? '8080')}" inputmode="numeric">
 <label for="wsPort">Its WebSocket (web terminal) port</label>
 <input type="text" id="wsPort" name="wsPort" value="${esc(values.wsPort ?? '8810')}" inputmode="numeric">
+<label for="bbsAccount">Your BBS's own Bluesky account (optional)</label>
+<input type="text" id="bbsAccount" name="bbsAccount" value="${esc(values.bbsAccount)}" placeholder="coolbbs.bsky.social" autocomplete="off">
+<p class="hint">The account your BBS publishes its listing from. The directory shows that listing here once it
+names your BBS's address on this hub (<code>https://name.${esc(config.domain)}</code>).</p>
 <button>Register</button>
 </form>`
             : config.registration.open
               ? `<p class="dim">You have ${mine.length} BBSes, the most this hub allows per sysop.</p>`
               : '<p class="dim">This hub registers new BBSes by arrangement with its admin.</p>';
-        return page('Your BBSes', `${list}${add}${remove}`, who);
+        const account = mine.some(b => 'active' === b.state)
+            ? `<h2>Your BBS's Bluesky account</h2>
+<form method="post" action="/bbs/account">
+<label for="aname">BBS</label>
+<input type="text" id="aname" name="name" autocomplete="off" placeholder="coolbbs">
+<label for="aaccount">Its Bluesky account (handle or DID; empty to clear)</label>
+<input type="text" id="aaccount" name="bbsAccount" autocomplete="off" placeholder="coolbbs.bsky.social">
+<button>Save</button>
+</form>`
+            : '';
+        return page(
+            'Your BBSes',
+            `${list}${add}${account}${remove}<p><a href="/">The directory</a></p>`,
+            who
+        );
     }
 
     function credentials(who: WebSession, bbs: Bbs, token: string, fresh: boolean): string {
@@ -234,6 +269,11 @@ it is your BBS's password on this hub. If you lose it, come back for a new token
             throw new HubError('bad-port', 'Ports are whole numbers from 1 to 65535.');
         }
         return n;
+    }
+
+    //  The public address of a name under the hub, through the edge
+    function hubUrl(host: string): string {
+        return `https://${host}${443 === config.edge.httpsPort ? '' : `:${config.edge.httpsPort}`}`;
     }
 
     //  A BBS's own address (name.domain): its page, and the web terminal
@@ -306,12 +346,149 @@ it is your BBS's password on this hub. If you lose it, come back for a new token
         const connect = deps.webterm
             ? `<p><a href="${WebTermPath}?connect=1">Connect in your browser</a></p>`
             : '';
+        const entry = deps.directory?.forBbs(bbs) ?? null;
+        const title = entry ? entry.listing.name : `${bbs.name}.${config.domain}`;
         return page(
-            `${bbs.name}.${config.domain}`,
-            `${lastSeen(bbs)}
+            title,
+            `${entry ? `<p class="dim">${esc(bbs.name)}.${esc(config.domain)}</p>` : ''}
+${lastSeen(bbs)}
 ${connect}
-<p class="dim">A BBS on the <a href="${esc(config.site.publicUrl)}/">${esc(config.domain)}</a> hub.</p>`
+${entry ? listingDetails(entry, false) : ''}
+<p class="dim">A BBS on the <a href="${esc(hubUrl(config.domain))}/">${esc(config.domain)}</a> hub.</p>`
         );
+    }
+
+    //  What a listing says, for the directory and the BBS's page
+    function listingDetails(entry: DirectoryEntry, brief: boolean): string {
+        const l = entry.listing;
+        const parts: string[] = [];
+        if (l.description) {
+            parts.push(`<p>${esc(l.description)}</p>`);
+        }
+        if (entry.status && 'up' !== entry.status.state) {
+            parts.push(
+                `<p><strong>${esc(entry.status.state)}</strong>${entry.status.message ? `: ${esc(entry.status.message)}` : ''}${
+                    entry.status.until
+                        ? ` (until ${esc(entry.status.until.replace('T', ' ').replace(/:\d\d\.\d+Z$/, ' UTC'))})`
+                        : ''
+                }</p>`
+            );
+        }
+        if (l.tags.length) {
+            parts.push(`<p class="tags">${l.tags.map(t => `<span>${esc(t)}</span>`).join(' ')}</p>`);
+        }
+        const hours = hoursText(l);
+        if (hours) {
+            parts.push(`<p class="dim">${esc(hours)}</p>`);
+        }
+        if (!brief) {
+            if (l.admission.howToJoin) {
+                parts.push(`<h2>How to join</h2><p>${esc(l.admission.howToJoin)}</p>`);
+            }
+            if (l.rules) {
+                parts.push(`<h2>Rules</h2><p class="pre">${esc(l.rules)}</p>`);
+            }
+            const others = l.endpoints.filter(e => 'web' !== e.protocol);
+            if (others.length) {
+                parts.push(
+                    `<h2>Other ways to connect</h2><ul>${others
+                        .map(e => `<li>${esc(e.protocol)}: <code>${esc(e.uri)}</code></li>`)
+                        .join('')}</ul>`
+                );
+            }
+        }
+        return parts.join('\n');
+    }
+
+    function hoursText(l: Listing): string {
+        if (!l.hours) {
+            return '';
+        }
+        const weekly = l.hours.weekly.map(w => `${w.days.join(', ')} ${w.from} to ${w.to}`).join('; ');
+        const zone = l.hours.timezone ? ` (${l.hours.timezone})` : '';
+        return [weekly ? `Usually up ${weekly}${zone}` : '', l.hours.note].filter(Boolean).join('. ');
+    }
+
+    //  The directory: this hub's BBSes first, then others on the network
+    function directoryPage(who: WebSession | null): string {
+        const directory = deps.directory;
+        const ratings = config.directory.ratings;
+        const ours = registry
+            .list()
+            .filter(b => 'active' === b.state)
+            .map(bbs => ({ bbs, entry: directory?.forBbs(bbs) ?? null }))
+            .filter(({ bbs, entry }) => {
+                //  a BBS whose listing has a rating this hub doesn't show stays out
+                const raw = bbs.bbsDid ? directory?.entry(bbs.bbsDid) : null;
+                return !(raw?.bbs && !ratings.includes(raw.listing.rating)) && (entry || !raw?.bbs);
+            })
+            .sort(
+                (a, b) =>
+                    Number(b.bbs.connected) - Number(a.bbs.connected) || a.bbs.name.localeCompare(b.bbs.name)
+            );
+        const card = ({ bbs, entry }: { bbs: Bbs; entry: DirectoryEntry | null }) => `<article>
+<h3><a href="${esc(hubUrl(`${bbs.name}.${config.domain}`))}/">${esc(
+            entry?.listing.name ?? bbs.name
+        )}</a> <span class="dim">${bbs.connected ? 'online' : 'offline'}</span></h3>
+${entry ? listingDetails(entry, true) : ''}
+</article>`;
+        const others =
+            directory && 'network' === config.directory.scope
+                ? directory
+                      .entries()
+                      .filter(e => !e.bbs)
+                      .sort((a, b) => a.listing.name.localeCompare(b.listing.name))
+                : [];
+        const otherCard = (e: DirectoryEntry) => {
+            const web = e.listing.endpoints.find(x => 'web' === x.protocol);
+            return `<article>
+<h3>${web ? `<a href="${esc(web.uri)}" rel="nofollow noopener">${esc(e.listing.name)}</a>` : esc(e.listing.name)}</h3>
+${listingDetails(e, true)}
+${e.listing.endpoints
+    .filter(x => 'web' !== x.protocol)
+    .map(x => `<p class="dim">${esc(x.protocol)}: <code>${esc(x.uri)}</code></p>`)
+    .join('')}
+</article>`;
+        };
+        const join = who
+            ? '<p><a href="/bbs">Your BBSes</a></p>'
+            : '<p>Run a BBS? <a href="/signin">Register it on this hub</a>.</p>';
+        return page(
+            `${config.domain}`,
+            `${join}
+<h2>BBSes on this hub</h2>
+${ours.length ? ours.map(card).join('\n') : '<p class="dim">None yet.</p>'}
+${
+    others.length
+        ? `<h2>Elsewhere on the network</h2>
+<p class="hint">Listed by their own accounts, and not checked by this hub.</p>
+${others.map(otherCard).join('\n')}`
+        : ''
+}`,
+            who ?? undefined
+        );
+    }
+
+    //  A BBS account given as a handle or DID, as a DID; empty for none
+    async function accountDid(value: string): Promise<string | null> {
+        const v = value.replace(/^@/, '').trim();
+        if (!v) {
+            return null;
+        }
+        if (isDid(v)) {
+            return v;
+        }
+        if (!HandleRe.test(v) || v.length > 253) {
+            throw new HubError('bad-account', `"${value}" isn't a handle or DID.`);
+        }
+        if (!deps.at) {
+            throw new HubError('bad-account', 'Give the account as a DID (did:plc:...).');
+        }
+        try {
+            return await deps.at.resolveHandle(v);
+        } catch (e) {
+            throw new HubError('bad-account', `Couldn't confirm the account ${v}: ${(e as Error).message}`);
+        }
     }
 
     async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -361,7 +538,7 @@ ${connect}
             }
 
             if (!who) {
-                return redirect(res, '/');
+                return redirect(res, '/signin');
             }
 
             if ('/bbs' === path) {
@@ -369,6 +546,7 @@ ${connect}
                     name: (form.get('name') ?? '').trim().toLowerCase(),
                     webPort: form.get('webPort') ?? '',
                     wsPort: form.get('wsPort') ?? '',
+                    bbsAccount: (form.get('bbsAccount') ?? '').trim(),
                 };
                 if (!config.registration.open) {
                     return send(res, 403, dashboard(who));
@@ -378,7 +556,8 @@ ${connect}
                 }
                 try {
                     const ports = { web: port(values.webPort, 8080), ws: port(values.wsPort, 8810) };
-                    const { bbs, token: bbsToken } = registry.add(values.name, who.did, null, ports);
+                    const bbsDid = await accountDid(values.bbsAccount);
+                    const { bbs, token: bbsToken } = registry.add(values.name, who.did, bbsDid, ports);
                     log(`site: ${who.did} registered ${bbs.name}`);
                     return send(res, 200, credentials(who, bbs, bbsToken, true));
                 } catch (e) {
@@ -389,7 +568,7 @@ ${connect}
                 }
             }
 
-            if ('/bbs/rotate' === path || '/bbs/remove' === path) {
+            if ('/bbs/rotate' === path || '/bbs/remove' === path || '/bbs/account' === path) {
                 const name = (form.get('name') ?? '').trim().toLowerCase();
                 const bbs = registry.get(name);
                 //  the same answer for "not yours" and "no such BBS"
@@ -401,6 +580,19 @@ ${connect}
                 }
                 if (!changeLimit.allow(who.did)) {
                     return send(res, 429, dashboard(who, 'Too many changes. Try again later.'));
+                }
+                if ('/bbs/account' === path) {
+                    try {
+                        const did = await accountDid((form.get('bbsAccount') ?? '').trim());
+                        registry.setBbsDid(name, did);
+                        log(`site: ${who.did} set the account of ${name} to ${did ?? '(none)'}`);
+                        return redirect(res, '/bbs');
+                    } catch (e) {
+                        if (e instanceof HubError) {
+                            return send(res, 400, dashboard(who, e.message));
+                        }
+                        throw e;
+                    }
                 }
                 if ('/bbs/rotate' === path) {
                     const fresh = registry.rotateToken(name);
@@ -420,6 +612,10 @@ ${connect}
         }
 
         if ('/' === path) {
+            return send(res, 200, directoryPage(who));
+        }
+
+        if ('/signin' === path) {
             return who ? redirect(res, '/bbs') : send(res, 200, landing());
         }
 
@@ -438,7 +634,7 @@ ${connect}
         }
 
         if ('/bbs' === path) {
-            return who ? send(res, 200, dashboard(who)) : redirect(res, '/');
+            return who ? send(res, 200, dashboard(who)) : redirect(res, '/signin');
         }
 
         return send(res, 404, page('Not found', '<p>Nothing here.</p>'));

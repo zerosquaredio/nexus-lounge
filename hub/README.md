@@ -9,7 +9,7 @@ machine:
 |---|---|
 | **Caddy** (the edge) | Public HTTPS. Makes a certificate for a name only after asking the control plane; refuses odd paths; forwards only a BBS's allowed paths |
 | **frps** (the tunnel server) | Accepts the tunnels BBSes open outward, and carries requests down them. Asks the control plane before accepting any agent or route |
-| **control** (this repo, `control/`) | The registry of BBSes, the tunnel's approval hook, the certificate check, handle verification, and the hub's own site, where sysops sign in with AT and register their BBSes |
+| **control** (this repo, `control/`) | The registry of BBSes, the tunnel's approval hook, the certificate check, handle verification, the directory of BBS listings from the AT network, and the hub's own site, where sysops sign in with AT and register their BBSes |
 
 Each BBS runs **frpc** (the tunnel agent) next to it, with a config the hub
 generates.
@@ -45,6 +45,11 @@ node src/main.ts hub.json
 
 `add` prints the BBS's token once (only a hash is kept) and writes its agent
 config, which the sysop runs with `frpc -c coolbbs-agent.toml`.
+
+The hub's own address shows the directory: its own BBSes first, then
+others listed on the AT network. It gathers listings with a first sweep and
+then follows the network's changes (`directory` in the config; the admin can
+`directory hide` an account).
 
 At each BBS's own address, `name.<domain>`, the hub serves the BBS's page
 and its own pinned copy of enig-term (set `webTerminal.root` to enig-term's

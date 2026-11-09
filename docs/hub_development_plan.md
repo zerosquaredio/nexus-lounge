@@ -314,6 +314,45 @@ enig-term connected through the tunnel to its login screen. 65 unit tests.
   listing, with the directory (H7). For one-click login through the hub,
   the BBS must know its public address, `https://name.<domain>` (F10).
 
+**H7, the directory, working locally** (2026-11-09). The hub's own page
+is now the directory: "BBSes on this hub" first (online or not, with what
+their listings say), then "Elsewhere on the network", marked as listed by
+their own accounts and not checked by the hub. Each BBS's page shows its
+listing too. Tested against the real network: a sweep found the test BBS's
+listing in about a second; with the hub running, the BBS republished its
+listing and the change arrived through the stream 8 seconds later, linking
+it to its registered name. 85 unit tests.
+
+- **Gathering:** a first sweep asks a relay which accounts hold listings
+  (`com.atproto.sync.listReposByCollection`), then fetches them a few at
+  a time with pauses. After that a Jetstream, filtered to listing and
+  status records, brings changes; the hub saves its place and resumes
+  there after a restart. It sweeps again daily, and after any absence
+  longer than the stream keeps. A sweep still fetches each listing
+  (1 to 2 KB); only unchanged ones aren't rewritten.
+- **`directory.scope`:** `network` (the default) or `hub`, which fetches
+  only the hub's own BBSes' listings and follows only their accounts.
+- **Linking a listing to a registered BBS needs both sides:** the sysop
+  names the BBS's account (an optional field on registration, or later on
+  their page; a handle is checked both ways against its DID document), and
+  that account's listing names the BBS's hub address
+  (`https://name.<domain>`). A sysop can't claim another BBS's listing,
+  and a listing can't claim a hub name.
+- **Anyone can publish a listing,** so every field is checked and cut to
+  size, only `https`, `wss`, `ssh` and `telnet` addresses are kept,
+  everything is escaped, and the admin can hide accounts
+  (`directory hide DID`). Only the ratings in `directory.ratings` are
+  shown (`general` by default, [hub.md](hub.md) §5.4).
+- **Fetching from addresses others choose** (account servers named in DID
+  documents, `did:web` hosts, handles): public `https://` servers only,
+  checked when connecting, so DNS can't be switched to an internal address
+  in between; size and time limited.
+- **The hub's own address** now shows the directory; signing in moved to
+  `/signin`.
+- Not yet: events (the community calendar records), stats, ads, and ANSI
+  banners; the API for apps (§5.2); a large hub's `hub` scope (the stream
+  is given the accounts in its address, which keeps it to a few hundred).
+
 Still open, for the public server:
 
 - **The agent's connection.** Agents must use TLS (the tunnel server
@@ -527,7 +566,7 @@ control plane, behind the same edge. The BBS side is F18 and F19
 | **HM0** Groundwork | H0 | Domain, VPS, and spikes done; tunnel choice confirmed |
 | **HM1** Reachable | H1, H2, minimal H3 (admin CLI) | A throwaway test ENiGMA½ (§6; never the personal dev VM) is reachable at `test.hub.cyberspace.nexus`, with AT login working through the hub. **Working locally** (2026-11-09); the public server remains |
 | **HM2** Self-service | H3, H4, H5 | Sysops register themselves, get handles, and users connect in the browser. H3 and H5 **working locally** (2026-11-09) |
-| **HM3** Discovery | H6, H7 | Observed status and a public directory |
+| **HM3** Discovery | H6, H7 | Observed status and a public directory. H7 **working locally** (2026-11-09) |
 | **HM4** Public launch | H8 | Operations and moderation in place; open to outside sysops |
 | **HM5** Common space, first slice | H13 to H18 | Sign-in, presence, one chat room, the live model, a 2D map and an ANSI view, with basic blocking. Built on the test hub; needs HM3, not HM4, but must be in place (with H18) before a public hub turns it on |
 | Later | H9, H10, H11 | Sysop verification, end-to-end privacy, hosted accounts |

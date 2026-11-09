@@ -39,7 +39,7 @@ interface BbsRow {
     open_proxies: number;
 }
 
-const SchemaVersion = 2;
+const SchemaVersion = 3;
 
 const Schema = `
 CREATE TABLE IF NOT EXISTS bbs (
@@ -79,6 +79,25 @@ CREATE TABLE IF NOT EXISTS oauth_state (
 CREATE TABLE IF NOT EXISTS oauth_session (
     did        TEXT PRIMARY KEY,
     value      TEXT NOT NULL
+);
+--  the directory (schema 3): listings and status from the AT network,
+--  sanitized; accounts the hub admin hid; the stream's place
+CREATE TABLE IF NOT EXISTS directory_entry (
+    did         TEXT PRIMARY KEY,
+    listing     TEXT NOT NULL,
+    listing_cid TEXT NOT NULL,
+    status      TEXT,
+    status_cid  TEXT,
+    updated_at  TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS directory_hidden (
+    did       TEXT PRIMARY KEY,
+    reason    TEXT NOT NULL DEFAULT '',
+    hidden_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS directory_state (
+    key   TEXT PRIMARY KEY,
+    value TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS web_session (
     token_hash TEXT PRIMARY KEY,

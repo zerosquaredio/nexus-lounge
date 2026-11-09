@@ -30,6 +30,11 @@ table { width: 100%; border-collapse: collapse; }
 td, th { text-align: left; padding: .4rem .3rem; border-bottom: 1px solid var(--line); vertical-align: top; }
 form.inline { display: inline; }
 form.inline button { margin: 0 .3rem 0 0; padding: .2rem .6rem; font-size: .9rem; }
+article { border-top: 1px solid var(--line); padding: .4rem 0 .2rem; }
+article h3 { margin: .4rem 0; font-size: 1.05rem; }
+article p { margin: .3rem 0; }
+.tags span { display: inline-block; border: 1px solid var(--line); border-radius: 3px; padding: 0 .4rem; font-size: .85rem; }
+.pre { white-space: pre-wrap; }
 header { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; flex-wrap: wrap; }
 `;
 

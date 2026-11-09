@@ -35,6 +35,23 @@ export interface HubConfig {
     //  release (its dist/ directory); empty for none. digest pins the
     //  release: print it with "node src/cli.ts web-terminal-digest"
     webTerminal: { root: string; digest: string };
+    //  the directory of BBSes, from listings published on the AT network
+    directory: {
+        enabled: boolean;
+        //  "network": every BBS with a listing (this hub's own first);
+        //  "hub": only this hub's own BBSes, fetching nothing else
+        scope: 'network' | 'hub';
+        //  record type names: the development names until they're final
+        nsidPrefix: string;
+        //  asked which accounts hold listings, for the first sweep
+        relay: string;
+        //  followed for changes
+        jetstream: string;
+        //  accounts fetched at once during a sweep
+        concurrency: number;
+        //  listings shown (hub spec §5.4); mature and adult need age checks
+        ratings: string[];
+    };
     edge: {
         //  "internal": Caddy's own test CA (development); "onDemand": public
         //  certificates, one per registered name, on first use
@@ -64,6 +81,15 @@ export const Defaults: HubConfig = {
     },
     site: { host: '127.0.0.1', port: 7210, publicUrl: 'http://127.0.0.1:7210' },
     webTerminal: { root: '', digest: '' },
+    directory: {
+        enabled: true,
+        scope: 'network',
+        nsidPrefix: 'nexus.cyberspace.dev',
+        relay: 'https://relay1.us-west.bsky.network',
+        jetstream: 'wss://jetstream2.us-west.bsky.network/subscribe',
+        concurrency: 4,
+        ratings: ['general'],
+    },
     edge: { tls: 'internal', bindAddr: '127.0.0.1', httpPort: 7081, httpsPort: 7443 },
     registration: { open: true, reservedNames: DefaultReservedNames, maxBbsPerSysop: 3 },
 };
@@ -78,6 +104,7 @@ export function makeConfig(overrides: Partial<Record<keyof HubConfig, unknown>> 
         tunnel: { ...Defaults.tunnel, ...(overrides.tunnel as object) },
         site: { ...Defaults.site, ...(overrides.site as object) },
         webTerminal: { ...Defaults.webTerminal, ...(overrides.webTerminal as object) },
+        directory: { ...Defaults.directory, ...(overrides.directory as object) },
         edge: { ...Defaults.edge, ...(overrides.edge as object) },
         registration: { ...Defaults.registration, ...(overrides.registration as object) },
     };
@@ -86,6 +113,9 @@ export function makeConfig(overrides: Partial<Record<keyof HubConfig, unknown>> 
     }
     if (!['internal', 'onDemand'].includes(config.edge.tls)) {
         throw new HubError('config', 'edge.tls is "internal" or "onDemand"');
+    }
+    if (!['network', 'hub'].includes(config.directory.scope)) {
+        throw new HubError('config', 'directory.scope is "network" or "hub"');
     }
     let site: URL;
     try {

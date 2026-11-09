@@ -9,6 +9,10 @@ import { HubError } from './errors.ts';
 import { agentConfig, caddyfile, frpsConfig } from './generate.ts';
 import { Registry, type Bbs } from './registry.ts';
 import { loadWebTerm } from './webterm.ts';
+import { atClient } from './atproto.ts';
+import { Directory } from './directory.ts';
+import { fetchPublicJson } from './net.ts';
+import { isDid } from './rules.ts';
 
 const Usage = `Usage: node src/cli.ts [--config FILE] COMMAND
 
@@ -31,6 +35,14 @@ Generated configs
   frps-config            the tunnel server's config
   caddyfile              the edge's config
   web-terminal-digest    the fingerprint of webTerminal.root, to pin it
+
+The directory
+  directory list         every listing the hub holds, and whose BBS it is
+  directory hide DID [--reason TEXT]
+                         keep an account's listing out of the directory
+  directory unhide DID
+  directory hidden       the accounts hidden
+  directory sweep        fetch every listing now (the hub also does this daily)
 `;
 
 function parse(argv: string[]): { positional: string[]; options: Record<string, string> } {
@@ -90,7 +102,7 @@ function need(positional: string[], index: number, what: string): string {
     return value;
 }
 
-export function run(argv: string[]): void {
+export async function run(argv: string[]): Promise<void> {
     const { positional, options } = parse(argv);
     const command = positional[0];
     if (!command || 'help' === command) {
@@ -195,6 +207,51 @@ export function run(argv: string[]): void {
                 console.log(`Removed ${name}.`);
                 return;
             }
+            case 'directory': {
+                const directory = new Directory(registry, config);
+                const what = need(positional, 1, 'list, hide, unhide, hidden or sweep');
+                if ('list' === what) {
+                    const all = directory.entries();
+                    if (!all.length) {
+                        console.log('The directory is empty.');
+                    }
+                    for (const e of all) {
+                        console.log(
+                            `${e.did}  ${e.bbs ? `${e.bbs.name} (this hub)` : 'elsewhere'}  ${e.listing.name}`
+                        );
+                    }
+                    return;
+                }
+                if ('hidden' === what) {
+                    for (const h of directory.hidden()) {
+                        console.log(`${h.did}  since ${h.hiddenAt}  ${h.reason}`);
+                    }
+                    return;
+                }
+                if ('hide' === what || 'unhide' === what) {
+                    const did = need(positional, 2, 'DID');
+                    if (!isDid(did)) {
+                        throw new HubError('bad-did', `"${did}" is not a did:plc or did:web`);
+                    }
+                    if ('hide' === what) {
+                        directory.hide(did, options.reason ?? '');
+                        console.log(`${did} is hidden from the directory.`);
+                    } else {
+                        directory.unhide(did);
+                        console.log(
+                            `${did} may be listed again; its listing returns with the next change or sweep.`
+                        );
+                    }
+                    return;
+                }
+                if ('sweep' === what) {
+                    await directory.sweep(atClient(fetchPublicJson, config.directory.relay), line =>
+                        console.log(line)
+                    );
+                    return;
+                }
+                throw new HubError('usage', `Unknown directory command "${what}"\n\n${Usage}`);
+            }
             default:
                 throw new HubError('usage', `Unknown command "${command}"\n\n${Usage}`);
         }
@@ -204,13 +261,11 @@ export function run(argv: string[]): void {
 }
 
 if (import.meta.main) {
-    try {
-        run(process.argv.slice(2));
-    } catch (e) {
+    run(process.argv.slice(2)).catch(e => {
         if (e instanceof HubError) {
             console.error(e.message);
             process.exit(1);
         }
         throw e;
-    }
+    });
 }

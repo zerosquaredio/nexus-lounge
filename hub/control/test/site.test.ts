@@ -125,7 +125,7 @@ function stop(): Promise<void> {
 
 describe('the hub site', () => {
     it('offers sign-in, and sends a handle to its account host', async () => {
-        const home = await call('GET', '/');
+        const home = await call('GET', '/signin');
         assert.equal(home.status, 200);
         assert.match(home.body, /Sign in with your Bluesky/);
         assert.match(String(home.headers['content-security-policy']), /frame-ancestors 'none'/);
@@ -200,9 +200,9 @@ describe('the hub site', () => {
     });
 
     it('needs a session to see or change BBSes', async () => {
-        assert.equal((await call('GET', '/bbs')).location, '/');
-        assert.equal((await call('POST', '/bbs', { form: { name: 'coolbbs' } })).location, '/');
-        assert.equal((await call('GET', '/bbs', { cookie: 'hub_session=made-up' })).location, '/');
+        assert.equal((await call('GET', '/bbs')).location, '/signin');
+        assert.equal((await call('POST', '/bbs', { form: { name: 'coolbbs' } })).location, '/signin');
+        assert.equal((await call('GET', '/bbs', { cookie: 'hub_session=made-up' })).location, '/signin');
         assert.equal(registry.list().length, 0);
     });
 
@@ -301,7 +301,7 @@ describe('the hub site', () => {
         const out = await call('POST', '/signout', { cookie });
         assert.equal(out.location, '/');
         assert.match(String((out.headers['set-cookie'] as string[])[0]), /Max-Age=0/);
-        assert.equal((await call('GET', '/bbs', { cookie })).location, '/');
+        assert.equal((await call('GET', '/bbs', { cookie })).location, '/signin');
     });
 });
 
