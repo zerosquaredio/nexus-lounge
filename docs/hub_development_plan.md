@@ -44,7 +44,7 @@ BBS-side work is in [development_plan.md](development_plan.md).
 | Component | Role | Implementation |
 |---|---|---|
 | **Edge** | Public HTTPS on 443; TLS for `*.hub.cyberspace.nexus`; routes by host and path; enforces the endpoint allowlist; rate limits | **Caddy** with **on-demand TLS**: a certificate per BBS subdomain on first use, via HTTP validation, after Caddy asks the control plane whether the name is registered. Needs only a wildcard DNS record, no DNS API. Wildcard certificates (DNS-01) remain an option for hubs whose DNS provider has an API. |
-| **Tunnel server** | Accepts outbound tunnels from BBS agents and forwards requests down them | **frp** (`frps`), to be confirmed by spike H0.2 |
+| **Tunnel server** | Accepts outbound tunnels from BBS agents and forwards requests down them | **frp** (`frps`), confirmed by spike H0.2 |
 | **Tunnel agent** | Runs next to the BBS; connects out to the hub; forwards to the BBS's local web and WebSocket ports | **frp** (`frpc`) with a generated config |
 | **Control plane** | Sysop registration (AT OAuth), BBS registry, tunnel tokens, handle verification, hub pages, observed status, directory, admin tools | **TypeScript** (Node.js), using the official AT libraries |
 | **Database** | Registrations, tokens (hashed), status, directory index | **SQLite** |
@@ -120,6 +120,61 @@ and WebSocket ports; [enigma_integration.md](enigma_integration.md) §6).
 | Implements | VPS; DNS records `hub` and `*.hub` → VPS in Gandi LiveDNS for `cyberspace.nexus`; three spikes: **H0.1** Caddy on-demand TLS with an `ask` endpoint; **H0.2** frp evaluation (subdomain and path routing, WebSocket, server plugin hooks able to reject a proxy that claims another subdomain or a disallowed path); **H0.3** Jetstream consumer filtered to our record types |
 | Depends on | VPS. Gandi LiveDNS accepts wildcard records and has an API, so DNS-01 wildcard certificates are also possible later. |
 | Done when | A throwaway test BBS (§6; never the personal dev VM) is reachable at `test.hub.cyberspace.nexus` through frp with a valid certificate; an unregistered name gets no certificate; the frp plugin hook can veto a proxy |
+
+**H0.2 result: frp confirmed** (2026-11-08; frp 0.72.0, run on the dev VM
+on its loopback address only, in front of the test ENiGMA½).
+
+What worked:
+
+- **Routing** by subdomain and path, several local targets per BBS (the
+  web port and the WebSocket port). Paths not claimed get a 404 from the
+  tunnel server without reaching the BBS.
+- **A terminal session over WebSocket** through `/ws`, held idle for 100
+  seconds without dropping.
+- **The approval hook** (frp's server plugin, an HTTP call to the control
+  plane on every login and every proxy). A stand-in refused each of: a
+  wrong token; another BBS's subdomain; the path `/`; no paths at all; a
+  TCP proxy; a custom domain; a path with `..` in it. Nothing was opened
+  for any of them.
+- **It fails closed:** with the hook unreachable, new agents are refused,
+  while tunnels already up keep serving.
+- **Recovery:** the agent was back 2 seconds after the tunnel server
+  restarted. The hook is told when a BBS's proxies close (for observed
+  status, H6): at once for a clean stop or a killed agent, and within
+  about 15 seconds for an agent that goes silent.
+
+What frp doesn't do, so the edge (H1) or the generated agent config (H2)
+must:
+
+1. **Paths are matched as raw prefixes and passed on unchanged.**
+   `/assets/../admin` matched `/assets/` and reached the BBS as written,
+   where a web server could resolve it to `/admin`. The edge must refuse
+   any path with dot segments, encoded slashes or backslashes before it
+   reaches the tunnel. Prefix matching also means `/_enig/signinX` reaches
+   the BBS; exact paths are the edge's job too.
+2. **A visitor's own `X-Forwarded-For` is kept,** with the tunnel
+   server's view appended. The edge must replace it, and the BBS's
+   trusted-proxy setting must expect the extra hop (requests arrive from
+   the agent on `127.0.0.1`).
+3. **`X-Forwarded-Proto` is overwritten with `http`,** since the tunnel
+   server speaks plain HTTP behind the edge. ENiGMA½ treats a WebSocket
+   connection as secure only when it says `https`, and AT login needs a
+   secure connection, so the generated agent config sets it
+   (`requestHeaders.set.x-forwarded-proto = "https"`; checked).
+4. **No path rewriting.** `/ws` arrives as `/ws`. ENiGMA½'s WebSocket
+   server accepts any path, so this needs nothing.
+5. **No per-BBS tokens of its own** (its built-in token is one shared
+   secret). Each BBS's token travels as client metadata and the hook
+   checks it, which works. To do in H2: make sure the agent's connection
+   is encrypted and checks the hub's certificate, since the token crosses
+   it.
+
+For H2, the hook must allow only: proxy type `http`; no custom domains;
+the BBS's own subdomain; a non-empty list of paths, each exactly on the
+allowlist; and none of frp's other routing options (groups, routing by
+HTTP user, host rewriting).
+
+Still to do in H0: H0.1 (Caddy on-demand TLS) and H0.3 (Jetstream).
 
 ### H1. Edge and routing
 
@@ -361,9 +416,9 @@ control plane, behind the same edge. The BBS side is F18 and F19
 
 ## 8. Open questions
 
-- **Tunnel software:** frp, pending spike H0.2. If its plugin hooks can't
-  enforce subdomain and path ownership, fall back to rathole/chisel plus
-  enforcement in Caddy, or a custom tunnel.
+- ~~**Tunnel software.**~~ frp, confirmed by spike H0.2 (2026-11-08): its
+  hooks can enforce subdomain and path ownership. Path clean-up and the
+  forwarded headers are the edge's job (H0, result).
 - ~~**Public domain.**~~ The hub uses `hub.cyberspace.nexus` (decided
   2026-11-06, before any BBS has a handle). BBS handles
   (`name.hub.cyberspace.nexus`) depend on the hub domain, so it should not
