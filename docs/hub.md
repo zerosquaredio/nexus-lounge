@@ -1,7 +1,7 @@
 # Hub Spec
 
 Status: Draft
-Last updated: 2026-11-04
+Last updated: 2026-11-08
 
 ## 1. Overview
 
@@ -249,6 +249,14 @@ avatars from people's AT accounts. Next steps: try the Overte client on
 Windows in a public world; then run its server on the VM (Docker) to see how
 its accounts work and where AT login fits. VRM avatar support is to be
 checked.
+
+**Decided 2026-11-08:** Overte for worlds and the native client, with a
+browser and WebXR client forked from Vircadia's web SDK joining the same
+domains over the WebRTC support Overte's domain server still has. Details,
+the identity and networking approach (a hub-run metaverse server and ICE
+server), and next steps are in [overte_evaluation.md](overte_evaluation.md).
+The Vircadia ruled out below is its new platform; its older web SDK is the
+part we reuse.
 
 Ruled out for now: Vircadia (rewrite not production-ready), JanusWeb
 (stagnant), Third Room (paused since 2023, but a good design reference for

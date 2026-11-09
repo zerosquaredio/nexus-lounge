@@ -644,6 +644,7 @@ in.
 | **M3** Public presence | F9, F10, F11, F17 | Publishing (including invite notifications), tunnels, the hub, and ready-made BBS images, for hosted and home-based boards |
 | **M4** Networking | F12 | Shared boards between BBSes |
 | Later | F7, F8, F13, F15 | Paid verification, attestation table, clusters, in-BBS user manager |
+| After M3 | (not yet split into features) | The 3D and VR social space: Overte worlds, AT login through a hub-run metaverse server, a browser client, an in-world BBS terminal. Decision and next steps in [overte_evaluation.md](overte_evaluation.md) |
 
 ## 5. Branches and PR sequence
 
