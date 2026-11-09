@@ -267,7 +267,7 @@ control plane, behind the same edge. The BBS side is F18 and F19
 
 | | |
 |---|---|
-| Implements | People (not only sysops) sign in to the hub with AT OAuth, identity scope only; a small profile keyed by DID, created at first sign-in, with their presence setting (off by default). No separate registration, no passwords |
+| Implements | People (not only sysops) sign in to the hub with AT OAuth, identity scope only; a small profile keyed by DID, created at first sign-in, with their presence setting (off by default). No separate registration, no passwords. Signing in alone doesn't open the common space: by default that needs membership of a connected BBS (H14, vision §8.7) |
 | Depends on | H3 (the hub's OAuth client) |
 | Done when | A person signs in, sees their profile, and can turn presence on and off |
 
@@ -275,9 +275,9 @@ control plane, behind the same edge. The BBS side is F18 and F19
 
 | | |
 |---|---|
-| Implements | Who is on the hub and on which leaf, from two sources (vision §8.6): the hub's own pages (a signed-in person opening a BBS from them), and reports from BBSes (F18), signed as the BBS, including vouched users without AT accounts (`alice@coolbbs`) where the hub admin accepts them from that BBS. Reports arriving through a BBS are shown as such (`alice via coolbbs`) until the person confirms that BBS at the hub. Consent: shown only with the person's setting on; the rating rule ([hub.md](hub.md) §5.4) |
+| Implements | Who is on the hub and on which leaf, from two sources (vision §8.6): the hub's own pages (a signed-in person opening a BBS from them), and reports from BBSes (F18), signed as the BBS, including vouched users without AT accounts (`alice@coolbbs`) where the hub admin accepts them from that BBS. Reports arriving through a BBS are shown as such (`alice via coolbbs`) until the person confirms that BBS at the hub. Consent: shown only with the person's setting on; the rating rule ([hub.md](hub.md) §5.4). **Who may join the common space** (vision §8.7): by default only members of a connected BBS, known from the BBS's signed statement (F18); hub settings for letting in anyone with an AT account, which BBSes count, and a waiting period |
 | Depends on | H13; F18 for reports; a way for a BBS to prove itself (H3's stages: the tunnel's own channel first) |
-| Done when | Someone who opened a board from the hub page, and someone who connected to a board by SSH, both appear, and disappear when they leave or turn presence off; a BBS can't report a user as on another BBS |
+| Done when | Someone who opened a board from the hub page, and someone who connected to a board by SSH, both appear, and disappear when they leave or turn presence off; a BBS can't report a user as on another BBS; someone signed in to the hub who is a member of no BBS can't join the space unless the hub is set to allow it |
 
 ### H15. Chat
 

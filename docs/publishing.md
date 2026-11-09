@@ -214,7 +214,7 @@ upload), and whether the member's opt-in is required.
 
 | Kind | Examples | Rule |
 |---|---|---|
-| **BBS events** | Calendar events and reminders; new board, door, or file area; status changes; scheduled ads; sysop announcements | May be posted |
+| **BBS events** | Calendar events and reminders; new board, door, or file area; status changes; the BBS's addresses changing (it has moved to another hub, or to none: a ready-made "we've moved" post, since this account is the one channel no hub controls; vision §6.1); scheduled ads; sysop announcements | May be posted |
 | **Member events** | Achievements, high scores, a file the member wants promoted | Only with that member's opt-in, stored on the BBS; the member also chooses whether their handle appears |
 | **Never posted** | Logins and logoffs, new users by name, private mail, node messages | Not available as triggers |
 
