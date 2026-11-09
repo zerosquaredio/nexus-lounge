@@ -119,6 +119,7 @@ and WebSocket ports; [enigma_integration.md](enigma_integration.md) §6).
 |---|---|
 | Implements | VPS; DNS records `hub` and `*.hub` → VPS in Gandi LiveDNS for `cyberspace.nexus`; three spikes: **H0.1** Caddy on-demand TLS with an `ask` endpoint; **H0.2** frp evaluation (subdomain and path routing, WebSocket, server plugin hooks able to reject a proxy that claims another subdomain or a disallowed path); **H0.3** Jetstream consumer filtered to our record types |
 | Depends on | VPS. Gandi LiveDNS accepts wildcard records and has an API, so DNS-01 wildcard certificates are also possible later. |
+| Status | The three spikes are done locally (2026-11-08; results below): frp, Caddy's ask-first certificates, and Jetstream all confirmed. The public server, DNS and real certificates remain |
 | Done when | A throwaway test BBS (§6; never the personal dev VM) is reachable at `test.hub.cyberspace.nexus` through frp with a valid certificate; an unregistered name gets no certificate; the frp plugin hook can veto a proxy |
 
 **H0.2 result: frp confirmed** (2026-11-08; frp 0.72.0, run on the dev VM
@@ -174,7 +175,62 @@ the BBS's own subdomain; a non-empty list of paths, each exactly on the
 allowlist; and none of frp's other routing options (groups, routing by
 HTTP user, host rewriting).
 
-Still to do in H0: H0.1 (Caddy on-demand TLS) and H0.3 (Jetstream).
+**H0.1 result: Caddy's ask-first certificates work** (2026-11-08; Caddy
+2.11.9 on the dev VM's loopback address, in front of the frp setup above,
+with Caddy's own test certificate authority in place of a public one).
+
+- **Certificates only for registered names.** The first request for a
+  registered BBS's name got a certificate, after Caddy asked the control
+  plane. An unregistered name under the hub's domain, and a foreign
+  domain, were both denied: the connection failed and no certificate was
+  made. Caddy asks again on every attempt for a denied name (5 attempts,
+  5 asks) and never again for a name it holds a certificate for, so the
+  ask endpoint must be cheap, and the edge rate limited.
+- **The whole chain works:** a browser-style request, and a terminal
+  session over `wss://`, through Caddy, the tunnel, and the agent to the
+  test BBS.
+- **Caddy covers the gaps frp left** (above), with three things to get
+  right in H1:
+  1. *Odd paths are refused* (400) by a rule on the raw path: dot
+     segments, doubled or encoded slashes, backslashes and encoded
+     nulls. The query string is left alone, so an OAuth callback's
+     encoded `iss` still passes.
+  2. *Order matters.* Caddy runs `handle` blocks before a bare
+     `respond`, so the rule must itself be the first `handle` block. My
+     first attempt put it outside, and it silently never ran: `/assets//x`
+     and a path with a backslash went through. H1's tests must include
+     these cases, so a mistake like that can't pass unnoticed.
+  3. *Forwarded headers.* Caddy drops a visitor's own `X-Forwarded-For`
+     and sets the real one. It does not drop `X-Real-IP`, which ENiGMA½
+     also reads, so the edge removes it. The BBS then sees the visitor's
+     address followed by one hub-internal hop, arriving from the agent on
+     loopback, which its trusted-proxy setting must allow for (F10).
+- The hub answering `/` and `/.well-known/atproto-did` itself, and exact
+  paths (`/_enig/signin` but not `/_enig/signinX`), work as path rules.
+
+Not testable locally: real certificates by HTTP validation, which need
+the public server and DNS.
+
+**H0.3 result: Jetstream delivers our records** (2026-11-08). A consumer
+subscribed with `wantedCollections=nexus.cyberspace.dev.leaf.*` on a
+public Jetstream instance connected in under half a second, and received
+the test BBS's status record about 230 ms after the BBS wrote it, with
+the record's content. Notes for H7:
+
+- Identity and account events for every account on the network arrive
+  whatever the filter (about one every two seconds), and must be ignored.
+- Rewriting a record with unchanged content produces no event, as
+  expected, so the listing's "only when it changes" rule (F9) costs
+  nothing here.
+- Jetstream only carries what happens while connected (plus a short
+  replay by cursor). For BBSes that published earlier, the relay's
+  `com.atproto.sync.listReposByCollection` lists every account holding a
+  given record type: asked for the listing type, it returned the test
+  BBS. So the directory can fill itself at startup, then follow the
+  stream.
+
+**H0 is done as far as it can be locally.** Remaining for the public
+server: DNS, and real certificates.
 
 ### H1. Edge and routing
 
