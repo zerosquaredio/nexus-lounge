@@ -235,8 +235,12 @@ upload), and whether the member's opt-in is required.
   `did:plc` whose rotation key the sysop holds
   ([Cyberspace Framework vision](https://github.com/zerosquaredio/cyberspace-framework/blob/main/docs/vision.md) §6.1, proposed
   2026-11-06).
-- Exact OAuth permission scopes for the BBS account. They name the record
-  types (now decided), so they can be written out with F9.
+- ~~Exact OAuth permission scopes for the BBS account.~~ Written out with
+  F9 (2026-11-08): `atproto`, `repo:` for the listing, status and
+  `app.bsky.feed.post`, and `blob:image/*`. Still open: an `rpc:`
+  permission for proving the BBS's identity to a hub or peer, to settle
+  before real boards connect ([development_plan.md](development_plan.md)
+  §6).
 - ~~Name structure: flat or grouped by area.~~ Grouped by role
   (`nexus.cyberspace.leaf.*`, `.hub.*`); each group has its own `_lexicon`
   DNS record (decided 2026-11-06).

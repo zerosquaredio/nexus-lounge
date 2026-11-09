@@ -1,7 +1,7 @@
 # Development Plan
 
 Status: Draft
-Last updated: 2026-11-06
+Last updated: 2026-11-08
 
 This plan breaks the work into features, says where each one is delivered
 (upstream ENiGMA½, our fork, or this repo), and defines how sysops enable it.
@@ -64,8 +64,9 @@ unchanged; its module boundaries are designed so that this costs nothing.
 
 ## 2. Configuration model
 
-Proposed new `config.hjson` settings, modeled on the existing top-level
-`activityPub` block. Names are proposals until agreed with the maintainer.
+The `config.hjson` settings, modeled on the existing top-level
+`activityPub` block, as built on the fork (2026-11-08). Names may still
+change if the maintainer prefers others.
 
 ```hjson
 atProto: {
@@ -77,11 +78,12 @@ atProto: {
         //  https:// base URL (contentServers.web.overrideUrlPrefix behind a
         //  proxy or the hub), so there is no separate URL setting
         clientMode: loopback
-        //  the scope is always "atproto" (identity only) and is not a setting
+        //  user logins always ask for "atproto" (identity only); the board
+        //  account's write scopes follow from publishing (F9); not settings
     }
 
     login: {
-        allowNewUsers: true         //  create a local user on first AT login
+        allowNewUsers: true         //  false: invitation only (F6)
         secureConnectionsOnly: true //  never offer AT login over telnet
         handoffTimeoutSeconds: 300
         //  only this DID may become root (user #1) via AT login (F3)
@@ -90,26 +92,33 @@ atProto: {
 
     webSignIn: {
         enabled: false              //  sign in on a web page before the terminal (F14)
-        cookieMaxAgeDays: 30
-        allowedOrigins: []          //  origins allowed to open terminal sessions
+        sessionDays: 30
+        allowedOrigins: []          //  other origins whose pages may use the sign-in
     }
 
     admission: {
-        //  attestations required for full access (F6)
-        policy: { anyOf: [ "open" ] }
-        //  group for AT users who log in without meeting the policy;
-        //  empty = refuse them instead
-        provisionalGroup: provisional
-        verifiers: {
-            open:           { enabled: true }
-            invite:         { enabled: false }  //  DID-bound invites
-            inviteCode:     { enabled: false }  //  shareable codes
-            sysopApproval:  { enabled: false }  //  uses users.requireActivation
-        }
+        //  verifiers, in order; the first that admits the applicant decides
+        //  (F6): open, invite, invite-code, sysop-approval
+        policy: [ "open" ]
+        //  group for applicants no verifier admits; empty = refuse them
+        provisionalGroup: ""
     }
 
     publishing: {
-        enabled: false              //  BBS account and public records (F9)
+        enabled: false              //  the board's own account and records (F9)
+        nsidPrefix: "nexus.cyberspace.dev"  //  until the record shapes are final
+        minPostIntervalSeconds: 60
+        postLangs: [ "en" ]
+        listing: {
+            description: ""
+            tags: []
+            rules: ""
+            howToJoin: ""
+            hours: {}
+            deriveEndpoints: true
+            endpoints: []
+            sysopDid: ""
+        }
     }
 }
 
@@ -129,6 +138,8 @@ contentServers: {
 
 Menu side: an `atprotoLogin` menu and a matching "login with AT" option on the
 login matrix, both commented out in `misc/menu_templates/login.in.hjson`.
+Later features add their own menus the same way (each feature's Config row
+names them).
 
 ## 3. Features
 
@@ -170,7 +181,7 @@ and what "done" means.
 | | |
 |---|---|
 | Implements | `atproto` login type in `authenticateFactor1`; member DID stored as a user property and used for lookup; username derived from handle with collision handling; first-login user creation (since F4: an application form after first login); `atprotoLogin` menu module (enter handle, show handoff URL, wait); web handler for client metadata and callback under `/_enig/atproto/`; secure-connection check (originally ACS `SC`; since F4 the module's own check, with a message); public client mode (client metadata, signing keys) alongside F1's loopback mode |
-| Status | **Done** (2026-11-05) on the fork's `atproto-login` branch, in four commits (login core, login screen and callback, public client mode, sysop docs), tagged `pr/03-atproto-login` and pushed. 42 new tests. Logged in live with a real Bluesky account over SSH, first in loopback mode and then in public mode through a Cloudflare quick tunnel: first login created the sysop via `rootDid`, a later login found the same user by DID. enig-term not yet tried |
+| Status | **Done** (2026-11-05) on the fork's `atproto-login` branch, in four commits (login core, login screen and callback, public client mode, sysop docs), tagged `pr/03-atproto-login` and pushed. 42 new tests. Logged in live with a real Bluesky account over SSH, first in loopback mode and then in public mode through a Cloudflare quick tunnel: first login created the sysop via `rootDid`, a later login found the same user by DID. enig-term was tried later, with F14 |
 | Track | **Upstream** |
 | Config | `atProto.login.*`, `atProto.oauth.clientMode: public` (uses `contentServers.web.overrideUrlPrefix`; no separate URL setting), `contentServers.web.handlers.atProto.enabled`, menu template entries (commented out) |
 | Depends on | F1, F2 |
@@ -245,7 +256,7 @@ extra prompt. SyncTERM's behavior with this is not yet checked.
 
 | | |
 |---|---|
-| Implements | Verifier interface ([attestation.md](attestation.md) §6); v1 attestations as groups ([enigma_integration.md](enigma_integration.md) §5); verifiers `open`, `invite`, `inviteCode`, `sysopApproval`; provisional access; global policy checked after AT login; users without a qualifying attestation are offered the matching verifier flow |
+| Implements | Verifier interface ([attestation.md](attestation.md) §6); v1 attestations as groups ([enigma_integration.md](enigma_integration.md) §5); verifiers `open`, `invite`, `invite-code`, `sysop-approval`; provisional access; global policy checked after AT login; users without a qualifying attestation are offered the matching verifier flow |
 | Status | **Done** (2026-11-07) on the fork's `atproto-login` branch, in one commit, tagged `pr/08-admission` and pushed. 27 new tests. Tested live over SSH with the Bluesky test account on a board admitting by invite and code only: a wrong code and no code refused on the form, a real code (typed in lower case without dashes) admitted the account active with the code's groups and `verified-invite-code`, one use taken; with `["open"]` the code field is hidden |
 | Track | `open` and `sysopApproval` go **upstream with F3**. The **verifier framework, `invite`, `inviteCode`, and provisional access** are proposed upstream; fork-only if declined |
 | Config | `atProto.admission.policy` (`open`, `invite`, `invite-code`, `sysop-approval`), `atProto.admission.provisionalGroup`; `oputil atproto invite …` and `invite-code …`; `ET9`/`TL10` in `atprotoApplication` |
@@ -634,6 +645,26 @@ in.
 | Depends on | F10 (hosted), F11 (home-based, through the hub) |
 | Done when | Someone with no ENiGMA½ experience starts a board from the image, signs in as its sysop with Bluesky, and it appears on the hub, in both models |
 
+### F18. Presence reports to the hub
+
+| | |
+|---|---|
+| Implements | With the sysop's switch on, the BBS tells its hub who is on, for members who have chosen to be shown (a setting in their user config, off by default): connecting, leaving, and optionally where they are (a door, a chat room), sent over the BBS's connection to the hub and signed as the BBS ([vision](https://github.com/zerosquaredio/cyberspace-framework/blob/main/docs/vision.md) §8.6). Members with a linked AT identity are reported by DID; with a second switch, members without one are reported as local users (`alice@coolbbs`, vision §6.4). The sysop can keep any member out of the hub's space, whatever the member's own setting (vision §8.7) |
+| Track | **Fork-only** (hub integration) |
+| Config | `atProto.hub.presence.*` (names to be settled with the hub settings, F10 and F11); a user config entry |
+| Depends on | F9 (the board's identity), F11; hub H14 |
+| Done when | A member who turned it on appears on the hub when they log in by any route, and is gone when they log off or turn it off; nobody is reported without their own setting on; a member the sysop withheld never appears |
+
+### F19. The hub as a door
+
+| | |
+|---|---|
+| Implements | A menu module showing the hub's common space inside the BBS, as an ANSI view of the hub's live model (hub H16, H17): who is around, grouped by who is talking, and the hub's chat room, as the caller's reported identity (F18). So a caller on an ordinary terminal can see and talk to people on other BBSes |
+| Track | **Fork-only** |
+| Config | A menu entry (commented out in the templates); art |
+| Depends on | F18; hub H15 to H17 |
+| Done when | A caller opens it from the main menu, sees people from another BBS and from the hub's web page, and chats with them |
+
 ## 4. Milestones
 
 | Milestone | Features | Outcome |
@@ -642,9 +673,10 @@ in.
 | **M1** Log in with Bluesky | F1, F2, F3 | Upstream PRs open for the core AT login |
 | **M2** Access control | F4, F5, F6, F14, F16 | AT-only boards, SSH for AT users, invites, provisional access, one-click web sign-in, existing users linking their AT identity |
 | **M3** Public presence | F9, F10, F11, F17 | Publishing (including invite notifications), tunnels, the hub, and ready-made BBS images, for hosted and home-based boards |
-| **M4** Networking | F12 | Shared boards between BBSes |
+| **M4** Common space, first slice | F18, F19 (with hub H13 to H18) | Members appear on the hub and can chat with people on other BBSes, from a browser or from inside the BBS (decided 2026-11-08, vision §3.2) |
+| **M5** Networking | F12 | Shared boards between BBSes |
 | Later | F7, F8, F13, F15 | Paid verification, attestation table, clusters, in-BBS user manager |
-| After M3 | (not yet split into features) | The 3D and VR social space: Overte worlds, AT login through a hub-run metaverse server, a browser client, an in-world BBS terminal. Decision and next steps in [overte_evaluation.md](overte_evaluation.md) |
+| After M4 | (not yet split into features) | Voice, then assets and avatars, then the 3D and VR social space: Overte worlds, AT login through a hub-run metaverse server, a browser client, an in-world BBS terminal. Decision and next steps in [overte_evaluation.md](overte_evaluation.md) |
 
 ## 5. Branches and PR sequence
 
@@ -677,8 +709,11 @@ order, each small and independently reviewable:
 7. Web sign-in (F14).
 8. Verifier framework, DID-bound invites, invite codes, and provisional
    access (F6), if the maintainer wants them.
-9. Docs: running behind a tunnel (F10).
-10. Bluesky announcement posting and invite notifications (F9, generic part).
+9. The board's own Bluesky account: announcement posting and the invite
+   message (F9, generic part). The tag `pr/09-board-account` also covers
+   the listing and status records, which are project-specific and stay on
+   the fork; they are separated out when this PR branch is cut.
+10. Docs: running behind a tunnel (F10).
 11. Multiple SSH keys per user (F5), as a separate proposal.
 12. In-BBS user manager (F15), as a separate proposal.
 
@@ -700,5 +735,11 @@ order, each small and independently reviewable:
 - **Bluesky DM reach and permissions** (F9). DMs often won't be delivered
   under recipients' default settings, and OAuth support for the chat
   permission needs verifying.
+- **The board account's permissions** (F9, F11, F12). Proving the board's
+  identity to a hub or a peer with AT service auth probably needs an
+  `rpc:` permission on the board account's session, beyond the `repo:`
+  and `blob:` ones F9 asks for (to verify against the permission spec).
+  Adding a permission later means every sysop reconnects the board
+  account, so the full set should be settled before real boards connect.
 - **Root vs. sysop semantics.** ENiGMA½'s `isSysOp()` means "is root"; any
   upstream change touching privileges should keep that distinction intact.

@@ -73,7 +73,9 @@ another hub at any time. The hub software should be runnable by anyone.
 3. The sysop chooses a BBS name, which becomes the subdomain
    (`coolbbs.hub.example`).
 4. The hub issues a **tunnel token** bound to the BBS record and the sysop's
-   DID.
+   DID. Later the tunnel also proves the BBS's own DID, and published
+   agreements follow; the stages are in
+   [hub_development_plan.md](hub_development_plan.md), H3.
 5. The hub may require sysop attestations before allowing registration, using
    the same model as [attestation.md](attestation.md) (e.g. `sysop-approval`,
    `stripe-card`). Hub bans are keyed by sysop DID.
@@ -116,6 +118,7 @@ those prefixes only.
 | `/oauth/client-metadata.json` | Yes | Response validated as JSON |
 | `/oauth/callback` | Yes | Responses limited to redirects or minimal pages |
 | `/login/<code>` | Yes | Browser handoff landing |
+| `/signin`, `/signout` | Yes | The BBS's own web sign-in page (ENiGMA½: `/_enig/signin`, `/_enig/signout`); the cookie it sets is the BBS's, for its own subdomain |
 | `/cb/<verifier-id>/...` | Yes | Verifier callbacks and webhooks |
 | `/assets/...` | Yes | Graphics and 3D assets the BBS offers to the shared space (§5.3): images, ANSI art, glTF/GLB, VRM. Only allowed content types, within size limits; the hub caches them so they stay available while the BBS is offline |
 | Anything else | No | 404 |
@@ -404,7 +407,9 @@ The hub supports both ways of running a BBS:
 - **Single point of failure:** every BBS on a hub goes dark if the hub does.
   Mitigations are portability to other tunnels and other hubs running the
   same software.
-- **Abuse handling:** reporting, BBS suspension, and sysop bans by DID.
+- **Abuse handling:** reporting, BBS suspension, and sysop bans by DID. Blocking
+  people in the common space, and who moderates it, are in the vision,
+  §8.7.
 - **Rate limits** on connections and bandwidth per BBS.
 - **Bandwidth:** terminal traffic is small, so per-BBS cost should be low.
 - **Legal exposure:** the hub serves other people's content under its domain;
@@ -420,5 +425,6 @@ The hub supports both ways of running a BBS:
 - Whether to support custom domains for BBSes behind the hub.
 - Design of the terminal front door (§5): how the directory, banners, and
   ads are shown in a terminal. The hub would run a small BBS-style app.
-- Which open-source social VR software to adapt for the social space (§5.3).
+- ~~Which open-source social VR software to adapt for the social space.~~
+  Overte (decided 2026-11-08, §5.3).
 - What counts as an "active" BBS (recent posts, users online, or connected).

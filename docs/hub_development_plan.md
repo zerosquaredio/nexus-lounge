@@ -1,7 +1,7 @@
 # Hub Development Plan
 
 Status: Draft
-Last updated: 2026-10-29
+Last updated: 2026-11-08
 
 This plan breaks the hub ([hub.md](hub.md)) into features and milestones. The
 hub lives in this repo under `hub/` and is independent of the BBS software;
@@ -88,7 +88,11 @@ tunnel:
     - /ws
     - /peer
     - /_enig/atproto/
+    - /_enig/handoff/
+    - /_enig/signin
+    - /_enig/signout
     - /_enig/verify/
+    - /assets/
 registration:
   open: true                     # anyone with an AT account may register
   reservedNames: [www, api, admin, hub, status, mail]
@@ -115,7 +119,7 @@ and WebSocket ports; [enigma_integration.md](enigma_integration.md) §6).
 |---|---|
 | Implements | VPS; DNS records `hub` and `*.hub` → VPS in Gandi LiveDNS for `cyberspace.nexus`; three spikes: **H0.1** Caddy on-demand TLS with an `ask` endpoint; **H0.2** frp evaluation (subdomain and path routing, WebSocket, server plugin hooks able to reject a proxy that claims another subdomain or a disallowed path); **H0.3** Jetstream consumer filtered to our record types |
 | Depends on | VPS. Gandi LiveDNS accepts wildcard records and has an API, so DNS-01 wildcard certificates are also possible later. |
-| Done when | A test BBS on the VM is reachable at `test.hub.cyberspace.nexus` through frp with a valid certificate; an unregistered name gets no certificate; the frp plugin hook can veto a proxy |
+| Done when | A throwaway test BBS (§6; never the personal dev VM) is reachable at `test.hub.cyberspace.nexus` through frp with a valid certificate; an unregistered name gets no certificate; the frp plugin hook can veto a proxy |
 
 ### H1. Edge and routing
 
@@ -143,6 +147,22 @@ and WebSocket ports; [enigma_integration.md](enigma_integration.md) §6).
 
 Note: before H3 exists, HM1 registers BBSes with the admin CLI only.
 
+**How a BBS proves itself to the hub, in stages** (2026-11-08; the
+specs described three different ways):
+
+1. **Tunnel token** (HM1, HM2): the sysop registers with their own AT
+   login and gets a token; the tunnel presents it. Simple, and enough
+   to start.
+2. **The BBS's own DID** (with H4): the registration also records the
+   BBS account's DID, and the tunnel additionally proves it with AT
+   service auth, so the hub knows the BBS itself, not only its sysop
+   ([vision](https://github.com/zerosquaredio/cyberspace-framework/blob/main/docs/vision.md)
+   §6.1). Needs the board account to hold a permission for it
+   ([development_plan.md](development_plan.md) §6).
+3. **Published agreements** (later): the hub's offer and the BBS's
+   request and agreement records (vision §4.1) replace the hub's
+   private registration as the public statement of the relationship.
+
 ### H4. Handle verification
 
 | | |
@@ -159,9 +179,13 @@ Note: before H3 exists, HM1 registers BBSes with the admin CLI only.
 | Depends on | H1, H3; H6 for live status |
 | Done when | Users can open `https://name.hub.cyberspace.nexus`, see the BBS, and connect in the browser; enig-term files match the pinned SHA-256 |
 
-Coordinate with BBS-side F14 (web sign-in): the sign-in callback and cookie
-belong to the BBS, so the info page links to the BBS's own sign-in route,
-which the allowlist must include once F14 defines it.
+Coordinate with BBS-side F14 (web sign-in, built 2026-11-07): the sign-in
+callback and cookie belong to the BBS, so the info page links to the BBS's
+own sign-in route, `/_enig/signin` (with `/_enig/signout`), now on the
+allowlist. One thing to settle with F10: after signing in, the BBS sends
+the browser to its own copy of enig-term (`/_enig/ws-term/`), which the
+hub doesn't forward. Either the BBS gets a setting for where to send the
+browser, or the hub answers that path with its own enig-term.
 
 ### H6. Observed status
 
@@ -211,7 +235,10 @@ without going to Bluesky
 §6.3). Sysops of hosted BBS accounts still hold their DID's rotation key
 (vision §6.1).
 
-### H12. User profiles and vouched identities (later)
+### H12. User profiles and vouched identities (split, 2026-11-08)
+
+Now part of the first slice of the common space: profiles are H13, and
+vouched identities are part of H14. The original notes are kept below.
 
 - **Profiles:** a small hub profile per user, keyed by DID and created at
   first AT login. No separate hub registration and no passwords.
@@ -226,16 +253,75 @@ without going to Bluesky
 
 Groundwork for the common space (vision stage 2); scheduled with it.
 
+### The common space, first slice (H13 to H18)
+
+Decided 2026-11-08
+([vision](https://github.com/zerosquaredio/cyberspace-framework/blob/main/docs/vision.md)
+§3.2): after the directory and tunnels, the next thing built is a small
+2D common space, before any 3D. Each service is a switch in the hub's
+config, off by default; they run as their own processes beside the
+control plane, behind the same edge. The BBS side is F18 and F19
+([development_plan.md](development_plan.md)).
+
+### H13. User sign-in and profiles
+
+| | |
+|---|---|
+| Implements | People (not only sysops) sign in to the hub with AT OAuth, identity scope only; a small profile keyed by DID, created at first sign-in, with their presence setting (off by default). No separate registration, no passwords |
+| Depends on | H3 (the hub's OAuth client) |
+| Done when | A person signs in, sees their profile, and can turn presence on and off |
+
+### H14. Presence
+
+| | |
+|---|---|
+| Implements | Who is on the hub and on which leaf, from two sources (vision §8.6): the hub's own pages (a signed-in person opening a BBS from them), and reports from BBSes (F18), signed as the BBS, including vouched users without AT accounts (`alice@coolbbs`) where the hub admin accepts them from that BBS. Reports arriving through a BBS are shown as such (`alice via coolbbs`) until the person confirms that BBS at the hub. Consent: shown only with the person's setting on; the rating rule ([hub.md](hub.md) §5.4) |
+| Depends on | H13; F18 for reports; a way for a BBS to prove itself (H3's stages: the tunnel's own channel first) |
+| Done when | Someone who opened a board from the hub page, and someone who connected to a board by SSH, both appear, and disappear when they leave or turn presence off; a BBS can't report a user as on another BBS |
+
+### H15. Chat
+
+| | |
+|---|---|
+| Implements | One room for the hub, text only, ephemeral: a short scrollback, nothing stored; a rolling in-memory buffer of a few minutes so a report can carry what was just said (vision §8). Starts with a spike: an IRCv3 server (Ergo) behind a WebSocket gateway, or our own small service |
+| Depends on | H13, H14 |
+| Done when | People from a browser and from a BBS (F19) talk in the same room; restarting the service leaves no history |
+
+### H16. The live model
+
+| | |
+|---|---|
+| Implements | The core live model (vision §8.3) as a WebSocket stream: entities (people, BBSes, the room), presence, groups, links. A first draft of its schema under the development names (`nexus.cyberspace.dev.space.*`), versioned; the hub's services and model version listed in its offer record later. Only what each viewer may see is sent to them |
+| Depends on | H14, H15; H6 and H7 for BBSes and their status |
+| Done when | A client that connects gets the current state, then changes as they happen; a person with presence off never appears in it |
+
+### H17. First views
+
+| | |
+|---|---|
+| Implements | A 2D map on the hub's web page, drawn from the live model: BBSes (connected or not), who is around, who is talking; and the hub's side of the ANSI view that BBSes show as a door (F19) |
+| Depends on | H16 |
+| Done when | Two people using different BBSes see each other on the map and chat, one from a browser and one from inside a BBS terminal |
+
+### H18. Blocking and moderation of the common space
+
+| | |
+|---|---|
+| Implements | The basics (vision §8.7): muting someone for yourself; the hub admin blocking an AT user by DID, a vouched user, or all of a BBS's vouched users, for a room or the whole space, for a time or for good; a BBS withholding its own members (F18); reports that carry the rolling buffer; a record of moderation actions. The first moderation model is hub-moderated; shared and each-leaf-its-own come after |
+| Depends on | H14, H15; H8 for the reporting form and admin tools |
+| Done when | A blocked person can't appear or speak in the space however they connect, and is told who blocked them; a muted person disappears only for whoever muted them |
+
 ## 5. Milestones
 
 | Milestone | Features | Outcome |
 |---|---|---|
 | **HM0** Groundwork | H0 | Domain, VPS, and spikes done; tunnel choice confirmed |
-| **HM1** Reachable | H1, H2, minimal H3 (admin CLI) | The VM's ENiGMA½ is reachable at `test.hub.cyberspace.nexus`, with AT login working through the hub |
+| **HM1** Reachable | H1, H2, minimal H3 (admin CLI) | A throwaway test ENiGMA½ (§6; never the personal dev VM) is reachable at `test.hub.cyberspace.nexus`, with AT login working through the hub |
 | **HM2** Self-service | H3, H4, H5 | Sysops register themselves, get handles, and users connect in the browser |
 | **HM3** Discovery | H6, H7 | Observed status and a public directory |
 | **HM4** Public launch | H8 | Operations and moderation in place; open to outside sysops |
-| Later | H9, H10, H11, H12 | Sysop verification, end-to-end privacy, hosted accounts, user profiles and vouched identities |
+| **HM5** Common space, first slice | H13 to H18 | Sign-in, presence, one chat room, the live model, a 2D map and an ANSI view, with basic blocking. Built on the test hub; needs HM3, not HM4, but must be in place (with H18) before a public hub turns it on |
+| Later | H9, H10, H11 | Sysop verification, end-to-end privacy, hosted accounts |
 
 ### 5.1 Dependencies on the BBS plan
 
@@ -244,6 +330,7 @@ Groundwork for the common space (vision stage 2); scheduled with it.
 | HM1 | F3 (AT login) and F10 (running behind a tunnel) to demonstrate end to end; reachability alone needs neither |
 | HM2 | F9 (BBS account) for handles; F14 routes for web sign-in |
 | HM3 | F9 listing and status records; record type names |
+| HM5 | F18 (presence reports) and F19 (the ANSI view) |
 
 ## 6. Testing
 
@@ -286,6 +373,11 @@ Groundwork for the common space (vision stage 2); scheduled with it.
 - **SSH through the hub** (not in v1; frp can forward TCP, but it needs a
   port per BBS or SNI-style routing).
 - **Multiple hubs:** whether hubs federate (shared directory) or stay
-  independent.
+  independent. Direction in the vision, §10.
+- **The common space beyond the first slice** (voice, more rooms, the
+  other moderation models, assets and avatars) has no features here
+  yet; the order is in the vision, §3.2.
+- **Ratings** ([hub.md](hub.md) §5.4): the directory (H7) should filter by
+  the listing's `rating` from the start, even before there are spaces.
 - **Cost model:** free for all, donation-supported, or paid tiers for heavy
   use.
