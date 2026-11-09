@@ -114,7 +114,9 @@ ${tls}
 		#  the hub's own site
 		@hub host ${config.domain}
 		handle @hub {
-			respond "Nexus Lounge hub" 200
+			reverse_proxy ${config.site.host}:${config.site.port} {
+				header_up -X-Real-IP
+			}
 		}
 
 		#  answered by the hub, never by the BBS, so a BBS can't claim

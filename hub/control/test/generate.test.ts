@@ -48,6 +48,7 @@ describe('generated configs', () => {
         }
         assert.match(text, /ask http:\/\/127\.0\.0\.1:7200\/tls\/allowed/);
         assert.match(text, /header_up -X-Real-IP/);
+        assert.match(text, /handle @hub \{\n\t+reverse_proxy 127\.0\.0\.1:7210/);
         assert.match(text, /tls internal/);
     });
 

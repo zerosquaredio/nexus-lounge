@@ -17,6 +17,8 @@ export interface Bbs {
     bbsDid: string | null;
     state: BbsState;
     createdAt: string;
+    webPort: number;
+    wsPort: number;
     //  observed through the tunnel's hooks (H6 refines this)
     connected: boolean;
     lastConnectedAt: string | null;
@@ -30,12 +32,14 @@ interface BbsRow {
     state: BbsState;
     token_hash: string;
     created_at: string;
+    web_port: number;
+    ws_port: number;
     last_connected_at: string | null;
     last_disconnected_at: string | null;
     open_proxies: number;
 }
 
-const SchemaVersion = 1;
+const SchemaVersion = 2;
 
 const Schema = `
 CREATE TABLE IF NOT EXISTS bbs (
@@ -46,6 +50,10 @@ CREATE TABLE IF NOT EXISTS bbs (
                               CHECK (state IN ('active', 'suspended')),
     token_hash           TEXT NOT NULL,
     created_at           TEXT NOT NULL,
+    --  where the BBS's web and WebSocket servers listen on its own machine,
+    --  for its agent config (schema 2)
+    web_port             INTEGER NOT NULL DEFAULT 8080,
+    ws_port              INTEGER NOT NULL DEFAULT 8810,
     last_connected_at    TEXT,
     last_disconnected_at TEXT
 );
@@ -60,6 +68,25 @@ CREATE TABLE IF NOT EXISTS tunnel_proxy (
     opened_at  TEXT NOT NULL,
     PRIMARY KEY (name, proxy)
 );
+
+--  the hub's own web sign-in (schema 2): AT OAuth flows in progress, AT
+--  sessions (kept only while signing in), and browser sessions
+CREATE TABLE IF NOT EXISTS oauth_state (
+    key        TEXT PRIMARY KEY,
+    value      TEXT NOT NULL,
+    created_at INTEGER NOT NULL
+);
+CREATE TABLE IF NOT EXISTS oauth_session (
+    did        TEXT PRIMARY KEY,
+    value      TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS web_session (
+    token_hash TEXT PRIMARY KEY,
+    did        TEXT NOT NULL,
+    handle     TEXT,
+    created_at TEXT NOT NULL,
+    expires_at INTEGER NOT NULL
+);
 `;
 
 const SelectBbs = `
@@ -73,6 +100,8 @@ function toBbs(row: BbsRow): Bbs {
         bbsDid: row.bbs_did,
         state: row.state,
         createdAt: row.created_at,
+        webPort: row.web_port,
+        wsPort: row.ws_port,
         connected: row.open_proxies > 0,
         lastConnectedAt: row.last_connected_at,
         lastDisconnectedAt: row.last_disconnected_at,
@@ -109,6 +138,12 @@ export class Registry {
                 `The registry is from a newer hub (schema ${row.user_version}); this one knows ${SchemaVersion}`
             );
         }
+        if (1 === row.user_version) {
+            this.db.exec(
+                'ALTER TABLE bbs ADD COLUMN web_port INTEGER NOT NULL DEFAULT 8080; ' +
+                    'ALTER TABLE bbs ADD COLUMN ws_port INTEGER NOT NULL DEFAULT 8810;'
+            );
+        }
         this.db.exec(Schema);
         this.db.exec(`PRAGMA user_version = ${SchemaVersion}`);
     }
@@ -131,6 +166,14 @@ export class Registry {
         return row ? toBbs(row) : null;
     }
 
+    listForSysop(did: string): Bbs[] {
+        return (
+            this.db
+                .prepare(`${SelectBbs} WHERE b.sysop_did = ? ORDER BY b.name`)
+                .all(did) as unknown as BbsRow[]
+        ).map(toBbs);
+    }
+
     list(): Bbs[] {
         return (this.db.prepare(`${SelectBbs} ORDER BY b.name`).all() as unknown as BbsRow[]).map(toBbs);
     }
@@ -145,7 +188,17 @@ export class Registry {
 
     //  Register a BBS. Returns its token, which is not stored and can't be
     //  shown again (rotate it to get a new one).
-    add(name: string, sysopDid: string, bbsDid: string | null = null): { bbs: Bbs; token: string } {
+    add(
+        name: string,
+        sysopDid: string,
+        bbsDid: string | null = null,
+        ports: { web?: number; ws?: number } = {}
+    ): { bbs: Bbs; token: string } {
+        for (const p of [ports.web, ports.ws]) {
+            if (undefined !== p && (!Number.isInteger(p) || p < 1 || p > 65535)) {
+                throw new HubError('bad-port', 'Ports are whole numbers from 1 to 65535');
+            }
+        }
         const problem = nameProblem(name, this.options.reservedNames);
         if (problem) {
             throw new HubError('bad-name', problem);
@@ -174,9 +227,9 @@ export class Registry {
         const token = newToken();
         this.db
             .prepare(
-                'INSERT INTO bbs (name, sysop_did, bbs_did, token_hash, created_at) VALUES (?, ?, ?, ?, ?)'
+                'INSERT INTO bbs (name, sysop_did, bbs_did, token_hash, created_at, web_port, ws_port) VALUES (?, ?, ?, ?, ?, ?, ?)'
             )
-            .run(name, sysopDid, bbsDid, hashToken(token), this.stamp());
+            .run(name, sysopDid, bbsDid, hashToken(token), this.stamp(), ports.web ?? 8080, ports.ws ?? 8810);
         return { bbs: this.mustGet(name), token };
     }
 

@@ -264,6 +264,30 @@ Also handle verification (H4's hub side) and connect/disconnect tracking
   test pass for the wrong reason; the end-to-end test probes the tunnel
   with `/ws`, which isn't limited.
 
+**H3, self-registration, working locally** (2026-11-09). The hub's own
+site (served at the hub's domain, behind the edge): a sysop signs in with
+their AT account, registers a BBS by name and local ports, and gets its
+token and agent config once; they can make a new token (the old one stops
+at once) or remove a BBS, only their own. Tested live: a sysop signed in
+with a real Bluesky account through an SSH tunnel, registered
+`cyberspacebbs`, made a new token, and the agent config from the page
+connected the test ENiGMA½ through the hub. 55 unit tests; the end-to-end
+test still passes.
+
+- **Sign-in asks for identity only** (the `atproto` scope), and the hub
+  signs the AT session out as soon as it knows the DID, so it holds no AT
+  tokens. Its own browser session is a random token, hashed, `HttpOnly`,
+  `SameSite=Lax`, for 7 days.
+- Forms are accepted only from the site's own origin; sign-in attempts are
+  limited per address and changes per sysop; every page is `no-store`
+  with a strict content security policy.
+- **The registration policy:** `registration.open` (default on);
+  `maxBbsPerSysop` (3). Sysop bans and approval come with H8 and H9.
+- **Only the loopback client so far.** Signing in at a public `https://`
+  address needs the hub's own client metadata and signing key, as the BBS
+  has (F3); it comes with the public server, and the site says so plainly
+  if configured for it.
+
 Still open, for the public server:
 
 - **The agent's connection.** Agents must use TLS (the tunnel server
@@ -477,7 +501,7 @@ control plane, behind the same edge. The BBS side is F18 and F19
 |---|---|---|
 | **HM0** Groundwork | H0 | Domain, VPS, and spikes done; tunnel choice confirmed |
 | **HM1** Reachable | H1, H2, minimal H3 (admin CLI) | A throwaway test ENiGMA½ (§6; never the personal dev VM) is reachable at `test.hub.cyberspace.nexus`, with AT login working through the hub. **Working locally** (2026-11-09); the public server remains |
-| **HM2** Self-service | H3, H4, H5 | Sysops register themselves, get handles, and users connect in the browser |
+| **HM2** Self-service | H3, H4, H5 | Sysops register themselves, get handles, and users connect in the browser. H3 **working locally** (2026-11-09) |
 | **HM3** Discovery | H6, H7 | Observed status and a public directory |
 | **HM4** Public launch | H8 | Operations and moderation in place; open to outside sysops |
 | **HM5** Common space, first slice | H13 to H18 | Sign-in, presence, one chat room, the live model, a 2D map and an ANSI view, with basic blocking. Built on the test hub; needs HM3, not HM4, but must be in place (with H18) before a public hub turns it on |

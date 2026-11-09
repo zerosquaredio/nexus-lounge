@@ -22,6 +22,15 @@ export interface HubConfig {
         //  frps: where the edge reaches it (never public)
         vhostHttpPort: number;
     };
+    //  the hub's own web pages (sign-in, registering a BBS), behind the edge
+    site: {
+        host: string;
+        port: number;
+        //  the address people use. http://127.0.0.1:<port> (development, on
+        //  this machine or through an SSH tunnel) signs in with AT's
+        //  loopback client; an https:// address will use a public client
+        publicUrl: string;
+    };
     edge: {
         //  "internal": Caddy's own test CA (development); "onDemand": public
         //  certificates, one per registered name, on first use
@@ -31,6 +40,9 @@ export interface HubConfig {
         httpsPort: number;
     };
     registration: {
+        //  anyone with an AT account may register a BBS on the hub's site;
+        //  false: only the admin, from the command line
+        open: boolean;
         reservedNames: string[];
         maxBbsPerSysop: number;
     };
@@ -46,8 +58,9 @@ export const Defaults: HubConfig = {
         bindPort: 7000,
         vhostHttpPort: 7080,
     },
+    site: { host: '127.0.0.1', port: 7210, publicUrl: 'http://127.0.0.1:7210' },
     edge: { tls: 'internal', bindAddr: '127.0.0.1', httpPort: 7081, httpsPort: 7443 },
-    registration: { reservedNames: DefaultReservedNames, maxBbsPerSysop: 3 },
+    registration: { open: true, reservedNames: DefaultReservedNames, maxBbsPerSysop: 3 },
 };
 
 const DomainRe = /^(?=.{1,200}$)([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z][a-z0-9-]*[a-z0-9]$/;
@@ -58,6 +71,7 @@ export function makeConfig(overrides: Partial<Record<keyof HubConfig, unknown>> 
         database: (overrides.database as string) ?? Defaults.database,
         control: { ...Defaults.control, ...(overrides.control as object) },
         tunnel: { ...Defaults.tunnel, ...(overrides.tunnel as object) },
+        site: { ...Defaults.site, ...(overrides.site as object) },
         edge: { ...Defaults.edge, ...(overrides.edge as object) },
         registration: { ...Defaults.registration, ...(overrides.registration as object) },
     };
@@ -67,6 +81,16 @@ export function makeConfig(overrides: Partial<Record<keyof HubConfig, unknown>> 
     if (!['internal', 'onDemand'].includes(config.edge.tls)) {
         throw new HubError('config', 'edge.tls is "internal" or "onDemand"');
     }
+    let site: URL;
+    try {
+        site = new URL(config.site.publicUrl);
+    } catch {
+        throw new HubError('config', `site.publicUrl "${config.site.publicUrl}" is not a URL`);
+    }
+    if (!('https:' === site.protocol || ('http:' === site.protocol && '127.0.0.1' === site.hostname))) {
+        throw new HubError('config', 'site.publicUrl is https://, or http://127.0.0.1 for development');
+    }
+    config.site.publicUrl = site.origin;
     return config;
 }
 

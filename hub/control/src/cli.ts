@@ -60,22 +60,18 @@ function describe(bbs: Bbs, config: HubConfig): string {
         `${bbs.name}.${config.domain}  ${bbs.state}, ${link}`,
         `  sysop     ${bbs.sysopDid}`,
         `  BBS DID   ${bbs.bbsDid ?? '(none)'}`,
+        `  ports     web ${bbs.webPort}, WebSocket ${bbs.wsPort} (on its own machine)`,
         `  created   ${bbs.createdAt}`,
     ].join('\n');
 }
 
 function giveAgentConfig(
     config: HubConfig,
-    name: string,
+    bbs: { name: string; webPort?: number; wsPort?: number },
     token: string,
     options: Record<string, string>
 ): void {
-    const text = agentConfig(config, {
-        name,
-        token,
-        webPort: options['web-port'] ? Number(options['web-port']) : undefined,
-        wsPort: options['ws-port'] ? Number(options['ws-port']) : undefined,
-    });
+    const text = agentConfig(config, { name: bbs.name, token, webPort: bbs.webPort, wsPort: bbs.wsPort });
     if (options.out) {
         writeFileSync(options.out, text, { mode: 0o600 });
         console.log(`Agent config written to ${options.out}`);
@@ -113,7 +109,16 @@ export function run(argv: string[]): void {
             if (!options.token) {
                 throw new HubError('usage', 'agent-config needs --token (from add or rotate-token)');
             }
-            giveAgentConfig(config, name, options.token, options);
+            giveAgentConfig(
+                config,
+                {
+                    name,
+                    webPort: options['web-port'] ? Number(options['web-port']) : undefined,
+                    wsPort: options['ws-port'] ? Number(options['ws-port']) : undefined,
+                },
+                options.token,
+                options
+            );
             return;
         }
     }
@@ -126,10 +131,13 @@ export function run(argv: string[]): void {
                 if (!options.sysop) {
                     throw new HubError('usage', 'add needs --sysop DID');
                 }
-                const { bbs, token } = registry.add(name, options.sysop, options.did ?? null);
+                const { bbs, token } = registry.add(name, options.sysop, options.did ?? null, {
+                    web: options['web-port'] ? Number(options['web-port']) : undefined,
+                    ws: options['ws-port'] ? Number(options['ws-port']) : undefined,
+                });
                 console.log(describe(bbs, config));
                 console.log(`\nToken (shown once): ${token}`);
-                giveAgentConfig(config, name, token, options);
+                giveAgentConfig(config, bbs, token, options);
                 return;
             }
             case 'list': {
@@ -163,7 +171,7 @@ export function run(argv: string[]): void {
                 const name = need(positional, 1, 'NAME');
                 const token = registry.rotateToken(name);
                 console.log(`New token for ${name} (shown once): ${token}`);
-                giveAgentConfig(config, name, token, options);
+                giveAgentConfig(config, registry.mustGet(name), token, options);
                 return;
             }
             case 'set-did': {

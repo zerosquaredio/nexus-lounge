@@ -9,13 +9,14 @@ machine:
 |---|---|
 | **Caddy** (the edge) | Public HTTPS. Makes a certificate for a name only after asking the control plane; refuses odd paths; forwards only a BBS's allowed paths |
 | **frps** (the tunnel server) | Accepts the tunnels BBSes open outward, and carries requests down them. Asks the control plane before accepting any agent or route |
-| **control** (this repo, `control/`) | The registry of BBSes, the tunnel's approval hook, the certificate check, and handle verification |
+| **control** (this repo, `control/`) | The registry of BBSes, the tunnel's approval hook, the certificate check, handle verification, and the hub's own site, where sysops sign in with AT and register their BBSes |
 
 Each BBS runs **frpc** (the tunnel agent) next to it, with a config the hub
 generates.
 
 The control plane is TypeScript run directly by Node 24 (which strips the
-types), with Node's built-in SQLite, so it has no runtime dependencies.
+types), with Node's built-in SQLite. Its one runtime dependency is the AT
+OAuth library, for signing sysops in.
 
 ## Status
 
@@ -27,7 +28,7 @@ and DNS wait for the public server.
 
 ```sh
 cd control
-npm install            # dev tools only: TypeScript and Node's types
+npm install            # the AT OAuth library, and the dev tools
 npm test               # unit tests
 npm run typecheck
 
@@ -44,6 +45,12 @@ node src/main.ts hub.json
 
 `add` prints the BBS's token once (only a hash is kept) and writes its agent
 config, which the sysop runs with `frpc -c coolbbs-agent.toml`.
+
+Sysops can also register themselves on the hub's site
+(`site.publicUrl`, by default `http://127.0.0.1:7210` for development): they
+sign in with their AT account, and the site gives them the same token and
+agent config, once. Signing in at a public `https://` address isn't built
+yet.
 
 **Suspending a BBS** refuses its agent's logins, new routes and new
 certificates at once. An open tunnel stays up until it drops: frp's agents

@@ -17,5 +17,8 @@
     "devDependencies": {
         "@types/node": "24.19.2",
         "typescript": "7.0.2"
+    },
+    "dependencies": {
+        "@atproto/oauth-client-node": "0.5.13"
     }
 }

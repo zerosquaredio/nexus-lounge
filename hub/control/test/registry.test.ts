@@ -1,5 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { Registry } from '../src/registry.ts';
 import { hashToken } from '../src/tokens.ts';
 import { BbsDid, OtherSysopDid, SysopDid, testRegistry } from './helpers.ts';
 
@@ -105,5 +106,29 @@ describe('the registry', () => {
         assert.equal(registry.get('coolbbs'), null);
         assert.equal(registry.openProxies('coolbbs'), 0);
         assert.throws(() => registry.remove('coolbbs'), { code: 'not-found' });
+    });
+});
+
+describe('registry upgrades', () => {
+    it('adds the port columns to a schema 1 registry, keeping its BBSes', async () => {
+        const { mkdtempSync, rmSync } = await import('node:fs');
+        const { tmpdir } = await import('node:os');
+        const { join } = await import('node:path');
+        const { DatabaseSync } = await import('node:sqlite');
+        const dir = mkdtempSync(join(tmpdir(), 'hub-reg-'));
+        const file = join(dir, 'hub.sqlite');
+        const old = new DatabaseSync(file);
+        old.exec(`CREATE TABLE bbs (name TEXT PRIMARY KEY, sysop_did TEXT NOT NULL, bbs_did TEXT,
+            state TEXT NOT NULL DEFAULT 'active', token_hash TEXT NOT NULL, created_at TEXT NOT NULL,
+            last_connected_at TEXT, last_disconnected_at TEXT);
+            INSERT INTO bbs (name, sysop_did, token_hash, created_at) VALUES ('oldbbs', '${SysopDid}', 'x', 'then');
+            PRAGMA user_version = 1;`);
+        old.close();
+        const registry = new Registry(file, { reservedNames: [], maxBbsPerSysop: 3 });
+        const bbs = registry.mustGet('oldbbs');
+        assert.equal(bbs.webPort, 8080);
+        assert.equal(bbs.wsPort, 8810);
+        registry.close();
+        rmSync(dir, { recursive: true, force: true });
     });
 });
