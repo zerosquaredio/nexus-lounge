@@ -1,0 +1,21 @@
+{
+    "name": "nexus-lounge-hub-control",
+    "version": "0.1.0",
+    "description": "The Nexus Lounge hub's control plane: BBS registry, tunnel approval, certificate checks",
+    "private": true,
+    "license": "BSD-2-Clause",
+    "type": "module",
+    "engines": {
+        "node": ">=24"
+    },
+    "scripts": {
+        "start": "node src/main.ts",
+        "hub": "node src/cli.ts",
+        "test": "node --test --test-reporter=spec \"test/*.test.ts\"",
+        "typecheck": "tsc"
+    },
+    "devDependencies": {
+        "@types/node": "24.19.2",
+        "typescript": "7.0.2"
+    }
+}

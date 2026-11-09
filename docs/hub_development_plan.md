@@ -66,10 +66,10 @@ BBS-side work is in [development_plan.md](development_plan.md).
 
 ```
 hub/
-  control/    control plane (TypeScript)
-  deploy/     Caddy, frps, and compose files for the VPS
-  agent/      frpc config templates and a setup script for sysops
+  control/    control plane (TypeScript); also generates the Caddy, frps
+              and per-BBS agent configs, so they can't drift apart
   test/       end-to-end tests
+  deploy/     compose files for the VPS (later)
 ```
 
 ## 3. Configuration model
@@ -231,6 +231,55 @@ the record's content. Notes for H7:
 
 **H0 is done as far as it can be locally.** Remaining for the public
 server: DNS, and real certificates.
+
+### Progress: HM1 working locally (2026-11-09)
+
+The first code is in [`hub/`](../hub/README.md): the control plane
+(`hub/control/`, TypeScript run directly by Node 24, with Node's own
+SQLite: no runtime dependencies) and an end-to-end test (`hub/test/e2e.sh`).
+On the dev VM, on `127.0.0.1` with Caddy's test CA, the whole chain works in
+front of the test ENiGMA½: Caddy, frps and the agent run from configs the
+hub generates, a terminal session opens over `wss://`, and the end-to-end
+test's 44 checks pass, including ten dishonest agents. 39 unit tests.
+
+Built: H1 and H2 as specified (with the spike findings above), and H3's
+minimal form, the admin command line (`add`, `list`, `show`, `suspend`,
+`resume`, `rotate-token`, `set-did`, `remove`, and the generated configs).
+Also handle verification (H4's hub side) and connect/disconnect tracking
+(the start of H6). Decided or found while building:
+
+- **The hub's config is JSON,** not YAML: no parser to depend on.
+- **Suspension** refuses logins, new routes and new certificates at once,
+  but can't cut a tunnel that is already open: frp's agents send no
+  heartbeats by default, and a dishonest agent could stop them. Restarting
+  the tunnel server cuts it (every other BBS is back within seconds). A
+  per-request check (frp's `NewWorkConn` hook) would cut it at once, but
+  would make every visitor request depend on the control plane; not done.
+- **A bug found end to end:** Node closes idle connections after 5
+  seconds, while frps reuses them for up to 90, so now and then a hook
+  call failed and frps refused an honest agent. The control plane now
+  keeps idle connections for 120 seconds.
+- **Checks to keep in H1's tests:** the BBS's own rate limits (ENiGMA½
+  limits its sign-in page to 20 requests in 10 minutes) can make a
+  test pass for the wrong reason; the end-to-end test probes the tunnel
+  with `/ws`, which isn't limited.
+
+Still open, for the public server:
+
+- **The agent's connection.** Agents must use TLS (the tunnel server
+  refuses them otherwise, tested), but don't yet check the hub's
+  certificate, so the connection is encrypted but not authenticated.
+  Options: give frps a real certificate and the agent its name to check;
+  or run the tunnel over `wss://` through the edge on port 443, which also
+  helps BBSes on networks that block other ports.
+- **Cookies for the whole hub domain.** A BBS can send `Set-Cookie` with
+  `Domain=hub.example`, which browsers would then send to every other
+  BBS's subdomain. Either the hub's domain goes on the Public Suffix List
+  (as `github.io` is), so browsers refuse such cookies, or the edge drops
+  them.
+- **Stale tunnel records.** If frps stops without closing its proxies, the
+  registry still shows those BBSes as connected; H6 reconciles with frps's
+  own API.
 
 ### H1. Edge and routing
 
@@ -427,7 +476,7 @@ control plane, behind the same edge. The BBS side is F18 and F19
 | Milestone | Features | Outcome |
 |---|---|---|
 | **HM0** Groundwork | H0 | Domain, VPS, and spikes done; tunnel choice confirmed |
-| **HM1** Reachable | H1, H2, minimal H3 (admin CLI) | A throwaway test ENiGMA½ (§6; never the personal dev VM) is reachable at `test.hub.cyberspace.nexus`, with AT login working through the hub |
+| **HM1** Reachable | H1, H2, minimal H3 (admin CLI) | A throwaway test ENiGMA½ (§6; never the personal dev VM) is reachable at `test.hub.cyberspace.nexus`, with AT login working through the hub. **Working locally** (2026-11-09); the public server remains |
 | **HM2** Self-service | H3, H4, H5 | Sysops register themselves, get handles, and users connect in the browser |
 | **HM3** Discovery | H6, H7 | Observed status and a public directory |
 | **HM4** Public launch | H8 | Operations and moderation in place; open to outside sysops |
