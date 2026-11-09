@@ -1,7 +1,7 @@
 # Publishing Spec
 
 Status: Draft
-Last updated: 2026-11-04
+Last updated: 2026-11-08
 
 ## 1. Overview
 
@@ -60,7 +60,8 @@ One record per BBS (record key `self`), in the BBS's repo.
 | `name` | string | Display name |
 | `description` | string | Short description |
 | `endpoints` | object[] | Ways to connect, each `{ protocol, uri }`; protocol is an open list (`web`, `ssh`, `telnet`, …), e.g. `https://coolbbs.hub.example`, `ssh://bbs.example:8889` |
-| `tags` | string[] | Optional topics |
+| `tags` | string[] | Optional topics or themes; free, loose, made up by communities ([hub.md](hub.md) §5.4) |
+| `rating` | string | The highest content rating anything on the BBS may have: `general` (all ages), `mature` or `adult` ([hub.md](hub.md) §5.4). Absent: `general`. Also carried as AT self-labels on the record, so ordinary AT apps see it |
 | `rules` | string | Optional; the BBS's rules, as plain text |
 | `admission` | object | `policy`: open list of values (`open`, `invite`, `invite-code`, `sysop-approval`, `verified`, …; the verifier ids ENiGMA½ uses) a directory can filter on; `howToJoin`: plain-text explanation |
 | `hours` | object | Optional; when a part-time BBS is usually up ([hub.md](hub.md) §6): `timezone` (IANA, e.g. `America/Los_Angeles`), `weekly`: `{ days, from, to }[]` (days `mon`…`sun`, times `HH:MM`), and `note`, plain text such as "most evenings". Absent: meant to be always up |

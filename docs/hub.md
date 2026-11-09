@@ -286,6 +286,71 @@ Related work:
 - No AT record type exists for live presence or rooms; presence would be a
   hub service, with any published records under `nexus.cyberspace.hub.*`.
 
+### 5.4 Ratings and themes
+
+Leaves, rooms and assets each have themes and a rating (raised
+2026-11-08; direction, not yet designed in detail). They are kept apart
+because they do different jobs:
+
+- **Themes** (hacking, anime, politics, furry, retro, …) are free tags,
+  loose and unofficial, made up by communities and changing over time:
+  the listing's `tags` ([publishing.md](publishing.md) §3.1), and tags on
+  asset records. They are for finding and filtering, never for access
+  control.
+- **Rating** is a short fixed list, because access depends on it:
+
+  | Rating | Meaning | AT labels that imply it |
+  |---|---|---|
+  | `general` | All ages | none |
+  | `mature` | Graphic or disturbing content, non-sexual nudity | `graphic-media`, `nudity` |
+  | `adult` | Sexual content | `sexual`, `porn` |
+
+  The mapping to AT labels is a first draft.
+
+**Use AT labels rather than our own scheme.** Records can carry
+self-labels their author attaches, and independent labeler services label
+other people's content; Bluesky's apps already honour both. Asset records
+carry self-labels, and the leaf listing carries its rating as one.
+
+**A thing's rating is the highest of:**
+
+1. its own self-labels;
+2. labels on it from labelers the hub trusts;
+3. the rating of the leaf (or room) it comes from.
+
+So an unlabelled asset from an adult leaf counts as adult: a missing label
+never lets something through.
+
+**Hub policy** (the hub admin's settings):
+
+- Allowed ratings, for the hub as a whole and for each space.
+- Themes to prefer, allow only, or block, for a hub keeping to a theme.
+  Soft: they decide what's shown and offered, and can't be exact, since
+  tags are loose.
+- Labelers to trust, possibly including the hub's own.
+- Which leaves' `verified-adult` attestations it accepts
+  ([attestation.md](attestation.md) §8).
+
+**Defaults:** every published asset from every connected leaf may be
+used, except that the common space is `general`. Spaces rated `mature` or
+`adult` admit only visitors with an age attestation the hub accepts.
+Visitors who aren't signed in see only `general` spaces, directory
+entries and assets.
+
+**Adult leaves on a general hub** can still connect. They appear in the
+directory to visitors allowed to see them, with their room hidden, or
+shown with a plain sign, elsewhere; their assets never reach spaces rated
+below them.
+
+**Presence counts too.** Showing that someone is on an adult leaf reveals
+something about them even if no adult content is shown. Presence is
+opt-in already (§5.3); in addition, presence on a leaf is shown only in
+spaces rated at or above that leaf.
+
+Labels are honest by default, and the hub can't inspect everything, so
+the rest is reporting, labelers, and the hub admin blocking an asset or a
+leaf.
+
 ## 6. Status monitoring
 
 The hub can observe whether each BBS's tunnel is connected. Because a crashed

@@ -1,7 +1,7 @@
 # Authentication & Attestation Spec
 
 Status: Draft
-Last updated: 2026-10-28
+Last updated: 2026-11-08
 
 ## 1. Overview
 
@@ -228,6 +228,13 @@ It is used by AT OAuth (§3.1) and by any verifier needing a browser
 | `peer-attested` | Honors attestations issued by a trusted peer BBS, for shared membership in clusters ([networking.md](networking.md) §8) | Later |
 | `stripe-card` | Payment method on file via Stripe Checkout | Later |
 | `id-check` | Identity verification via a provider (e.g. Stripe Identity) | Later |
+| `age` | The user is an adult (`verified-adult`), checked by a provider, by `id-check`, or by the sysop's own judgement as the board's policy allows. Gates adult areas, and adult spaces on a hub ([hub.md](hub.md) §5.4). AT gives apps no age signal: Bluesky's own age checks, required in some places, aren't readable through the protocol, as far as known (2026-11-08) | Later |
+
+Age attestations can travel: a hub decides whether to accept a leaf's
+`verified-adult` (as `peer-attested` does between peer BBSes), and from
+which leaves. Each operator is responsible for the age-verification law
+where they and their users are; the framework provides the means, not
+compliance.
 
 `open` and `invite-code` are implemented as real plugins through the same
 interface as future verifiers, so the plugin system is in use from day one.
