@@ -11,6 +11,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { HubConfig } from './config.ts';
 import type { Registry } from './registry.ts';
 import { decide, type HookEvent } from './frp_plugin.ts';
+import { labelForHost } from './rules.ts';
 
 const MaxBody = 64 * 1024;
 
@@ -22,13 +23,8 @@ export interface ServerDeps {
 
 //  The registered, active BBS a host name belongs to, if any
 export function bbsForHost(host: string | undefined, deps: ServerDeps): string | null {
-    const name = (host ?? '').toLowerCase().replace(/:\d+$/, '').replace(/\.$/, '');
-    const suffix = `.${deps.config.domain}`;
-    if (!name.endsWith(suffix)) {
-        return null;
-    }
-    const label = name.slice(0, -suffix.length);
-    if (!label || label.includes('.')) {
+    const label = labelForHost(host, deps.config.domain);
+    if (!label) {
         return null;
     }
     const bbs = deps.registry.get(label);

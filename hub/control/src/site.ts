@@ -16,7 +16,9 @@ import { HubError } from './errors.ts';
 import { agentConfig } from './generate.ts';
 import { esc, page } from './html.ts';
 import type { Bbs, Registry } from './registry.ts';
+import { labelForHost } from './rules.ts';
 import { CallbackPath, SessionDays, type Identity, type WebSession } from './signin.ts';
+import { clientConfig, fileFor, policy, WebTermPath, type WebTerm } from './webterm.ts';
 
 export interface SignInLike {
     start(handle: string): Promise<string>;
@@ -30,6 +32,8 @@ export interface SiteDeps {
     config: HubConfig;
     registry: Registry;
     signin: SignInLike;
+    //  the hub's copy of enig-term, if it serves one
+    webterm?: WebTerm | null;
     log?: (line: string) => void;
     now?: () => number;
 }
@@ -232,7 +236,89 @@ it is your BBS's password on this hub. If you lose it, come back for a new token
         return n;
     }
 
+    //  A BBS's own address (name.domain): its page, and the web terminal
+    function bbsSite(req: IncomingMessage, res: ServerResponse, label: string, path: string): void {
+        if ('GET' !== req.method && 'HEAD' !== req.method) {
+            return send(res, 405, page('Not allowed', '<p>Not allowed.</p>'));
+        }
+        const bbs = registry.get(label);
+        if (!bbs) {
+            return send(res, 404, page('Not found', `<p>No BBS is registered as ${esc(label)}.</p>`));
+        }
+        if ('suspended' === bbs.state) {
+            return send(
+                res,
+                410,
+                page(`${bbs.name}.${config.domain}`, "<p>This BBS isn't available on this hub.</p>")
+            );
+        }
+        if ('/' === path) {
+            return send(res, 200, boardPage(bbs));
+        }
+        const webterm = deps.webterm;
+        if (webterm && `${WebTermPath}config.json` === path) {
+            res.writeHead(200, {
+                'Content-Type': 'application/json',
+                'Cache-Control': 'no-cache',
+                'X-Content-Type-Options': 'nosniff',
+            });
+            return void res.end(clientConfig(config, bbs.name));
+        }
+        if (webterm && WebTermPath.slice(0, -1) === path) {
+            return redirect(res, WebTermPath);
+        }
+        const found = webterm ? fileFor(webterm, path) : null;
+        if (!webterm || !found) {
+            return send(res, 404, page('Not found', '<p>Nothing here.</p>'));
+        }
+        const headers: Record<string, string> = {
+            'Content-Type': found.file.type,
+            //  revalidate each time: enig-term's files must match each other
+            'Cache-Control': 'no-cache',
+            ETag: found.file.etag,
+            'X-Content-Type-Options': 'nosniff',
+        };
+        if (found.file.type.startsWith('text/html')) {
+            headers['Content-Security-Policy'] = policy(webterm, config, bbs.name);
+            headers['Referrer-Policy'] = 'same-origin';
+        }
+        if (req.headers['if-none-match'] === found.file.etag) {
+            res.writeHead(304, headers);
+            return void res.end();
+        }
+        res.writeHead(200, headers);
+        res.end('HEAD' === req.method ? undefined : found.file.body);
+    }
+
+    function lastSeen(bbs: Bbs): string {
+        if (bbs.connected) {
+            return '<p><strong>Online</strong> now.</p>';
+        }
+        const when = bbs.lastDisconnectedAt ?? bbs.lastConnectedAt;
+        return when
+            ? `<p><strong>Offline.</strong> Last seen <time datetime="${esc(when)}">${esc(
+                  when.replace('T', ' ').replace(/\.\d+Z$/, ' UTC')
+              )}</time>. Many BBSes are only up part of the time.</p>`
+            : "<p><strong>Offline.</strong> It hasn't connected to the hub yet.</p>";
+    }
+
+    function boardPage(bbs: Bbs): string {
+        const connect = deps.webterm
+            ? `<p><a href="${WebTermPath}?connect=1">Connect in your browser</a></p>`
+            : '';
+        return page(
+            `${bbs.name}.${config.domain}`,
+            `${lastSeen(bbs)}
+${connect}
+<p class="dim">A BBS on the <a href="${esc(config.site.publicUrl)}/">${esc(config.domain)}</a> hub.</p>`
+        );
+    }
+
     async function handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
+        const label = labelForHost(req.headers.host, config.domain);
+        if (label) {
+            return bbsSite(req, res, label, (req.url ?? '/').split('?')[0] ?? '/');
+        }
         const url = new URL(req.url ?? '/', config.site.publicUrl);
         const token = cookies(req)[Cookie];
         const who = signin.session(token);

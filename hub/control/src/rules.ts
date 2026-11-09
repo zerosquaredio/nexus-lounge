@@ -61,6 +61,18 @@ export function nameProblem(name: string, reserved: readonly string[]): string |
     return null;
 }
 
+//  The BBS label of a host under the hub's domain ("coolbbs" for
+//  coolbbs.hub.example:443), or null. Says nothing about registration.
+export function labelForHost(host: string | undefined, domain: string): string | null {
+    const name = (host ?? '').toLowerCase().replace(/:\d+$/, '').replace(/\.$/, '');
+    const suffix = `.${domain}`;
+    if (!name.endsWith(suffix)) {
+        return null;
+    }
+    const label = name.slice(0, -suffix.length);
+    return label && !label.includes('.') ? label : null;
+}
+
 const DidRe = /^did:(?:plc:[a-z2-7]{24}|web:[a-zA-Z0-9.%:-]{1,253})$/;
 
 export function isDid(value: string): boolean {

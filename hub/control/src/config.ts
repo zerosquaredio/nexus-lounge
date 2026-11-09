@@ -31,6 +31,10 @@ export interface HubConfig {
         //  loopback client; an https:// address will use a public client
         publicUrl: string;
     };
+    //  the web terminal the hub serves for every BBS: a copy of enig-term's
+    //  release (its dist/ directory); empty for none. digest pins the
+    //  release: print it with "node src/cli.ts web-terminal-digest"
+    webTerminal: { root: string; digest: string };
     edge: {
         //  "internal": Caddy's own test CA (development); "onDemand": public
         //  certificates, one per registered name, on first use
@@ -59,6 +63,7 @@ export const Defaults: HubConfig = {
         vhostHttpPort: 7080,
     },
     site: { host: '127.0.0.1', port: 7210, publicUrl: 'http://127.0.0.1:7210' },
+    webTerminal: { root: '', digest: '' },
     edge: { tls: 'internal', bindAddr: '127.0.0.1', httpPort: 7081, httpsPort: 7443 },
     registration: { open: true, reservedNames: DefaultReservedNames, maxBbsPerSysop: 3 },
 };
@@ -72,6 +77,7 @@ export function makeConfig(overrides: Partial<Record<keyof HubConfig, unknown>> 
         control: { ...Defaults.control, ...(overrides.control as object) },
         tunnel: { ...Defaults.tunnel, ...(overrides.tunnel as object) },
         site: { ...Defaults.site, ...(overrides.site as object) },
+        webTerminal: { ...Defaults.webTerminal, ...(overrides.webTerminal as object) },
         edge: { ...Defaults.edge, ...(overrides.edge as object) },
         registration: { ...Defaults.registration, ...(overrides.registration as object) },
     };

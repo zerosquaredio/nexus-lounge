@@ -126,10 +126,12 @@ ${tls}
 			reverse_proxy ${control}
 		}
 
-		#  the BBS's page (served by the hub, H5)
-		@root path /
-		handle @root {
-			respond "{http.request.host}" 200
+		#  served by the hub, not the BBS: its page, and the web terminal
+		@hubpage path / /_enig/ws-term /_enig/ws-term/*
+		handle @hubpage {
+			reverse_proxy ${config.site.host}:${config.site.port} {
+				header_up -X-Real-IP
+			}
 		}
 
 		#  forwarded to the BBS through its tunnel

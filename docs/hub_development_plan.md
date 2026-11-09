@@ -288,6 +288,32 @@ test still passes.
   has (F3); it comes with the public server, and the site says so plainly
   if configured for it.
 
+**H5, a BBS's page and web terminal, working locally** (2026-11-09). At
+`name.<domain>`, the hub serves the BBS's page (online now, or when it was
+last seen) with "Connect in your browser", and its own copy of enig-term at
+`/_enig/ws-term/`, the same path the BBS uses, so web sign-in's redirect
+works through the hub unchanged. enig-term runs in the visitor's browser;
+the hub only serves its files, and a `config.json` made per BBS, locked to
+`wss://name.<domain>/ws`, which the edge forwards down that BBS's tunnel.
+Tested in a browser: the page showed the test BBS online, and the hub's
+enig-term connected through the tunnel to its login screen. 65 unit tests.
+
+- **The release is pinned:** the hub reads the files once, serves only
+  those, by exact path, and can refuse a copy that doesn't match a
+  fingerprint (`webTerminal.digest`, printed by `web-terminal-digest`).
+- **Its own security policy,** which the BBS doesn't send: scripts from
+  the hub only, plus enig-term's one inline script by hash and
+  WebAssembly; connections only to that BBS; no framing. No violations in
+  the browser test.
+- **Development trick:** a dev hub named `hub.localhost` lets a browser
+  reach any `name.hub.localhost` through one SSH tunnel, since browsers
+  send all of `*.localhost` to the local machine. The browser was given a
+  session that accepts Caddy's test certificate, rather than trusting
+  Caddy's test authority system-wide.
+- **The description, hours and ways to connect** come from the BBS's
+  listing, with the directory (H7). For one-click login through the hub,
+  the BBS must know its public address, `https://name.<domain>` (F10).
+
 Still open, for the public server:
 
 - **The agent's connection.** Agents must use TLS (the tunnel server
@@ -366,10 +392,9 @@ specs described three different ways):
 Coordinate with BBS-side F14 (web sign-in, built 2026-11-07): the sign-in
 callback and cookie belong to the BBS, so the info page links to the BBS's
 own sign-in route, `/_enig/signin` (with `/_enig/signout`), now on the
-allowlist. One thing to settle with F10: after signing in, the BBS sends
-the browser to its own copy of enig-term (`/_enig/ws-term/`), which the
-hub doesn't forward. Either the BBS gets a setting for where to send the
-browser, or the hub answers that path with its own enig-term.
+allowlist. After signing in, the BBS sends the browser to
+`/_enig/ws-term/`; the hub answers that path with its own enig-term
+(decided and built 2026-11-09), so the BBS needs no change.
 
 ### H6. Observed status
 
@@ -501,7 +526,7 @@ control plane, behind the same edge. The BBS side is F18 and F19
 |---|---|---|
 | **HM0** Groundwork | H0 | Domain, VPS, and spikes done; tunnel choice confirmed |
 | **HM1** Reachable | H1, H2, minimal H3 (admin CLI) | A throwaway test ENiGMA½ (§6; never the personal dev VM) is reachable at `test.hub.cyberspace.nexus`, with AT login working through the hub. **Working locally** (2026-11-09); the public server remains |
-| **HM2** Self-service | H3, H4, H5 | Sysops register themselves, get handles, and users connect in the browser. H3 **working locally** (2026-11-09) |
+| **HM2** Self-service | H3, H4, H5 | Sysops register themselves, get handles, and users connect in the browser. H3 and H5 **working locally** (2026-11-09) |
 | **HM3** Discovery | H6, H7 | Observed status and a public directory |
 | **HM4** Public launch | H8 | Operations and moderation in place; open to outside sysops |
 | **HM5** Common space, first slice | H13 to H18 | Sign-in, presence, one chat room, the live model, a 2D map and an ANSI view, with basic blocking. Built on the test hub; needs HM3, not HM4, but must be in place (with H18) before a public hub turns it on |

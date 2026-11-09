@@ -43,7 +43,7 @@ describe('generated configs', () => {
         const route = text.indexOf('route {');
         const odd = text.indexOf('handle @odd');
         assert.ok(route > 0 && odd > route, 'inside the ordered route block');
-        for (const other of ['handle @hub', 'handle @did', 'handle @root', 'handle @bbs']) {
+        for (const other of ['handle @hub', 'handle @did', 'handle @hubpage', 'handle @bbs']) {
             assert.ok(text.indexOf(other) > odd, other);
         }
         assert.match(text, /ask http:\/\/127\.0\.0\.1:7200\/tls\/allowed/);

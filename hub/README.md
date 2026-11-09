@@ -46,6 +46,11 @@ node src/main.ts hub.json
 `add` prints the BBS's token once (only a hash is kept) and writes its agent
 config, which the sysop runs with `frpc -c coolbbs-agent.toml`.
 
+At each BBS's own address, `name.<domain>`, the hub serves the BBS's page
+and its own pinned copy of enig-term (set `webTerminal.root` to enig-term's
+release directory). The terminal runs in the visitor's browser and connects
+to `wss://name.<domain>/ws`, which goes down the BBS's tunnel.
+
 Sysops can also register themselves on the hub's site
 (`site.publicUrl`, by default `http://127.0.0.1:7210` for development): they
 sign in with their AT account, and the site gives them the same token and

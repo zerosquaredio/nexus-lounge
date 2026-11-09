@@ -8,6 +8,7 @@ import { loadConfig, type HubConfig } from './config.ts';
 import { HubError } from './errors.ts';
 import { agentConfig, caddyfile, frpsConfig } from './generate.ts';
 import { Registry, type Bbs } from './registry.ts';
+import { loadWebTerm } from './webterm.ts';
 
 const Usage = `Usage: node src/cli.ts [--config FILE] COMMAND
 
@@ -29,6 +30,7 @@ Generated configs
   agent-config NAME --token TOKEN [--web-port N] [--ws-port N]
   frps-config            the tunnel server's config
   caddyfile              the edge's config
+  web-terminal-digest    the fingerprint of webTerminal.root, to pin it
 `;
 
 function parse(argv: string[]): { positional: string[]; options: Record<string, string> } {
@@ -104,6 +106,13 @@ export function run(argv: string[]): void {
         case 'caddyfile':
             process.stdout.write(caddyfile(config));
             return;
+        case 'web-terminal-digest': {
+            if (!config.webTerminal.root) {
+                throw new HubError('usage', 'Set webTerminal.root in the config first');
+            }
+            console.log(loadWebTerm(config.webTerminal.root).digest);
+            return;
+        }
         case 'agent-config': {
             const name = need(positional, 1, 'NAME');
             if (!options.token) {
