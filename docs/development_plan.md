@@ -374,6 +374,7 @@ building it:
 | | |
 |---|---|
 | Implements | The BBS's own AT account (OAuth with write scopes); Bluesky announcement posts; events; listing and status records ([publishing.md](publishing.md)); event-scheduler jobs for updates |
+| Status | **Part 1 done** (2026-11-08) on the fork's `atproto-login` branch, in one commit, tagged `pr/09-board-account` and pushed: the board account, listing and status records, announcements, and the ready-made invite message. 21 new tests. Tested live with the Bluesky test account as the board account: connected from the `BA` screen (the consent page listed only the granular permissions), the listing and status read back publicly from the account's host, and a first announcement posted from the screen (2026-11-08). The screen is sysops-only by its menu ACS; `ID1` makes it root-only. Part 2 (triggered posts, events, stats, ads, art, bridging, DM invites) is still to do |
 | Track | Split: **generic Bluesky announcement posting goes upstream**; the **listing and status records are project-specific** (our record types), so fork-only |
 | Config | `atProto.publishing.*` |
 | Depends on | F1; record type names (`nexus.cyberspace.*`, decided) |
@@ -390,6 +391,58 @@ building it:
 Default: try a DM, fall back to the sysop-delivered message; public mentions
 only when the sysop chooses them. Invites go only to people a sysop names, to
 avoid the BBS account looking like a spam bot.
+
+**Design** (2026-11-07, before coding). F9 is split; this first part is
+the board account, the listing and status records, and announcements.
+Triggered posts, events, stats, ads, ANSI art images, board bridging and
+DM invites come after.
+
+- **Permissions:** granular OAuth scopes, which bsky.social supports, not
+  the broad `transition:generic`: `atproto`, `repo:` for the listing and
+  status record types and for `app.bsky.feed.post`, and `blob:image/*`
+  (for art, later). The client metadata (loopback `client_id` or the
+  public metadata document) lists all of them; user logins still ask for
+  `atproto` alone. DMs would need Bluesky's chat permission; deferred.
+- **A separate session store for the board account** (an
+  `oauth_board_session` table), used by a second OAuth client instance
+  with the same client metadata. User sessions and the board's are both
+  keyed by DID, so sharing a store would let the board account's owner
+  logging in as a user replace the board's write session with a
+  login-only one (the test account is also a user here).
+- **Connecting the account:** a sysop-only screen in the BBS (`BA` in the
+  main menu template, commented out, gated to sysops), built on the AT
+  login screen: enter the board account's handle, approve in a browser,
+  and the board keeps the write session. Shows the account, and lets the
+  sysop disconnect it (revoking the session).
+- **No new dependency:** records and posts are written with the OAuth
+  session's own authenticated requests (`com.atproto.repo.putRecord`,
+  `createRecord`), not `@atproto/api`.
+- **Record names:** under `nexus.cyberspace.dev.*` until the shapes are
+  final (publishing spec §3.8), from one setting
+  (`atProto.publishing.nsidPrefix`), so switching to the real names later
+  changes no code.
+- **Listing** (`leaf.listing`, key `self`): the board name, and from
+  `atProto.publishing.listing`: description, tags, rules, `howToJoin`,
+  `hours`, extra `endpoints`, and optionally the sysop's DID. Endpoints
+  are derived from the enabled servers (web/enig-term, SSH, telnet) plus
+  any listed. `admission.policy` comes from `atProto.admission.policy`.
+  Published at startup, when the config changes, and daily, only when it
+  differs from what was last written.
+- **Status** (`leaf.status`, key `self`): set by the sysop
+  (`oputil atproto status up|maintenance|degraded|down [--message ...]
+  [--until ...]`). The hub's observed status (F11) covers whether the
+  board is actually reachable.
+- **Announcements:** `oputil atproto post "text"`, and the same from the
+  sysop screen. Plain text with link facets; rate limited.
+- **Invite notifications:** `oputil atproto invite add` prints a
+  ready-made message for the sysop to send (the "sysop sends it" row
+  above); DMs later.
+- **oputil** uses the stored board session directly (it can restore it
+  without the BBS running), so publishing works from the command line too.
+- Off by default (`atProto.publishing.enabled`).
+
+Testing uses the Bluesky test account as the board account. Posts from it
+are public, so the first live post waits for the user's go-ahead.
 
 ### F10. Running behind a tunnel or the hub
 
