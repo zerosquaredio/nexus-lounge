@@ -219,7 +219,16 @@ hub federation) is in [Cyberspace Framework vision](https://github.com/zerosquar
   hub then fetches from there, with the same type and size checks, and
   still serves clients from its cache, so clients never depend on the BBS
   being up or reveal their addresses to it.
-- In-room chat, person-to-person messages, and possibly voice.
+- In-room chat, person-to-person messages, and possibly voice. The hub
+  works like a co-working space even without 3D (vision §8): IRC-like
+  text with ephemeral history, and voice with one big room by default.
+  Hub services for it: chat (an IRCv3 server or our own), STUN and TURN
+  for direct calls and their fallback (also used by Overte domains and
+  web clients, [overte_evaluation.md](overte_evaluation.md) §4.2), and a
+  media server (SFU) for larger voice rooms.
+- A **live model** of the space (vision §8.3): a small core every hub
+  publishes, plus named extensions that fall back to core types, so any
+  view works on any hub.
 - **Presence is opt-in.** Showing that someone is "hanging out", or which
   BBS they are on, is member activity, so it follows the same rule as
   triggered posts ([publishing.md](publishing.md) §5): off unless the person
@@ -309,7 +318,7 @@ because they do different jobs:
 
 **Use AT labels rather than our own scheme.** Records can carry
 self-labels their author attaches, and independent labeler services label
-other people's content; Bluesky's apps already honour both. Asset records
+other people's content; Bluesky's apps already honor both. Asset records
 carry self-labels, and the leaf listing carries its rating as one.
 
 **A thing's rating is the highest of:**
