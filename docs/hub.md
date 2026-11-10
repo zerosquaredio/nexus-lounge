@@ -228,7 +228,7 @@ hub federation) is in [Cyberspace Framework vision](https://github.com/zerosquar
   Hub services for it: chat (an IRCv3 server or our own), STUN and TURN
   for direct calls and their fallback (also used by Overte domains and
   web clients, [overte_evaluation.md](overte_evaluation.md) §4.2), and a
-  media server (SFU) for larger voice rooms.
+  media server (SFU) for larger voice rooms. Rough sizing is in §8.1.
 - A **live model** of the space (vision §8.3): a small core every hub
   publishes, plus named extensions that fall back to core types, so any
   view works on any hub.
@@ -414,6 +414,66 @@ The hub supports both ways of running a BBS:
 - **Bandwidth:** terminal traffic is small, so per-BBS cost should be low.
 - **Legal exposure:** the hub serves other people's content under its domain;
   needs terms of service and an abuse contact.
+
+### 8.1 Sizing (provisional)
+
+**Estimates, not measurements** (2026-11-09). Replace them with measured
+figures from the load-test tool (vision §4.4). The reference server is a
+small VPS: about 4 shared vCPU, 8 GB RAM, 75 GB disk, 400–500 Mbps
+unmetered (OVH VPS-1 class).
+
+How group calls are carried decides most of the cost:
+
+| Approach | How it works | Load |
+|---|---|---|
+| Peer-to-peer (mesh) | Everyone sends to everyone | Each person uploads N−1 copies; fine for 2–4 people |
+| SFU (Selective Forwarding Unit) | Each person uploads one stream; the server forwards copies without decoding them, and can skip muted people or send a lower quality to slow connections | Server bandwidth, little CPU |
+| MCU / mixer | The server decodes, mixes and re-encodes one stream per listener | Heavy server CPU; each person downloads one stream |
+
+Hub voice rooms use an SFU (such as LiveKit); calls between two people go
+peer-to-peer, with TURN only when a direct path fails. Overte's audio mixer
+works like an MCU (spatial audio mixed per listener), so it is CPU-bound.
+
+Positional (3D) audio doesn't need server-side mixing. For the 2D map and
+web 3D views, the SFU forwards each listener only the nearest or loudest
+few speakers (say 3–6), along with their positions, and each device
+positions them locally (the browser's Web Audio panner). Server CPU stays
+low and each person's download stays roughly constant however large the
+crowd. Overte mixes on the server mainly to keep downloads to one stream
+for big crowds and slow connections; that tradeoff is Overte's, not one
+positional audio requires.
+
+| Space | Audio | Server cost |
+|---|---|---|
+| Hub voice rooms | SFU; everyone hears the room | Low |
+| 2D map, web 3D views | SFU forwarding the nearest or loudest speakers, positioned on each device | Low |
+| Overte worlds | Overte's own mixer, per world | High; its own server |
+
+| Service | Cost per active user | Rough capacity on the reference server |
+|---|---|---|
+| Control plane, tunnels, directory, edge | Small; BBS traffic passes through | Hundreds of BBSes |
+| Text chat and presence | Negligible | Thousands of people |
+| Voice (SFU) | ~40 kbps up, ~40 kbps down per other speaker | A room of 10 uses ~4 Mbps; 100+ people across rooms. Steady CPU timing limits it before bandwidth does |
+| Video calls (SFU) | 0.3–2.5 Mbps per stream | A room of 10 uses ~25–50 Mbps; about 10 rooms. **The first real limit** |
+| Overte world | Audio mixing CPU; avatar data ~50–200 kbps per person | About 15–30 people in one world |
+| 3D downloads (models, textures, avatars) | Tens to hundreds of MB per first visit | Can fill the bandwidth at busy times; serve from object storage or a CDN |
+
+Risks that matter more than raw size:
+
+- **Shared vCPU and real-time audio.** Other tenants on the same host
+  cause jitter (crackling voice) even when CPU use looks low. Voice and 3D
+  want dedicated cores.
+- **UDP and DDoS filtering.** Voice and Overte use UDP. A VPS provider's
+  anti-DDoS filtering can interfere with it; test early.
+- **A sysop's home upload** limits what their own BBS contributes (assets,
+  a BBS-hosted room) before the hub does.
+
+Growth path: scale by splitting services across servers, not by buying one
+larger machine. Start with the hub, text chat and a voice SFU on one small
+server. Give each Overte world its own server (Overte runs one server
+process per world anyway), and put 3D files on object storage. Move the
+SFU to dedicated-core servers when video or large rooms arrive. The
+control plane stays small and doesn't need to move.
 
 ## 9. Open questions
 
