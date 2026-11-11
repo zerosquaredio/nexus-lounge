@@ -488,3 +488,7 @@ control plane stays small and doesn't need to move.
 - ~~Which open-source social VR software to adapt for the social space.~~
   Overte (decided 2026-11-08, §5.3).
 - What counts as an "active" BBS (recent posts, users online, or connected).
+- Objects with their own code (vision §8.8): whether a hub runs foreign
+  code at all, and if so the fuel budget per object; how a BBS serves as
+  an object's backend through its tunnel; per-object bandwidth and update
+  limits; rules on compute groups (mining) and on relaying media.
