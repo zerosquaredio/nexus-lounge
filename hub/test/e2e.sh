@@ -17,6 +17,10 @@ BIN=${BIN:?set BIN to the directory holding frps, frpc and caddy}
 BBS_WEB_PORT=${BBS_WEB_PORT:-8080}
 BBS_WS_PORT=${BBS_WS_PORT:-8810}
 
+#  frps's admin API password, for frps and the control plane (never printed)
+HUB_FRPS_ADMIN_PASSWORD=$(head -c 24 /dev/urandom | base64 | tr -d '/+=')
+export HUB_FRPS_ADMIN_PASSWORD
+
 WORK=$(mktemp -d /tmp/hub-e2e.XXXXXX)
 PIDS=()
 cleanup() {
@@ -188,6 +192,10 @@ check "answered by the hub from the registry" did:plc:cccccccccccccccccccccccc "
 
 echo "== state seen by the admin"
 check "listed as connected" connected "$(hub list | awk '$1 == "testbbs" { print $3 }')"
+ADMIN=http://127.0.0.1:7400/api/proxy/http
+check "the tunnel server's admin API wants its password" 401 "$(curl -s -o /dev/null -w '%{http_code}' $ADMIN)"
+check "and with it, lists the BBS's routes as online" 2 \
+    "$(curl -s -u "hub:$HUB_FRPS_ADMIN_PASSWORD" $ADMIN | grep -o '"status":"online"' | wc -l)"
 
 echo "== suspension"
 hub suspend testbbs >/dev/null

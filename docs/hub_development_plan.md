@@ -99,7 +99,8 @@ registration:
   maxBbsPerSysop: 3
 atproto:
   oauthClientUrl: https://hub.cyberspace.nexus/oauth/client-metadata.json
-  hubAccountDid: ""              # hub's own AT account, publishes observed status
+  #  the hub's own AT account (publishes observed status) is connected with
+  #  "hub-account connect" and kept in the registry, not set here (H6)
 limits:
   requestsPerMinutePerBbs: 600
   bandwidthMbPerDayPerBbs: 2048
@@ -366,9 +367,9 @@ Still open, for the public server:
   BBS's subdomain. Either the hub's domain goes on the Public Suffix List
   (as `github.io` is), so browsers refuse such cookies, or the edge drops
   them.
-- **Stale tunnel records.** If frps stops without closing its proxies, the
+- ~~**Stale tunnel records.** If frps stops without closing its proxies, the
   registry still shows those BBSes as connected; H6 reconciles with frps's
-  own API.
+  own API.~~ Done with H6 (2026-11-17).
 
 ### H1. Edge and routing
 
@@ -442,6 +443,40 @@ allowlist. After signing in, the BBS sends the browser to
 | Implements | Track agent connect and disconnect (frp server plugin events or frps admin API); publish `observedStatus` records from the hub's AT account ([publishing.md](publishing.md) §3.3); feed the offline page |
 | Depends on | H2; hub AT account; record type names (`nexus.cyberspace.*`) |
 | Done when | Stopping a BBS's agent updates its observed status within a minute, publicly readable on AT |
+| Status | **Working locally** (2026-11-17), with the hub's account `cyberspacehub.bsky.social` |
+
+**How it works.** frp's hooks already report agents coming and going (a
+killed agent's close arrives within a millisecond), so H6 adds three things:
+
+- **The hub's own AT account.** The admin connects it once with `hub-account
+  connect HANDLE` (a loopback OAuth client for now; a public client comes
+  with the public server). It asks only for the base scope and
+  `repo:nexus.cyberspace.dev.hub.observedStatus`. Its session is stored apart
+  from sign-in's, which gives its sessions straight back.
+- **Checking frps's own view** every 15 seconds, through frps's admin API
+  (on 127.0.0.1, its password from `HUB_FRPS_ADMIN_PASSWORD`, given to both
+  programs and kept out of the generated config). It forgets proxies frps no
+  longer has, apart from any opened in the last 10 seconds, which frps may
+  not list yet; with nothing listening, no BBS is connected. This closes the
+  stale tunnel records gap (H0 results).
+- **Publishing** one record per BBS with a DID, its key the DID, when its
+  state has changed and held for 20 seconds; at most 10 writes a run, and a
+  rate limit ends the run. Records of BBSes removed, or whose DID changed,
+  are deleted. The `observed` command shows each BBS's state and what was
+  published.
+
+**Tested live** (2026-11-17), the test board behind the dev hub on the VM:
+
+| Case | Public record changed after |
+|---|---|
+| Agent stopped | 33 s |
+| Agent started | 32 s |
+| frps killed (`kill -9`, so no close was sent) | 36 s |
+| frps back; the agent reconnected by itself | 29 s |
+
+Starting the control plane also cleared a stale "connected" left from
+before the VM restarted. 14 new tests (99 in all); the end-to-end test
+passes (44 checks).
 
 ### H7. Directory
 
@@ -566,7 +601,7 @@ control plane, behind the same edge. The BBS side is F18 and F19
 | **HM0** Groundwork | H0 | Domain, VPS, and spikes done; tunnel choice confirmed |
 | **HM1** Reachable | H1, H2, minimal H3 (admin CLI) | A throwaway test ENiGMA½ (§6; never the personal dev VM) is reachable at `test.hub.cyberspace.nexus`, with AT login working through the hub. **Working locally** (2026-11-09); the public server remains |
 | **HM2** Self-service | H3, H4, H5 | Sysops register themselves, get handles, and users connect in the browser. H3 and H5 **working locally** (2026-11-09) |
-| **HM3** Discovery | H6, H7 | Observed status and a public directory. H7 **working locally** (2026-11-09) |
+| **HM3** Discovery | H6, H7 | Observed status and a public directory. **Working locally**: H7 (2026-11-09), H6 (2026-11-17) |
 | **HM4** Public launch | H8 | Operations and moderation in place; open to outside sysops |
 | **HM5** Common space, first slice | H13 to H18 | Sign-in, presence, one chat room, the live model, a 2D map and an ANSI view, with basic blocking. Built on the test hub; needs HM3, not HM4, but must be in place (with H18) before a public hub turns it on |
 | Later | H9, H10, H11 | Sysop verification, end-to-end privacy, hosted accounts |

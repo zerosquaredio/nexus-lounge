@@ -9,18 +9,18 @@ machine:
 |---|---|
 | **Caddy** (the edge) | Public HTTPS. Makes a certificate for a name only after asking the control plane; refuses odd paths; forwards only a BBS's allowed paths |
 | **frps** (the tunnel server) | Accepts the tunnels BBSes open outward, and carries requests down them. Asks the control plane before accepting any agent or route |
-| **control** (this repo, `control/`) | The registry of BBSes, the tunnel's approval hook, the certificate check, handle verification, the directory of BBS listings from the AT network, and the hub's own site, where sysops sign in with AT and register their BBSes |
+| **control** (this repo, `control/`) | The registry of BBSes, the tunnel's approval hook, the certificate check, handle verification, the directory of BBS listings from the AT network, observed status (whether each BBS's tunnel is up, published from the hub's own AT account), and the hub's own site, where sysops sign in with AT and register their BBSes |
 
 Each BBS runs **frpc** (the tunnel agent) next to it, with a config the hub
 generates.
 
 The control plane is TypeScript run directly by Node 24 (which strips the
 types), with Node's built-in SQLite. Its one runtime dependency is the AT
-OAuth library, for signing sysops in.
+OAuth library, for signing sysops in and for the hub's own account.
 
 ## Status
 
-Local only so far (2026-11-09): everything below runs on one machine on
+Local only so far (updated 2026-11-17): everything below runs on one machine on
 `127.0.0.1`, with Caddy's own test certificate authority. Real certificates
 and DNS wait for the public server.
 
@@ -61,6 +61,29 @@ Sysops can also register themselves on the hub's site
 sign in with their AT account, and the site gives them the same token and
 agent config, once. Signing in at a public `https://` address isn't built
 yet.
+
+### Observed status
+
+The hub publishes whether each BBS's tunnel is up, from its own AT account,
+one `observedStatus` record per BBS with a DID (keyed by that DID), once a
+change has held for 20 seconds. Connect the account once:
+
+```sh
+node src/cli.ts --config hub.json hub-account connect cyberspacehub.bsky.social
+node src/cli.ts --config hub.json observed     # what the hub sees, and what it published
+```
+
+`connect` prints a link to approve in a browser, then waits for the browser
+to come back to `127.0.0.1:7220` (`hubAccount.callbackPort`); from another
+machine, forward that port first. The account is asked only to write its
+observed status records.
+
+The control plane also asks frps which tunnels are really up, so a tunnel
+server that restarted or crashed doesn't leave BBSes shown as connected.
+Start **both** frps and the control plane with the same
+`HUB_FRPS_ADMIN_PASSWORD` in their environment: the generated `frps.toml`
+reads it from there, and without it frps's admin API (on `127.0.0.1` only)
+has no password.
 
 **Suspending a BBS** refuses its agent's logins, new routes and new
 certificates at once. An open tunnel stays up until it drops: frp's agents

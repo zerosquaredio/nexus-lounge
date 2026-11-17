@@ -4,6 +4,9 @@
 //  node src/cli.ts [--config FILE] COMMAND ...
 
 import { writeFileSync } from 'node:fs';
+import { createServer } from 'node:http';
+import { HubAccount, HubAccountCallbackPath } from './hub_account.ts';
+import { ObservedStatus } from './observed.ts';
 import { loadConfig, type HubConfig } from './config.ts';
 import { HubError } from './errors.ts';
 import { agentConfig, caddyfile, frpsConfig } from './generate.ts';
@@ -43,7 +46,43 @@ The directory
   directory unhide DID
   directory hidden       the accounts hidden
   directory sweep        fetch every listing now (the hub also does this daily)
+
+The hub's own AT account (it publishes observed status)
+  hub-account connect HANDLE
+                         prints a link to approve in a browser, then waits
+                         for the browser to come back to 127.0.0.1
+  hub-account show
+  hub-account disconnect gives the session back and forgets the account
+  observed               each BBS: what the hub sees, and what it published
 `;
+
+//  Wait for the browser to come back from approving, on 127.0.0.1 only
+function awaitCallback(port: number, path: string, timeoutMs: number): Promise<URLSearchParams> {
+    return new Promise((resolve, reject) => {
+        const server = createServer((req, res) => {
+            const url = new URL(req.url ?? '/', `http://127.0.0.1:${port}`);
+            if (url.pathname !== path) {
+                res.writeHead(404).end();
+                return;
+            }
+            res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' }).end(
+                'Done. You can close this window and go back to the terminal.\n'
+            );
+            clearTimeout(timer);
+            server.close();
+            resolve(url.searchParams);
+        });
+        const timer = setTimeout(() => {
+            server.close();
+            reject(new HubError('timeout', 'Nobody came back from approving in time; run it again'));
+        }, timeoutMs);
+        server.on('error', e => {
+            clearTimeout(timer);
+            reject(new HubError('listen', `Can't listen on 127.0.0.1:${port}: ${e.message}`));
+        });
+        server.listen(port, '127.0.0.1');
+    });
+}
 
 function parse(argv: string[]): { positional: string[]; options: Record<string, string> } {
     const positional: string[] = [];
@@ -251,6 +290,59 @@ export async function run(argv: string[]): Promise<void> {
                     return;
                 }
                 throw new HubError('usage', `Unknown directory command "${what}"\n\n${Usage}`);
+            }
+            case 'hub-account': {
+                const account = new HubAccount(registry.db, config);
+                const what = need(positional, 1, 'connect, show or disconnect');
+                if ('show' === what) {
+                    const info = account.info();
+                    console.log(
+                        info
+                            ? `${info.handle ?? '(no handle)'}  ${info.did}  connected ${info.connectedAt}`
+                            : 'No hub account connected.'
+                    );
+                    return;
+                }
+                if ('connect' === what) {
+                    const handle = need(positional, 2, 'HANDLE');
+                    const port = config.hubAccount.callbackPort;
+                    const back = awaitCallback(port, HubAccountCallbackPath, 10 * 60 * 1000);
+                    console.log(
+                        `Open this link in a browser, signed in as ${handle}, and approve:\n\n` +
+                            `${await account.start(handle)}\n\n` +
+                            `The browser comes back to 127.0.0.1:${port}. If this is another machine, forward\n` +
+                            `that port first (ssh -L ${port}:127.0.0.1:${port} ...). Waiting...`
+                    );
+                    const info = await account.finish(await back);
+                    console.log(`Connected: ${info.handle ?? '(no handle)'} ${info.did}`);
+                    return;
+                }
+                if ('disconnect' === what) {
+                    const info = await account.disconnect();
+                    console.log(info ? `Disconnected ${info.did}.` : 'No hub account was connected.');
+                    return;
+                }
+                throw new HubError('usage', `Unknown hub-account command "${what}"\n\n${Usage}`);
+            }
+            case 'observed': {
+                const observed = new ObservedStatus(
+                    registry,
+                    new HubAccount(registry.db, config),
+                    { nsidPrefix: config.directory.nsidPrefix, settleMs: 0 },
+                    () => undefined
+                );
+                const rows = observed.report();
+                if (!rows.length) {
+                    console.log('No BBS has a DID set, so there is nothing to publish.');
+                }
+                for (const { observation: o, published: p } of rows) {
+                    const now = `${o.connected ? 'connected' : 'disconnected'} since ${o.since}`;
+                    const was = p
+                        ? `published ${p.connected ? 'connected' : 'disconnected'} at ${p.published_at}`
+                        : 'not published';
+                    console.log(`${o.name.padEnd(24)} ${now}; ${was}`);
+                }
+                return;
             }
             default:
                 throw new HubError('usage', `Unknown command "${command}"\n\n${Usage}`);

@@ -1,7 +1,7 @@
 //  Config files generated from the hub's config and rules.ts, so the edge,
 //  the tunnel server and every agent agree on names, ports and paths.
 
-import type { HubConfig } from './config.ts';
+import { FrpsAdminPasswordEnv, type HubConfig } from './config.ts';
 import { BbsExactPaths, BbsPrefixPaths, OddPathRe2 } from './rules.ts';
 
 function tomlString(value: string): string {
@@ -67,6 +67,14 @@ allowPorts = []
 
 log.to = "console"
 log.level = "info"
+
+#  the admin API, on this machine only: the control plane asks it which
+#  tunnels are really up. Start frps with ${FrpsAdminPasswordEnv} set (the
+#  control plane needs the same); without it, frps's API has no password
+webServer.addr = "127.0.0.1"
+webServer.port = ${config.tunnel.adminPort}
+webServer.user = "hub"
+webServer.password = "{{ .Envs.${FrpsAdminPasswordEnv} }}"
 
 #  every login and proxy is approved by the control plane
 [[httpPlugins]]

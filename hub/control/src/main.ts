@@ -1,6 +1,8 @@
 //  Runs the control plane: node src/main.ts [config.json]
 
-import { loadConfig } from './config.ts';
+import { FrpsAdminPasswordEnv, loadConfig } from './config.ts';
+import { HubAccount } from './hub_account.ts';
+import { checkTunnels, ObservedStatus } from './observed.ts';
 import { Registry } from './registry.ts';
 import { createControlServer } from './server.ts';
 import { SignIn } from './signin.ts';
@@ -45,6 +47,42 @@ if (directory) {
     stream = followStream(directory, log);
 }
 
+//  observed status (H6): check the tunnels, then publish what changed
+const account = new HubAccount(registry.db, config);
+const observed = config.observedStatus.enabled
+    ? new ObservedStatus(
+          registry,
+          account,
+          {
+              nsidPrefix: config.directory.nsidPrefix,
+              settleMs: config.observedStatus.settleSeconds * 1000,
+          },
+          log
+      )
+    : null;
+const adminPassword = process.env[FrpsAdminPasswordEnv] ?? '';
+if (!adminPassword) {
+    log(`tunnels: ${FrpsAdminPasswordEnv} isn't set, so the tunnel server's own view isn't checked`);
+}
+let checking = false;
+const check = async () => {
+    if (checking) {
+        return;
+    }
+    checking = true;
+    try {
+        if (adminPassword) {
+            await checkTunnels(registry, { port: config.tunnel.adminPort, password: adminPassword }, log);
+        }
+        await observed?.publish();
+    } catch (e) {
+        log(`observed status: ${(e as Error).message}`);
+    } finally {
+        checking = false;
+    }
+};
+const checkTimer = setInterval(check, config.observedStatus.intervalSeconds * 1000);
+
 const site = createSite({
     config,
     registry,
@@ -61,6 +99,7 @@ site.listen(config.site.port, config.site.host, () => {
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
     process.on(signal, () => {
         stream?.stop();
+        clearInterval(checkTimer);
         site.close();
         server.close(() => {
             registry.close();

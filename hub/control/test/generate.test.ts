@@ -38,6 +38,13 @@ describe('generated configs', () => {
         assert.match(text, /^proxyBindAddr = "127\.0\.0\.1"$/m);
     });
 
+    it('opens the admin API on this machine only, its password from the environment', () => {
+        const text = frpsConfig(config);
+        assert.match(text, /^webServer\.addr = "127\.0\.0\.1"$/m);
+        assert.match(text, /^webServer\.port = 7400$/m);
+        assert.match(text, /^webServer\.password = "\{\{ \.Envs\.HUB_FRPS_ADMIN_PASSWORD \}\}"$/m);
+    });
+
     it('puts the odd-path rule first in the edge', () => {
         const text = caddyfile(config);
         const route = text.indexOf('route {');

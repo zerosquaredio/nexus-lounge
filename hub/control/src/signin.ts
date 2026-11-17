@@ -26,7 +26,15 @@ export interface WebSession extends Identity {
     expiresAt: number;
 }
 
-function table(db: DatabaseSync, name: 'oauth_state' | 'oauth_session', keyColumn: 'key' | 'did') {
+//  The OAuth library's stores, in the registry's database. Sign-in and the
+//  hub's own account (hub_account.ts) share the state store; their sessions
+//  are kept apart, so signing someone in can never sign the hub's account
+//  out.
+export function oauthStore(
+    db: DatabaseSync,
+    name: 'oauth_state' | 'oauth_session' | 'hub_oauth_session',
+    keyColumn: 'key' | 'did'
+) {
     return {
         get(key: string) {
             const row = db.prepare(`SELECT value FROM ${name} WHERE ${keyColumn} = ?`).get(key) as
@@ -40,7 +48,7 @@ function table(db: DatabaseSync, name: 'oauth_state' | 'oauth_session', keyColum
                     'INSERT OR REPLACE INTO oauth_state (key, value, created_at) VALUES (?, ?, ?)'
                 ).run(key, JSON.stringify(value), Date.now());
             } else {
-                db.prepare('INSERT OR REPLACE INTO oauth_session (did, value) VALUES (?, ?)').run(
+                db.prepare(`INSERT OR REPLACE INTO ${name} (did, value) VALUES (?, ?)`).run(
                     key,
                     JSON.stringify(value)
                 );
@@ -90,8 +98,8 @@ export class SignIn {
             lib =>
                 new lib.NodeOAuthClient({
                     clientMetadata: clientMetadata(this.config),
-                    stateStore: table(this.db, 'oauth_state', 'key'),
-                    sessionStore: table(this.db, 'oauth_session', 'did'),
+                    stateStore: oauthStore(this.db, 'oauth_state', 'key'),
+                    sessionStore: oauthStore(this.db, 'oauth_session', 'did'),
                     requestLock: lib.requestLocalLock,
                 })
         );

@@ -39,7 +39,7 @@ interface BbsRow {
     open_proxies: number;
 }
 
-const SchemaVersion = 3;
+const SchemaVersion = 4;
 
 const Schema = `
 CREATE TABLE IF NOT EXISTS bbs (
@@ -98,6 +98,27 @@ CREATE TABLE IF NOT EXISTS directory_hidden (
 CREATE TABLE IF NOT EXISTS directory_state (
     key   TEXT PRIMARY KEY,
     value TEXT NOT NULL
+);
+--  the hub's own AT account (schema 4): which account it is, and its AT
+--  session, kept apart from the sessions of people signing in
+CREATE TABLE IF NOT EXISTS hub_account (
+    id           INTEGER PRIMARY KEY CHECK (id = 1),
+    did          TEXT NOT NULL,
+    handle       TEXT,
+    connected_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS hub_oauth_session (
+    did        TEXT PRIMARY KEY,
+    value      TEXT NOT NULL
+);
+--  observed status records the hub has published, one per BBS DID, from
+--  the account named (schema 4)
+CREATE TABLE IF NOT EXISTS observed_published (
+    subject      TEXT PRIMARY KEY,
+    account      TEXT NOT NULL,
+    connected    INTEGER NOT NULL,
+    since        TEXT NOT NULL,
+    published_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS web_session (
     token_hash TEXT PRIMARY KEY,
@@ -319,6 +340,37 @@ export class Registry {
         if (changes > 0 && 0 === this.openProxies(name)) {
             this.db.prepare('UPDATE bbs SET last_disconnected_at = ? WHERE name = ?').run(this.stamp(), name);
         }
+    }
+
+    //  The tunnel server's own view, from its admin API: forget proxies it
+    //  no longer has (its hooks can't report a close when it restarts or
+    //  crashes). Only proxies opened before |openedBefore| are forgotten:
+    //  a proxy is approved before the tunnel server lists it, so one opened
+    //  as the list was being read may not be in it yet.
+    reconcileProxies(online: ReadonlySet<string>, openedBefore: string): string[] {
+        const rows = this.db
+            .prepare('SELECT name, proxy FROM tunnel_proxy WHERE opened_at < ?')
+            .all(openedBefore) as { name: string; proxy: string }[];
+        const closed: string[] = [];
+        for (const row of rows) {
+            if (!online.has(row.proxy)) {
+                this.proxyClosed(row.name, row.proxy);
+                closed.push(`${row.name}/${row.proxy}`);
+            }
+        }
+        return closed;
+    }
+
+    //  The tunnel server isn't running: no BBS is connected
+    closeAllProxies(): string[] {
+        const rows = this.db.prepare('SELECT name, proxy FROM tunnel_proxy').all() as {
+            name: string;
+            proxy: string;
+        }[];
+        for (const row of rows) {
+            this.proxyClosed(row.name, row.proxy);
+        }
+        return rows.map(row => `${row.name}/${row.proxy}`);
     }
 
     openProxies(name: string): number {

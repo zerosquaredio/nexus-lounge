@@ -21,6 +21,26 @@ export interface HubConfig {
         bindPort: number;
         //  frps: where the edge reaches it (never public)
         vhostHttpPort: number;
+        //  frps's admin API, on 127.0.0.1 only: the control plane asks it
+        //  which tunnels are really up. Its password comes from the
+        //  HUB_FRPS_ADMIN_PASSWORD environment variable, for both programs
+        adminPort: number;
+    };
+    //  the hub's own AT account, which publishes observed status
+    hubAccount: {
+        //  connecting it ("hub-account connect") listens here, on
+        //  127.0.0.1, for the browser to come back after approving
+        callbackPort: number;
+    };
+    //  what the hub sees of each BBS's tunnel, published from its account
+    //  (publishing spec §3.3)
+    observedStatus: {
+        enabled: boolean;
+        //  a change is published once it has held this long, so a tunnel
+        //  that drops and comes straight back writes nothing
+        settleSeconds: number;
+        //  how often the tunnels are checked and changes published
+        intervalSeconds: number;
     };
     //  the hub's own web pages (sign-in, registering a BBS), behind the edge
     site: {
@@ -69,6 +89,10 @@ export interface HubConfig {
     };
 }
 
+//  The tunnel server's admin password, for frps and the control plane both:
+//  kept out of config files
+export const FrpsAdminPasswordEnv = 'HUB_FRPS_ADMIN_PASSWORD';
+
 export const Defaults: HubConfig = {
     domain: 'hub.test',
     database: './data/hub.sqlite',
@@ -78,7 +102,10 @@ export const Defaults: HubConfig = {
         bindAddr: '127.0.0.1',
         bindPort: 7000,
         vhostHttpPort: 7080,
+        adminPort: 7400,
     },
+    hubAccount: { callbackPort: 7220 },
+    observedStatus: { enabled: true, settleSeconds: 20, intervalSeconds: 15 },
     site: { host: '127.0.0.1', port: 7210, publicUrl: 'http://127.0.0.1:7210' },
     webTerminal: { root: '', digest: '' },
     directory: {
@@ -102,6 +129,8 @@ export function makeConfig(overrides: Partial<Record<keyof HubConfig, unknown>> 
         database: (overrides.database as string) ?? Defaults.database,
         control: { ...Defaults.control, ...(overrides.control as object) },
         tunnel: { ...Defaults.tunnel, ...(overrides.tunnel as object) },
+        hubAccount: { ...Defaults.hubAccount, ...(overrides.hubAccount as object) },
+        observedStatus: { ...Defaults.observedStatus, ...(overrides.observedStatus as object) },
         site: { ...Defaults.site, ...(overrides.site as object) },
         webTerminal: { ...Defaults.webTerminal, ...(overrides.webTerminal as object) },
         directory: { ...Defaults.directory, ...(overrides.directory as object) },
@@ -116,6 +145,21 @@ export function makeConfig(overrides: Partial<Record<keyof HubConfig, unknown>> 
     }
     if (!['network', 'hub'].includes(config.directory.scope)) {
         throw new HubError('config', 'directory.scope is "network" or "hub"');
+    }
+    for (const [what, port] of [
+        ['tunnel.adminPort', config.tunnel.adminPort],
+        ['hubAccount.callbackPort', config.hubAccount.callbackPort],
+    ] as const) {
+        if (!Number.isInteger(port) || port < 1 || port > 65535) {
+            throw new HubError('config', `${what} is a port, 1 to 65535`);
+        }
+    }
+    const { settleSeconds, intervalSeconds } = config.observedStatus;
+    if (!(settleSeconds >= 0) || !(intervalSeconds >= 1)) {
+        throw new HubError(
+            'config',
+            'observedStatus.settleSeconds is 0 or more, and intervalSeconds 1 or more'
+        );
     }
     let site: URL;
     try {

@@ -100,7 +100,9 @@ while the BBS is offline.
 | `until` | datetime | Optional expected end |
 | `updatedAt` | datetime | |
 
-`nexus.cyberspace.hub.observedStatus` (in the hub's repo, one record per BBS):
+`nexus.cyberspace.hub.observedStatus` (in the hub's repo, one record per BBS,
+its record key the BBS's DID; a change is published once it has held for 20
+seconds, so a brief drop writes nothing):
 
 | Field | Type | Notes |
 |---|---|---|
@@ -244,8 +246,9 @@ upload), and whether the member's opt-in is required.
 - ~~Name structure: flat or grouped by area.~~ Grouped by role
   (`nexus.cyberspace.leaf.*`, `.hub.*`); each group has its own `_lexicon`
   DNS record (decided 2026-11-06).
-- Record key for `observedStatus`: the BBS's DID, or a generated key with the
-  DID in `subject`.
+- ~~Record key for `observedStatus`: the BBS's DID, or a generated key with the
+  DID in `subject`.~~ The BBS's DID (decided 2026-11-17, with H6), so
+  anyone can fetch one BBS's record directly; `subject` repeats it.
 - Confirm the community calendar-event schema (believed to be
   `community.lexicon.calendar.event`) and that it is stable.
 - Stats: a periodic record (§3.5), live counts over the tunnel, or both.
