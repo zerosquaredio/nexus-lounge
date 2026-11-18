@@ -39,7 +39,7 @@ interface BbsRow {
     open_proxies: number;
 }
 
-const SchemaVersion = 4;
+const SchemaVersion = 5;
 
 const Schema = `
 CREATE TABLE IF NOT EXISTS bbs (
@@ -119,6 +119,42 @@ CREATE TABLE IF NOT EXISTS observed_published (
     connected    INTEGER NOT NULL,
     since        TEXT NOT NULL,
     published_at TEXT NOT NULL
+);
+--  people signed in to the hub (schema 5): a small profile, created at
+--  sign-in while the common space is on (profiles.ts)
+CREATE TABLE IF NOT EXISTS profile (
+    did          TEXT PRIMARY KEY,
+    handle       TEXT,
+    created_at   TEXT NOT NULL,
+    signed_in_at TEXT NOT NULL,
+    presence     INTEGER NOT NULL DEFAULT 0
+);
+--  what BBSes report about their members (schema 5, presence.ts): each
+--  BBS's latest report replaces its rows. member is "did:<did>" or
+--  "user:<local name, lower-case>"
+CREATE TABLE IF NOT EXISTS bbs_member (
+    bbs          TEXT NOT NULL REFERENCES bbs (name) ON DELETE CASCADE,
+    member       TEXT NOT NULL,
+    did          TEXT,
+    name         TEXT NOT NULL,
+    member_since TEXT NOT NULL,
+    online       INTEGER NOT NULL,
+    online_since TEXT,
+    PRIMARY KEY (bbs, member)
+);
+CREATE INDEX IF NOT EXISTS bbs_member_did ON bbs_member (did);
+CREATE TABLE IF NOT EXISTS bbs_report (
+    bbs         TEXT PRIMARY KEY REFERENCES bbs (name) ON DELETE CASCADE,
+    reported_at INTEGER NOT NULL
+);
+--  a person's answer, signed in at the hub, to a BBS saying they are a
+--  member there: "confirmed" or "denied"
+CREATE TABLE IF NOT EXISTS profile_bbs (
+    did        TEXT NOT NULL,
+    bbs        TEXT NOT NULL REFERENCES bbs (name) ON DELETE CASCADE,
+    answer     TEXT NOT NULL,
+    answered_at TEXT NOT NULL,
+    PRIMARY KEY (did, bbs)
 );
 CREATE TABLE IF NOT EXISTS web_session (
     token_hash TEXT PRIMARY KEY,

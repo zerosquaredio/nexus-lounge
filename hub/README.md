@@ -62,6 +62,24 @@ sign in with their AT account, and the site gives them the same token and
 agent config, once. Signing in at a public `https://` address isn't built
 yet.
 
+### The common space
+
+Off by default (`"space": { "enabled": true }` turns it on). With it on,
+anyone who signs in gets a small profile, keyed by their DID, at `/me`:
+their handle, when they first came, and whether they are shown in the
+common space (presence), which is off until they turn it on. They can
+remove the profile there, which also signs them out everywhere. Nobody
+needs to run a BBS to sign in.
+
+**Presence** comes from the BBSes: each reports, with its tunnel token, the
+members who chose to be shown and whether they are on
+(`POST /api/bbs/presence`; on the ENiGMA½ side, `atProto.hub.presence`).
+`/space` lists who is around, for people allowed in. A member reported by
+DID appears as `alice via coolbbs` until they confirm that BBS at `/me`.
+Who may join is `space.join` (`members` of a BBS here, the default, or
+`anyone`), with `memberDays` and `excludeOpenBbses`; members without an AT
+account are shown only from BBSes listed in `space.vouchedFrom`.
+
 ### Observed status
 
 The hub publishes whether each BBS's tunnel is up, from its own AT account,

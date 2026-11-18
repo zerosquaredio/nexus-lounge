@@ -7,6 +7,7 @@ import { makeConfig } from '../src/config.ts';
 import { Registry } from '../src/registry.ts';
 import { clientMetadata, SignIn, type Identity } from '../src/signin.ts';
 import { createSite, type SignInLike } from '../src/site.ts';
+import { Profiles } from '../src/profiles.ts';
 import { OtherSysopDid, SysopDid } from './helpers.ts';
 
 //  the AT step stood in for: "start" goes to a fake account host, and
@@ -86,11 +87,14 @@ function call(
     });
 }
 
-async function signedIn(identity: Identity = { did: SysopDid, handle: 'sysop.example' }): Promise<string> {
+async function signedIn(
+    identity: Identity = { did: SysopDid, handle: 'sysop.example' },
+    home = '/bbs'
+): Promise<string> {
     signin.next = identity;
     const reply = await call('GET', '/oauth/callback?code=good&state=x&iss=https://account.example');
     assert.equal(reply.status, 303);
-    assert.equal(reply.location, '/bbs');
+    assert.equal(reply.location, home);
     assert.ok(reply.cookie?.startsWith('hub_session='));
     return reply.cookie as string;
 }
@@ -104,14 +108,20 @@ before(async () => {
     origin = `http://127.0.0.1:${port}`;
 });
 
-beforeEach(async () => {
+beforeEach(() => start(false));
+
+async function start(space: boolean): Promise<void> {
     await stop();
-    const config = makeConfig({ database: ':memory:', site: { port, publicUrl: origin } });
+    const config = makeConfig({
+        database: ':memory:',
+        site: { port, publicUrl: origin },
+        space: { enabled: space },
+    });
     registry = new Registry(':memory:', config.registration);
     signin = new FakeSignIn(registry.db, config);
     server = createSite({ config, registry, signin: signin as SignInLike });
     await new Promise<void>(r => server.listen(port, '127.0.0.1', r));
-});
+}
 
 after(() => stop());
 
@@ -332,5 +342,195 @@ describe('sign-in sessions', () => {
             () => clientMetadata(makeConfig({ site: { publicUrl: 'https://hub.example' } })),
             /not built yet/
         );
+    });
+});
+
+describe('profiles, with the common space on', () => {
+    beforeEach(() => start(true));
+
+    it("aren't made, and have no page, while the space is off", async () => {
+        await start(false);
+        await signedIn();
+        assert.equal((await call('GET', '/me', { cookie: await signedIn() })).status, 404);
+        assert.equal(new Profiles(registry.db).get(SysopDid), null);
+        assert.throws(() => makeConfig({ space: { enabled: 'yes' } }), /space\.enabled/);
+    });
+
+    it('are made at the first sign-in, with presence off', async () => {
+        const cookie = await signedIn({ did: OtherSysopDid, handle: 'someone.example' }, '/me');
+        const profile = new Profiles(registry.db).get(OtherSysopDid);
+        assert.equal(profile?.handle, 'someone.example');
+        assert.equal(profile?.presence, false);
+
+        const me = await call('GET', '/me', { cookie });
+        assert.equal(me.status, 200);
+        assert.match(me.body, /@someone\.example/);
+        assert.match(me.body, /<strong>Off:<\/strong>/);
+        assert.match(me.body, /Register it here/);
+        assert.equal((await call('GET', '/signin', { cookie })).location, '/me');
+    });
+
+    it('turn presence on and off', async () => {
+        const cookie = await signedIn(undefined, '/me');
+        const on = await call('POST', '/me/presence', { cookie, form: { presence: 'on' } });
+        assert.equal(on.location, '/me');
+        assert.equal(new Profiles(registry.db).get(SysopDid)?.presence, true);
+        assert.match((await call('GET', '/me', { cookie })).body, /<strong>On:<\/strong>/);
+
+        await call('POST', '/me/presence', { cookie, form: { presence: 'off' } });
+        assert.equal(new Profiles(registry.db).get(SysopDid)?.presence, false);
+
+        assert.equal(
+            (await call('POST', '/me/presence', { cookie, form: { presence: 'maybe' } })).status,
+            400
+        );
+        assert.equal(
+            (
+                await call('POST', '/me/presence', {
+                    cookie,
+                    form: { presence: 'on' },
+                    origin: 'https://evil.example',
+                })
+            ).status,
+            403
+        );
+        assert.equal(new Profiles(registry.db).get(SysopDid)?.presence, false);
+    });
+
+    it('need a session', async () => {
+        assert.equal((await call('GET', '/me')).location, '/signin');
+        assert.equal((await call('POST', '/me/presence', { form: { presence: 'on' } })).location, '/signin');
+    });
+
+    it('keep their setting when signing in again, with the latest handle', async () => {
+        const cookie = await signedIn(undefined, '/me');
+        await call('POST', '/me/presence', { cookie, form: { presence: 'on' } });
+        await signedIn({ did: SysopDid, handle: 'renamed.example' }, '/me');
+        const profile = new Profiles(registry.db).get(SysopDid);
+        assert.equal(profile?.handle, 'renamed.example');
+        assert.equal(profile?.presence, true);
+    });
+
+    it('can be removed, which signs the person out everywhere', async () => {
+        const first = await signedIn(undefined, '/me');
+        const second = await signedIn(undefined, '/me');
+        const other = await signedIn({ did: OtherSysopDid, handle: 'other.example' }, '/me');
+        const gone = await call('POST', '/me/forget', { cookie: first });
+        assert.equal(gone.location, '/');
+        assert.match(String((gone.headers['set-cookie'] as string[])[0]), /Max-Age=0/);
+        assert.equal(new Profiles(registry.db).get(SysopDid), null);
+        assert.equal((await call('GET', '/me', { cookie: second })).location, '/signin');
+        assert.equal((await call('GET', '/me', { cookie: other })).status, 200);
+    });
+
+    it('are invited from the directory, and escaped', async () => {
+        assert.match((await call('GET', '/')).body, /Sign in<\/a> to take part in the common space/);
+        const cookie = await signedIn({ did: SysopDid, handle: '<b>x</b>.example' }, '/me');
+        const me = await call('GET', '/me', { cookie });
+        assert.doesNotMatch(me.body, /<b>x/);
+        assert.match((await call('GET', '/', { cookie })).body, /href="\/me"/);
+    });
+});
+
+describe('presence on the site', () => {
+    beforeEach(() => start(true));
+
+    const Alice = 'did:plc:alicealicealicealicealic';
+    const since = '2026-01-01T00:00:00.000Z';
+
+    function postReport(body: unknown, token: string | null): Promise<Reply> {
+        const text = JSON.stringify(body);
+        return new Promise((resolve, reject) => {
+            const headers: Record<string, string> = {
+                'Content-Type': 'application/json',
+                'Content-Length': String(Buffer.byteLength(text)),
+            };
+            if (token) {
+                headers.Authorization = `Bearer ${token}`;
+            }
+            const req = request(
+                { host: '127.0.0.1', port, method: 'POST', path: '/api/bbs/presence', headers, agent: false },
+                res => {
+                    let out = '';
+                    res.on('data', d => (out += d));
+                    res.on('end', () =>
+                        resolve({ status: res.statusCode ?? 0, headers: res.headers, body: out })
+                    );
+                }
+            );
+            req.on('error', reject);
+            req.end(text);
+        });
+    }
+
+    function aliceOn(bbs = 'coolbbs') {
+        return { bbs, members: [{ did: Alice, name: 'alice', memberSince: since, online: true }] };
+    }
+
+    it('takes reports only with the BBS own token, from no web page', async () => {
+        const { token } = registry.add('coolbbs', SysopDid, null, {});
+        const other = registry.add('otherbbs', OtherSysopDid, null, {});
+        registry.proxyOpened('coolbbs', 'coolbbs.web', null);
+
+        assert.equal((await postReport(aliceOn(), null)).status, 401);
+        assert.equal((await postReport(aliceOn(), other.token)).status, 401);
+        assert.equal((await postReport(aliceOn('nosuch'), token)).status, 401);
+        assert.equal(new Profiles(registry.db).get(Alice), null);
+
+        const ok = await postReport(aliceOn(), token);
+        assert.equal(ok.status, 200);
+        assert.deepEqual(JSON.parse(ok.body), { ok: true, members: 1 });
+
+        assert.equal((await postReport({ bbs: 'coolbbs', members: [{ did: 'nope' }] }, token)).status, 400);
+        registry.setState('coolbbs', 'suspended');
+        assert.equal((await postReport(aliceOn(), token)).status, 401);
+    });
+
+    it('limits how often a BBS reports', async () => {
+        const { token } = registry.add('coolbbs', SysopDid, null, {});
+        for (let i = 0; i < 30; i++) {
+            assert.equal((await postReport(aliceOn(), token)).status, 200);
+        }
+        assert.equal((await postReport(aliceOn(), token)).status, 429);
+    });
+
+    it('lets members of a BBS see who is around, and confirm or deny it', async () => {
+        const { token } = registry.add('coolbbs', SysopDid, null, {});
+        registry.proxyOpened('coolbbs', 'coolbbs.web', null);
+        const cookie = await signedIn({ did: Alice, handle: 'alice.example' }, '/me');
+
+        assert.match((await call('GET', '/space', { cookie })).body, /for members of its BBSes/);
+        assert.match((await call('GET', '/me', { cookie })).body, /No BBS on this hub has said/);
+
+        await postReport(aliceOn(), token);
+        const me = await call('GET', '/me', { cookie });
+        assert.match(me.body, /shown as "alice via coolbbs"/);
+        //  her own profile's presence is off, so she isn't shown yet
+        assert.match((await call('GET', '/space', { cookie })).body, /Nobody is around/);
+
+        await call('POST', '/me/presence', { cookie, form: { presence: 'on' } });
+        assert.match((await call('GET', '/space', { cookie })).body, /alice via coolbbs/);
+
+        const yes = await call('POST', '/me/bbs', { cookie, form: { bbs: 'coolbbs', answer: 'confirmed' } });
+        assert.equal(yes.location, '/me');
+        assert.match((await call('GET', '/space', { cookie })).body, /@alice\.example/);
+
+        await call('POST', '/me/bbs', { cookie, form: { bbs: 'coolbbs', answer: 'denied' } });
+        assert.match((await call('GET', '/space', { cookie })).body, /for members of its BBSes/);
+
+        //  only about a BBS that has said something about her
+        registry.add('otherbbs', OtherSysopDid, null, {});
+        assert.equal(
+            (await call('POST', '/me/bbs', { cookie, form: { bbs: 'otherbbs', answer: 'confirmed' } }))
+                .status,
+            400
+        );
+    });
+
+    it('has no report endpoint while the space is off', async () => {
+        await start(false);
+        const { token } = registry.add('coolbbs', SysopDid, null, {});
+        assert.equal((await postReport(aliceOn(), token)).status, 404);
+        assert.equal((await call('GET', '/space')).status, 404);
     });
 });

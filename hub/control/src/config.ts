@@ -72,6 +72,25 @@ export interface HubConfig {
         //  listings shown (hub spec §5.4); mature and adult need age checks
         ratings: string[];
     };
+    //  the common space (hub plan H13 to H18): off by default. On, people
+    //  who sign in get a profile and can choose to be shown in it
+    space: {
+        enabled: boolean;
+        //  who may join (vision §8.7): "members" of a BBS on this hub, as
+        //  the BBS reports them (the default), or "anyone" with an AT account
+        join: 'members' | 'anyone';
+        //  a waiting period: a member of their BBS for at least this long
+        memberDays: number;
+        //  BBSes whose listing admits anyone ("open") don't make their
+        //  members members here
+        excludeOpenBbses: boolean;
+        //  BBSes whose members without an AT account are shown, as
+        //  alice@coolbbs (vision §6.4); none by default
+        vouchedFrom: string[];
+        //  a BBS that has sent no report for this long counts as having
+        //  nobody on (it reports every minute)
+        reportTimeoutSeconds: number;
+    };
     edge: {
         //  "internal": Caddy's own test CA (development); "onDemand": public
         //  certificates, one per registered name, on first use
@@ -117,6 +136,14 @@ export const Defaults: HubConfig = {
         concurrency: 4,
         ratings: ['general'],
     },
+    space: {
+        enabled: false,
+        join: 'members',
+        memberDays: 0,
+        excludeOpenBbses: false,
+        vouchedFrom: [],
+        reportTimeoutSeconds: 180,
+    },
     edge: { tls: 'internal', bindAddr: '127.0.0.1', httpPort: 7081, httpsPort: 7443 },
     registration: { open: true, reservedNames: DefaultReservedNames, maxBbsPerSysop: 3 },
 };
@@ -134,6 +161,7 @@ export function makeConfig(overrides: Partial<Record<keyof HubConfig, unknown>> 
         site: { ...Defaults.site, ...(overrides.site as object) },
         webTerminal: { ...Defaults.webTerminal, ...(overrides.webTerminal as object) },
         directory: { ...Defaults.directory, ...(overrides.directory as object) },
+        space: { ...Defaults.space, ...(overrides.space as object) },
         edge: { ...Defaults.edge, ...(overrides.edge as object) },
         registration: { ...Defaults.registration, ...(overrides.registration as object) },
     };
@@ -142,6 +170,21 @@ export function makeConfig(overrides: Partial<Record<keyof HubConfig, unknown>> 
     }
     if (!['internal', 'onDemand'].includes(config.edge.tls)) {
         throw new HubError('config', 'edge.tls is "internal" or "onDemand"');
+    }
+    if ('boolean' !== typeof config.space.enabled || 'boolean' !== typeof config.space.excludeOpenBbses) {
+        throw new HubError('config', 'space.enabled and space.excludeOpenBbses are true or false');
+    }
+    if (!['members', 'anyone'].includes(config.space.join)) {
+        throw new HubError('config', 'space.join is "members" or "anyone"');
+    }
+    if (!(config.space.memberDays >= 0) || !(config.space.reportTimeoutSeconds >= 30)) {
+        throw new HubError('config', 'space.memberDays is 0 or more, and reportTimeoutSeconds 30 or more');
+    }
+    if (
+        !Array.isArray(config.space.vouchedFrom) ||
+        !config.space.vouchedFrom.every(n => 'string' === typeof n)
+    ) {
+        throw new HubError('config', 'space.vouchedFrom is a list of BBS names');
     }
     if (!['network', 'hub'].includes(config.directory.scope)) {
         throw new HubError('config', 'directory.scope is "network" or "hub"');

@@ -1,9 +1,17 @@
-//  The hub's own site (hub plan H3): sysops sign in with AT and register
-//  their BBSes. Served behind the edge, at the hub's own domain.
+//  The hub's own site (hub plan H3, H13): people sign in with AT; sysops
+//  register their BBSes, and with the common space on, anyone signed in
+//  has a profile. Served behind the edge, at the hub's own domain.
 //
-//  GET  /                 sign in, or go to your BBSes
+//  GET  /                 the directory
+//  GET  /signin           sign in
 //  POST /signin           start AT sign-in
 //  GET  /oauth/callback   the account host sends the browser back here
+//  GET  /me               your profile (common space on)
+//  POST /me/presence      show you in the common space, or not
+//  POST /me/forget        remove your profile and sign out everywhere
+//  POST /me/bbs           confirm or deny a BBS that says you are a member
+//  GET  /space            who is around (common space on)
+//  POST /api/bbs/presence a BBS reports its members (bearer: its tunnel token)
 //  GET  /bbs              your BBSes, and registering a new one
 //  POST /bbs              register a BBS: shows its token and agent config, once
 //  POST /bbs/rotate       a new token and agent config
@@ -19,6 +27,8 @@ import type { Bbs, Registry } from './registry.ts';
 import type { AtClient } from './atproto.ts';
 import type { Directory, DirectoryEntry } from './directory.ts';
 import type { Listing } from './listing.ts';
+import { Profiles, type Profile } from './profiles.ts';
+import { parseReport, Presence } from './presence.ts';
 import { isDid, labelForHost } from './rules.ts';
 import { CallbackPath, SessionDays, type Identity, type WebSession } from './signin.ts';
 import { clientConfig, fileFor, policy, WebTermPath, type WebTerm } from './webterm.ts';
@@ -46,6 +56,8 @@ export interface SiteDeps {
 
 const Cookie = 'hub_session';
 const MaxForm = 8 * 1024;
+//  a presence report of the most members allowed fits easily
+const MaxReport = 512 * 1024;
 const HandleRe = /^@?([a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z][a-z0-9-]*$/i;
 
 //  A few attempts per address or account in a window, in memory
@@ -96,22 +108,26 @@ function clientAddress(req: IncomingMessage): string {
         : peer;
 }
 
-function readForm(req: IncomingMessage): Promise<URLSearchParams> {
+function readBody(req: IncomingMessage, max: number): Promise<string> {
     return new Promise((resolve, reject) => {
         let size = 0;
         const chunks: Buffer[] = [];
         req.on('data', (chunk: Buffer) => {
             size += chunk.length;
-            if (size > MaxForm) {
+            if (size > max) {
                 reject(new HubError('too-large', 'That form was too large.'));
                 req.destroy();
                 return;
             }
             chunks.push(chunk);
         });
-        req.on('end', () => resolve(new URLSearchParams(Buffer.concat(chunks).toString('utf8'))));
+        req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8')));
         req.on('error', reject);
     });
+}
+
+async function readForm(req: IncomingMessage): Promise<URLSearchParams> {
+    return new URLSearchParams(await readBody(req, MaxForm));
 }
 
 export function createSite(deps: SiteDeps): Server {
@@ -121,6 +137,11 @@ export function createSite(deps: SiteDeps): Server {
     const secure = config.site.publicUrl.startsWith('https://');
     const signinLimit = new Limiter(10, 10 * 60 * 1000, now);
     const changeLimit = new Limiter(10, 60 * 60 * 1000, now);
+    const profiles = config.space.enabled ? new Profiles(registry.db, () => new Date(now())) : null;
+    const presence = profiles ? new Presence(registry, config, profiles, deps.directory ?? null, now) : null;
+    const reportLimit = new Limiter(30, 60 * 1000, now);
+    //  where signing in leads
+    const home = profiles ? '/me' : '/bbs';
 
     function send(
         res: ServerResponse,
@@ -151,10 +172,14 @@ export function createSite(deps: SiteDeps): Server {
     }
 
     function landing(error?: string): string {
+        const intro = profiles
+            ? `<p>Sign in to take part in this hub's common space, or to register your BBS: a registered BBS
+gets an address under <code>${esc(config.domain)}</code>, reachable from anywhere without opening any ports.</p>`
+            : `<p>Run a BBS? Register it here, and it gets an address under
+<code>${esc(config.domain)}</code>, reachable from anywhere without opening any ports.</p>`;
         return page(
-            'Register your BBS',
-            `<p>Run a BBS? Register it here, and it gets an address under
-<code>${esc(config.domain)}</code>, reachable from anywhere without opening any ports.</p>
+            profiles ? 'Sign in' : 'Register your BBS',
+            `${intro}
 ${error ? `<p class="error">${esc(error)}</p>` : ''}
 <form method="post" action="/signin">
 <label for="handle">Sign in with your Bluesky (AT Protocol) handle</label>
@@ -241,9 +266,148 @@ names your BBS's address on this hub (<code>https://name.${esc(config.domain)}</
             : '';
         return page(
             'Your BBSes',
-            `${list}${add}${account}${remove}<p><a href="/">The directory</a></p>`,
+            `${list}${add}${account}${remove}<p>${profiles ? '<a href="/me">Your profile</a> · ' : ''}<a href="/">The directory</a></p>`,
             who
         );
+    }
+
+    function profilePage(who: WebSession, profile: Profile): string {
+        const shown = profile.presence
+            ? `<p><strong>On:</strong> others in the common space can see that you are around, and which
+BBS you are on.</p>
+<form method="post" action="/me/presence"><input type="hidden" name="presence" value="off"><button>Stop showing me</button></form>`
+            : `<p><strong>Off:</strong> nobody in the common space sees you, whatever BBS you are on.</p>
+<form method="post" action="/me/presence"><input type="hidden" name="presence" value="on"><button>Show me</button></form>`;
+        const bbses = registry.listForSysop(who.did).length
+            ? '<a href="/bbs">Your BBSes</a>'
+            : 'Run a BBS? <a href="/bbs">Register it here</a>';
+        return page(
+            'Your profile',
+            `<table>
+<tr><th>Signed in as</th><td>${esc(profile.handle ? `@${profile.handle}` : '(no handle)')}</td></tr>
+<tr><th>Account</th><td><code>${esc(profile.did)}</code></td></tr>
+<tr><th>On this hub since</th><td>${esc(profile.createdAt.slice(0, 10))}</td></tr>
+</table>
+<h2>Being shown in the common space</h2>
+${shown}
+<p class="hint">Off unless you turn it on. A BBS that reports who is on it has its own setting for you
+too, and the stricter one wins.</p>
+${membershipsSection(who)}
+<p>${bbses} · <a href="/space">Who's around</a> · <a href="/">The directory</a></p>
+<h2>Remove your profile</h2>
+<form method="post" action="/me/forget"><button>Remove it and sign out</button></form>
+<p class="hint">The hub keeps only what is shown above. Removing it signs you out everywhere; signing in
+again starts a new profile, with presence off.</p>`,
+            who
+        );
+    }
+
+    function membershipsSection(who: WebSession): string {
+        const list = presence?.memberships(who.did) ?? [];
+        if (!list.length) {
+            return `<h2>Your BBSes</h2>
+<p class="dim">No BBS on this hub has said you are a member yet. A BBS tells the hub once you turn on
+being shown in its own settings.</p>`;
+        }
+        const row = (m: (typeof list)[number]) => {
+            const form = (answer: string, label: string) =>
+                `<form class="inline" method="post" action="/me/bbs"><input type="hidden" name="bbs" value="${esc(
+                    m.bbs
+                )}"><input type="hidden" name="answer" value="${answer}"><button>${label}</button></form>`;
+            const state =
+                'confirmed' === m.answer
+                    ? 'Confirmed: you are shown as yourself there'
+                    : 'denied' === m.answer
+                      ? 'Denied: what it says about you is ignored'
+                      : `Not confirmed: you are shown as "${esc(m.name)} via ${esc(m.bbs)}"`;
+            const actions = [
+                'confirmed' !== m.answer ? form('confirmed', 'That is me') : '',
+                'denied' !== m.answer ? form('denied', 'Not me') : '',
+            ].join('');
+            return `<tr><td><strong>${esc(m.bbs)}</strong><br><span class="dim">as ${esc(m.name)}, a member since ${esc(
+                m.memberSince.slice(0, 10)
+            )}</span></td><td>${state}</td><td>${actions}</td></tr>`;
+        };
+        return `<h2>Your BBSes</h2>
+<p class="hint">These BBSes say you are a member. Until you confirm one, the hub shows you there only by
+the name the BBS gives, never as your own account.</p>
+<table>${list.map(row).join('')}</table>`;
+    }
+
+    function spacePage(who: WebSession): string {
+        if (!presence?.mayJoin(who.did)) {
+            return page(
+                "Who's around",
+                `<p>This hub's common space is for members of its BBSes. Once a BBS here says you are a member
+(turn on being shown in its own settings), you can join.</p>
+<p><a href="/me">Your profile</a> · <a href="/">The directory</a></p>`,
+                who
+            );
+        }
+        const people = presence.around();
+        const byBbs = new Map<string, typeof people>();
+        for (const p of people) {
+            byBbs.set(p.bbs, [...(byBbs.get(p.bbs) ?? []), p]);
+        }
+        const groups = [...byBbs.entries()]
+            .map(
+                ([bbs, list]) => `<article>
+<h3>${esc(bbs)} <span class="dim">${list.length} on</span></h3>
+<p>${list.map(p => esc(p.label)).join(', ')}</p>
+</article>`
+            )
+            .join('\n');
+        return page(
+            "Who's around",
+            `${groups || '<p class="dim">Nobody is around right now.</p>'}
+<p class="hint">Only people who chose to be shown appear here.</p>
+<p><a href="/me">Your profile</a> · <a href="/">The directory</a></p>`,
+            who
+        );
+    }
+
+    function json(res: ServerResponse, status: number, body: unknown): void {
+        res.writeHead(status, {
+            'Content-Type': 'application/json',
+            'Cache-Control': 'no-store',
+            'X-Content-Type-Options': 'nosniff',
+        });
+        res.end(JSON.stringify(body));
+    }
+
+    //  A BBS reports its members (F18): authenticated by its tunnel token,
+    //  and speaking only for itself
+    async function presenceReport(req: IncomingMessage, res: ServerResponse): Promise<void> {
+        if (!presence) {
+            return json(res, 404, { error: 'This hub has no common space.' });
+        }
+        const auth = String(req.headers.authorization ?? '');
+        const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
+        let body: unknown;
+        try {
+            body = JSON.parse(await readBody(req, MaxReport));
+        } catch (e) {
+            return json(res, e instanceof HubError ? 413 : 400, { error: 'A report is a JSON object.' });
+        }
+        const name = (body as { bbs?: unknown } | null)?.bbs;
+        const bbs = registry.authenticate(name, token);
+        if (!bbs) {
+            //  the same answer for no such BBS, a wrong token and a suspended one
+            return json(res, 401, { error: 'Not a BBS on this hub, or the wrong token.' });
+        }
+        if (!reportLimit.allow(bbs.name)) {
+            return json(res, 429, { error: 'Too many reports; one a minute is plenty.' });
+        }
+        try {
+            const members = parseReport(body);
+            presence.report(bbs, members);
+            return json(res, 200, { ok: true, members: members.length });
+        } catch (e) {
+            if (e instanceof HubError) {
+                return json(res, 400, { error: e.message });
+            }
+            throw e;
+        }
     }
 
     function credentials(who: WebSession, bbs: Bbs, token: string, fresh: boolean): string {
@@ -451,8 +615,10 @@ ${e.listing.endpoints
 </article>`;
         };
         const join = who
-            ? '<p><a href="/bbs">Your BBSes</a></p>'
-            : '<p>Run a BBS? <a href="/signin">Register it on this hub</a>.</p>';
+            ? `<p>${profiles ? '<a href="/space">Who&#39;s around</a> · <a href="/me">Your profile</a> · ' : ''}<a href="/bbs">Your BBSes</a></p>`
+            : profiles
+              ? '<p><a href="/signin">Sign in</a> to take part in the common space, or to register your BBS.</p>'
+              : '<p>Run a BBS? <a href="/signin">Register it on this hub</a>.</p>';
         return page(
             `${config.domain}`,
             `${join}
@@ -501,6 +667,10 @@ ${others.map(otherCard).join('\n')}`
         const who = signin.session(token);
         const path = url.pathname;
 
+        if ('POST' === req.method && '/api/bbs/presence' === path) {
+            return presenceReport(req, res);
+        }
+
         if ('POST' === req.method) {
             //  forms are only accepted from the hub's own pages
             if (req.headers.origin !== config.site.publicUrl) {
@@ -539,6 +709,50 @@ ${others.map(otherCard).join('\n')}`
 
             if (!who) {
                 return redirect(res, '/signin');
+            }
+
+            if (presence && '/me/bbs' === path) {
+                const name = (form.get('bbs') ?? '').trim().toLowerCase();
+                const answer = form.get('answer');
+                if (
+                    ('confirmed' !== answer && 'denied' !== answer) ||
+                    !presence.memberships(who.did).some(m => m.bbs === name)
+                ) {
+                    return send(
+                        res,
+                        400,
+                        page('Not understood', '<p>That form was not understood.</p>', who)
+                    );
+                }
+                if (!changeLimit.allow(who.did)) {
+                    return send(res, 429, page('Too many changes', '<p>Try again later.</p>', who));
+                }
+                profiles?.get(who.did) ?? profiles?.signedIn(who);
+                presence.answer(who.did, name, answer);
+                log(`site: ${who.did} ${answer} ${name}`);
+                return redirect(res, '/me');
+            }
+
+            if (profiles && ('/me/presence' === path || '/me/forget' === path)) {
+                if ('/me/forget' === path) {
+                    profiles.remove(who.did);
+                    log(`site: ${who.did} removed their profile`);
+                    return redirect(res, '/', { 'Set-Cookie': sessionCookie('', 0) });
+                }
+                const value = form.get('presence');
+                if ('on' !== value && 'off' !== value) {
+                    return send(
+                        res,
+                        400,
+                        page('Not understood', '<p>That form was not understood.</p>', who)
+                    );
+                }
+                if (!changeLimit.allow(who.did)) {
+                    return send(res, 429, page('Too many changes', '<p>Try again later.</p>', who));
+                }
+                profiles.get(who.did) ?? profiles.signedIn(who);
+                profiles.setPresence(who.did, 'on' === value);
+                return redirect(res, '/me');
             }
 
             if ('/bbs' === path) {
@@ -616,15 +830,16 @@ ${others.map(otherCard).join('\n')}`
         }
 
         if ('/signin' === path) {
-            return who ? redirect(res, '/bbs') : send(res, 200, landing());
+            return who ? redirect(res, home) : send(res, 200, landing());
         }
 
         if (CallbackPath === path) {
             try {
                 const identity = await signin.finish(url.searchParams);
                 const session = signin.createSession(identity);
+                profiles?.signedIn(identity);
                 log(`site: signed in ${identity.did}`);
-                return redirect(res, '/bbs', {
+                return redirect(res, home, {
                     'Set-Cookie': sessionCookie(session, SessionDays * 24 * 60 * 60),
                 });
             } catch (e) {
@@ -635,6 +850,17 @@ ${others.map(otherCard).join('\n')}`
 
         if ('/bbs' === path) {
             return who ? send(res, 200, dashboard(who)) : redirect(res, '/signin');
+        }
+
+        if ('/space' === path && presence) {
+            return who ? send(res, 200, spacePage(who)) : redirect(res, '/signin');
+        }
+
+        if ('/me' === path && profiles) {
+            if (!who) {
+                return redirect(res, '/signin');
+            }
+            return send(res, 200, profilePage(who, profiles.get(who.did) ?? profiles.signedIn(who)));
         }
 
         return send(res, 404, page('Not found', '<p>Nothing here.</p>'));

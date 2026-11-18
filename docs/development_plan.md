@@ -655,6 +655,7 @@ in.
 | Config | `atProto.hub.presence.*` (names to be settled with the hub settings, F10 and F11); a user config entry |
 | Depends on | F9 (the board's identity), F11; hub H14 |
 | Done when | A member who turned it on appears on the hub when they log in by any route, and is gone when they log off or turn it off; nobody is reported without their own setting on; a member the sysop withheld never appears |
+| Status | **Working locally** (2026-11-17), with hub H14. `atProto.hub` (`url`, `name`, `token`: the hub's address, and the name and token from its agent config) and `atProto.hub.presence` (`enabled`, `includeLocalUsers`). The whole list of members who chose it goes to the hub over HTTPS (or `http://` to `127.0.0.1`) after each login and logoff, a change of setting, and every minute. Members choose from a new menu (`hubPresenceConfig`, behind a commented out `HP`); sysops withhold with `oputil.js user hub USERNAME withhold\|allow`, shown in `user info`. Invisible members count as not on. 10 new tests. Tested live behind the dev hub, as for H14: logging in by SSH, leaving, the tunnel cut and back, and a member withheld. Committed as `3657e213` (fork-only, no PR tag) |
 
 ### F19. The hub as a door
 
