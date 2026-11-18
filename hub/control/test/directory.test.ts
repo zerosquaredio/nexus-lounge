@@ -115,10 +115,20 @@ describe('listings from the network', () => {
         assert.equal('evil' in l, false);
     });
 
-    it('needs a name; an unknown rating counts as general', () => {
+    it('needs a name; no rating is general, and one not understood counts as adult', () => {
         assert.equal(sanitizeListing({ description: 'no name' }), null);
         assert.equal(sanitizeListing(null), null);
-        assert.equal(sanitizeListing(listing({ rating: 'spicy' }))?.rating, 'general');
+        assert.equal(sanitizeListing({ name: 'Plain' })?.rating, 'general');
+        assert.equal(sanitizeListing(listing({ rating: 'spicy' }))?.rating, 'adult');
+    });
+
+    it('rates a listing by the highest of its rating and its self-labels', () => {
+        const labelled = (rating: string, ...vals: string[]) =>
+            sanitizeListing(listing({ rating, labels: { values: vals.map(val => ({ val })) } }))?.rating;
+        assert.equal(labelled('general', 'porn'), 'adult');
+        assert.equal(labelled('general', 'nudity'), 'mature');
+        assert.equal(labelled('adult', 'nudity'), 'adult', 'a label never lowers it');
+        assert.equal(labelled('mature', 'something-else'), 'mature');
     });
 
     it('checks status records too', () => {

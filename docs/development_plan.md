@@ -385,7 +385,7 @@ building it:
 | | |
 |---|---|
 | Implements | The BBS's own AT account (OAuth with write scopes); Bluesky announcement posts; events; listing and status records ([publishing.md](publishing.md)); event-scheduler jobs for updates |
-| Status | **Part 1 done** (2026-11-08) on the fork's `atproto-login` branch, in one commit, tagged `pr/09-board-account` and pushed: the board account, listing and status records, announcements, and the ready-made invite message. 21 new tests. Tested live with the Bluesky test account as the board account: connected from the `BA` screen (the consent page listed only the granular permissions), the listing and status read back publicly from the account's host, and a first announcement posted from the screen (2026-11-08). The screen is sysops-only by its menu ACS; `ID1` makes it root-only. Part 2 (triggered posts, including a "we've moved" post when the board's addresses change, events, stats, ads, art, bridging, DM invites, and the listing's `rating` with matching self-labels, [hub.md](hub.md) §5.4) is still to do |
+| Status | **Part 1 done** (2026-11-08) on the fork's `atproto-login` branch, in one commit, tagged `pr/09-board-account` and pushed: the board account, listing and status records, announcements, and the ready-made invite message. 21 new tests. Tested live with the Bluesky test account as the board account: connected from the `BA` screen (the consent page listed only the granular permissions), the listing and status read back publicly from the account's host, and a first announcement posted from the screen (2026-11-08). The screen is sysops-only by its menu ACS; `ID1` makes it root-only. Part 2, started (2026-11-17): the listing's `rating` (`general`, `mature` or `adult`) with matching self-labels ([hub.md](hub.md) §5.4), and a "we've moved" post when the board's addresses change (`triggers.moved`, off by default; it never posts on a first listing or with no addresses left, and the listing is still written if the post fails). 9 new tests; the rating tested live (the test board's listing reads back `rating: general`); the moved post unit-tested only, since a live test would post publicly. Committed as `019ec483`, tagged `pr/09-rating-and-moved` (after `pr/10`, as it uses the listing addresses; fork-only, with the listing). The hub now rates a listing by the higher of its rating and its self-labels, and counts an unrecognised rating as adult. Still to do: other triggered posts, events, stats, ads, art, bridging and DM invites |
 | Track | Split: **generic Bluesky announcement posting goes upstream**; the **listing and status records are project-specific** (our record types), so fork-only |
 | Config | `atProto.publishing.*` |
 | Depends on | F1; record type names (`nexus.cyberspace.*`, decided) |
@@ -713,7 +713,9 @@ order, each small and independently reviewable:
 9. The board's own Bluesky account: announcement posting and the invite
    message (F9, generic part). The tag `pr/09-board-account` also covers
    the listing and status records, which are project-specific and stay on
-   the fork; they are separated out when this PR branch is cut.
+   the fork; they are separated out when this PR branch is cut. So does
+   `pr/09-rating-and-moved` (the listing's rating and the "we've moved"
+   post), which comes after `pr/10` and also stays on the fork.
 10. Docs: running behind a tunnel (F10).
 11. Multiple SSH keys per user (F5), as a separate proposal.
 12. In-BBS user manager (F15), as a separate proposal.

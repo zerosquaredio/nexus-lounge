@@ -331,7 +331,9 @@ carry self-labels, and the leaf listing carries its rating as one.
 3. the rating of the leaf (or room) it comes from.
 
 So an unlabelled asset from an adult leaf counts as adult: a missing label
-never lets something through.
+never lets something through. Likewise a listing with no rating is
+`general`, but one whose rating the hub doesn't recognise counts as `adult`
+(the directory does this, 2026-11-17).
 
 **Hub policy** (the hub admin's settings):
 
@@ -488,6 +490,10 @@ control plane stays small and doesn't need to move.
 - ~~Which open-source social VR software to adapt for the social space.~~
   Overte (decided 2026-11-08, §5.3).
 - What counts as an "active" BBS (recent posts, users online, or connected).
+- Directory order by activity: for example logins (from a BBS's stats,
+  [publishing.md](publishing.md) §3.5) or contributions to the common
+  space (vision §8.8). Today it lists the hub's own BBSes first, online
+  before offline, then by name.
 - Objects with their own code (vision §8.8): whether a hub runs foreign
   code at all, and if so the fuel budget per object; how a BBS serves as
   an object's backend through its tunnel; per-object bandwidth and update

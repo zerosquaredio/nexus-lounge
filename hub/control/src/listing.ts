@@ -137,6 +137,35 @@ function hours(value: unknown): Listing['hours'] {
     return { timezone: zone, weekly, note };
 }
 
+//  AT labels that imply a rating (hub spec §5.4; a first draft)
+const LabelRatings: Record<string, Rating> = {
+    'graphic-media': 'mature',
+    nudity: 'mature',
+    gore: 'mature',
+    sexual: 'adult',
+    porn: 'adult',
+};
+
+//  A listing's rating is the highest of the one it states and its
+//  self-labels. Absent means general; a rating not understood counts as
+//  adult, so something unclear never reaches an all-ages directory.
+export function ratingOf(v: Record<string, unknown>): Rating {
+    const stated = text(v.rating, 16).toLowerCase();
+    let rating: Rating = !stated
+        ? 'general'
+        : (Ratings as readonly string[]).includes(stated)
+          ? (stated as Rating)
+          : 'adult';
+    const values = obj(v.labels).values;
+    for (const label of Array.isArray(values) ? values.slice(0, 20) : []) {
+        const implied = LabelRatings[text(obj(label).val, 64)];
+        if (implied && Ratings.indexOf(implied) > Ratings.indexOf(rating)) {
+            rating = implied;
+        }
+    }
+    return rating;
+}
+
 export function sanitizeListing(value: unknown): Listing | null {
     const v = obj(value);
     const name = text(v.name, 80);
@@ -144,12 +173,11 @@ export function sanitizeListing(value: unknown): Listing | null {
         return null;
     }
     const admission = obj(v.admission);
-    const rating = text(v.rating, 16).toLowerCase();
     return {
         name,
         description: text(v.description, 500, true),
         tags: words(v.tags, 10, 32, /^[a-z0-9][a-z0-9 -]{0,31}$/),
-        rating: (Ratings as readonly string[]).includes(rating) ? (rating as Rating) : 'general',
+        rating: ratingOf(v),
         rules: text(v.rules, 2000, true),
         endpoints: endpoints(v.endpoints),
         admission: {
