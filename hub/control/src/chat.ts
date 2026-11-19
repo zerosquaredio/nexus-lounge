@@ -247,6 +247,11 @@ export class Chat {
         );
     }
 
+    //  Who is connected now
+    connected(): string[] {
+        return [...new Set([...this.links].map(l => l.person.did))];
+    }
+
     connections(did: string): number {
         return [...this.links].filter(l => l.person.did === did).length;
     }

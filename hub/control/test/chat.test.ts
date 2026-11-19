@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { createServer as createHttp, request, type Server } from 'node:http';
 import { createServer as createTcp, connect, type AddressInfo, type Server as TcpServer, type Socket } from 'node:net';
 import { Chat, chatHandle, chatNick, MinChatSecret, parseIrc, signBroker } from '../src/chat.ts';
+import { ChatScript, ChatScriptPath } from '../src/chat_page.ts';
 import { makeConfig, type HubConfig } from '../src/config.ts';
 import { chatCommand } from '../src/generate.ts';
 import { Presence } from '../src/presence.ts';
@@ -292,6 +293,27 @@ describe('chat through the hub', () => {
         });
     }
 
+    function get(path: string, cookie?: string) {
+        return new Promise<{ status: number; headers: Record<string, unknown>; text: string }>((resolve, reject) => {
+            const req = request(
+                {
+                    host: '127.0.0.1',
+                    port,
+                    path,
+                    agent: false,
+                    headers: { Host: Domain, ...(cookie ? { Cookie: `hub_session=${cookie}` } : {}) },
+                },
+                res => {
+                    let text = '';
+                    res.on('data', d => (text += d));
+                    res.on('end', () => resolve({ status: res.statusCode ?? 0, headers: res.headers, text }));
+                }
+            );
+            req.on('error', reject);
+            req.end();
+        });
+    }
+
     //  opens the chat connection; resolves with the status line and socket
     function open(session?: string, options: { origin?: string; path?: string; host?: string; key?: string } = {}) {
         return new Promise<{ status: string; socket: Socket; text: () => string }>(resolve => {
@@ -324,6 +346,55 @@ describe('chat through the hub', () => {
             );
         });
     }
+
+    it('shows the chat page to someone allowed in, with only its own script', async () => {
+        const reply = await get('/space/chat', 'member-session');
+        assert.equal(reply.status, 200);
+        assert.match(reply.text, /id="chat-log"/);
+        assert.match(reply.text, /<script src="\/space\/chat\.js" defer><\/script>/);
+        assert.doesNotMatch(reply.text, /<script>/);
+        const policy = String(reply.headers['content-security-policy']);
+        assert.match(policy, /script-src 'self';/);
+        assert.match(policy, /connect-src 'self' wss:\/\/hub\.test;/);
+        assert.doesNotMatch(policy, /script-src[^;]*unsafe/);
+    });
+
+    it('keeps the chat page from others', async () => {
+        assert.equal((await get('/space/chat')).status, 303);
+        const stranger = await get('/space/chat', 'stranger-session');
+        assert.doesNotMatch(stranger.text, /chat-log/);
+        assert.match(stranger.text, /for members of its BBSes/);
+    });
+
+    it('links to the chat from who is around', async () => {
+        assert.match((await get('/space', 'member-session')).text, /href="\/space\/chat"/);
+    });
+
+    it('serves a script that parses, as a script', async () => {
+        const reply = await get(ChatScriptPath);
+        assert.equal(reply.status, 200);
+        assert.match(String(reply.headers['content-type']), /^text\/javascript/);
+        assert.equal(reply.text, ChatScript);
+        assert.doesNotThrow(() => new Function(reply.text));
+    });
+
+    it('never puts text from others into the page as HTML', () => {
+        assert.doesNotMatch(ChatScript, /innerHTML|outerHTML|insertAdjacentHTML|document\.write|eval\(/);
+    });
+
+    it('names people by who signed in, for those allowed in', async () => {
+        new Profiles(registry.db).signedIn({ did: Member, handle: 'alice.bsky.social' });
+        await open('member-session');
+        const query = `/space/chat/people?did=${encodeURIComponent(Member)}&did=${encodeURIComponent(Stranger)}&did=nonsense`;
+        const reply = await get(query, 'member-session');
+        assert.equal(reply.status, 200);
+        assert.deepEqual(JSON.parse(reply.text), {
+            here: [{ did: Member, label: '@alice.bsky.social' }],
+            labels: { [Member]: '@alice.bsky.social', [Stranger]: Stranger },
+        });
+        assert.equal((await get(query)).status, 401);
+        assert.equal((await get(query, 'stranger-session')).status, 403);
+    });
 
     it('takes the room as its operator, signed in as itself', () => {
         assert.deepEqual(freeq.tokens[0], { did: 'did:web:hub.test', handle: 'hub.chat.hub.test' });

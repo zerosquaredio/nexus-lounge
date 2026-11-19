@@ -95,9 +95,10 @@ Messages stay in freeq's memory and are gone when it restarts. Don't give it
 a database or expose its ports: the hub is what checks who may join, and it
 retakes the room after a restart before letting anyone in. Someone allowed in
 gets a single-use login from `POST /space/chat/token` and connects to
-`/chat/irc` on the hub's address. The hub closes that connection when they
+`/chat/irc` on the hub's address. People are named by the DID on each
+message, not by their nick. The hub closes that connection when they
 sign out or stop being allowed (checked every `checkSeconds`, 30 by default).
-There's no chat in the hub's pages yet.
+The chat itself is at `/space/chat`, for anyone signed in who may join.
 
 ### Observed status
 

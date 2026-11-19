@@ -11,6 +11,9 @@
 //  POST /me/forget        remove your profile and sign out everywhere
 //  POST /me/bbs           confirm or deny a BBS that says you are a member
 //  GET  /space            who is around (common space on)
+//  GET  /space/chat       the chat page
+//  GET  /space/chat.js    its script
+//  GET  /space/chat/people  who is in the room, and names for DIDs
 //  POST /space/chat/token a single-use chat login, for someone allowed in
 //  GET  /chat/irc         the chat connection (WebSocket), see chat.ts
 //  POST /api/bbs/presence a BBS reports its members (bearer: its tunnel token)
@@ -23,6 +26,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { ChatPath, type Chat } from './chat.ts';
+import { chatPageBody, ChatScript, ChatScriptPath, MaxLabelLookups } from './chat_page.ts';
 import type { HubConfig } from './config.ts';
 import { HubError } from './errors.ts';
 import { agentConfig } from './generate.ts';
@@ -373,7 +377,7 @@ the name the BBS gives, never as your own account.</p>
             "Who's around",
             `${groups || '<p class="dim">Nobody is around right now.</p>'}
 <p class="hint">Only people who chose to be shown appear here.</p>
-<p><a href="/me">Your profile</a> · <a href="/">The directory</a></p>`,
+<p>${chat ? '<a href="/space/chat">Chat</a> · ' : ''}<a href="/me">Your profile</a> · <a href="/">The directory</a></p>`,
             who
         );
     }
@@ -420,6 +424,43 @@ the name the BBS gives, never as your own account.</p>
             }
             throw e;
         }
+    }
+
+    //  How someone appears in chat: from who they signed in as, never from
+    //  anything their client says
+    function chatLabel(did: string): string | null {
+        if (did === chat?.botDid) {
+            return config.domain;
+        }
+        const handle = profiles?.get(did)?.handle;
+        return handle ? `@${handle}` : null;
+    }
+
+    function chatPeople(res: ServerResponse, who: WebSession | null, url: URL): void {
+        if (!who) {
+            return json(res, 401, { error: 'Sign in first.' });
+        }
+        if (!chat || !presence?.mayJoin(who.did)) {
+            return json(res, 403, { error: "You can't join this room." });
+        }
+        const labels: Record<string, string> = {};
+        for (const did of url.searchParams.getAll('did').slice(0, MaxLabelLookups)) {
+            if (isDid(did)) {
+                labels[did] = chatLabel(did) ?? did;
+            }
+        }
+        const here = chat.connected().map(did => ({ did, label: chatLabel(did) ?? did }));
+        return json(res, 200, { here, labels });
+    }
+
+    function chatPage(res: ServerResponse, who: WebSession): void {
+        if (!presence?.mayJoin(who.did)) {
+            return send(res, 200, spacePage(who));
+        }
+        const socket = config.site.publicUrl.replace(/^http/, 'ws');
+        return send(res, 200, page('Chat', chatPageBody(config.space.chat.room), who), {
+            'Content-Security-Policy': `default-src 'none'; script-src 'self'; connect-src 'self' ${socket}; style-src 'unsafe-inline'; img-src 'self'; form-action 'self' https:; frame-ancestors 'none'; base-uri 'none'`,
+        });
     }
 
     //  A single-use chat login for the person signed in
@@ -890,6 +931,23 @@ ${others.map(otherCard).join('\n')}`
 
         if ('/bbs' === path) {
             return who ? send(res, 200, dashboard(who)) : redirect(res, '/signin');
+        }
+
+        if (chat && ChatScriptPath === path) {
+            res.writeHead(200, {
+                'Content-Type': 'text/javascript; charset=utf-8',
+                'Cache-Control': 'no-cache',
+                'X-Content-Type-Options': 'nosniff',
+            });
+            return void res.end('HEAD' === req.method ? undefined : ChatScript);
+        }
+
+        if (chat && '/space/chat/people' === path) {
+            return chatPeople(res, who, url);
+        }
+
+        if (chat && '/space/chat' === path) {
+            return who ? chatPage(res, who) : redirect(res, '/signin');
         }
 
         if ('/space' === path && presence) {
