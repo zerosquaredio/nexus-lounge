@@ -1,5 +1,6 @@
 //  Runs the control plane: node src/main.ts [config.json]
 
+import { Chat, ChatSecretEnv, MinChatSecret } from './chat.ts';
 import { FrpsAdminPasswordEnv, loadConfig } from './config.ts';
 import { HubAccount } from './hub_account.ts';
 import { checkTunnels, ObservedStatus } from './observed.ts';
@@ -83,6 +84,17 @@ const check = async () => {
 };
 const checkTimer = setInterval(check, config.observedStatus.intervalSeconds * 1000);
 
+//  chat (H15), if it's on and has its secret
+let chat: Chat | null = null;
+if (config.space.chat.enabled) {
+    const secret = process.env[ChatSecretEnv] ?? '';
+    if (secret.length >= MinChatSecret) {
+        chat = new Chat(config, secret, log);
+    } else {
+        log(`chat: off, because ${ChatSecretEnv} isn't set to ${MinChatSecret} characters or more`);
+    }
+}
+
 const site = createSite({
     config,
     registry,
@@ -90,15 +102,18 @@ const site = createSite({
     webterm,
     directory,
     at,
+    chat,
     log,
 });
 site.listen(config.site.port, config.site.host, () => {
     log(`hub site on ${config.site.host}:${config.site.port}, for ${config.site.publicUrl}`);
+    chat?.start();
 });
 
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
     process.on(signal, () => {
         stream?.stop();
+        chat?.stop();
         clearInterval(checkTimer);
         site.close();
         server.close(() => {

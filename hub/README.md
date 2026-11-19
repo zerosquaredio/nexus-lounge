@@ -80,6 +80,25 @@ Who may join is `space.join` (`members` of a BBS here, the default, or
 `anyone`), with `memberDays` and `excludeOpenBbses`; members without an AT
 account are shown only from BBSes listed in `space.vouchedFrom`.
 
+**Chat** (`"space": { "enabled": true, "chat": { "enabled": true } }`) runs on
+[freeq](https://github.com/freeq-irc/freeq), built from source (tested at
+commit `f59840eb`), which only the hub can reach. Give the control plane and
+freeq the same secret, of at least 32 characters:
+
+```sh
+export HUB_CHAT_SECRET="$(openssl rand -hex 32)"
+mkdir -p data/chat
+eval "$(node src/cli.ts --config hub.json chat-command --binary /path/to/freeq-server)"
+```
+
+Messages stay in freeq's memory and are gone when it restarts. Don't give it
+a database or expose its ports: the hub is what checks who may join, and it
+retakes the room after a restart before letting anyone in. Someone allowed in
+gets a single-use login from `POST /space/chat/token` and connects to
+`/chat/irc` on the hub's address. The hub closes that connection when they
+sign out or stop being allowed (checked every `checkSeconds`, 30 by default).
+There's no chat in the hub's pages yet.
+
 ### Observed status
 
 The hub publishes whether each BBS's tunnel is up, from its own AT account,

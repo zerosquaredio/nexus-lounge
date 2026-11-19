@@ -38,6 +38,7 @@ export const DefaultReservedNames = [
     'auth',
     'oauth',
     'pds',
+    'chat',
     'assets',
     'static',
     'test',

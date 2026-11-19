@@ -11,6 +11,8 @@
 //  POST /me/forget        remove your profile and sign out everywhere
 //  POST /me/bbs           confirm or deny a BBS that says you are a member
 //  GET  /space            who is around (common space on)
+//  POST /space/chat/token a single-use chat login, for someone allowed in
+//  GET  /chat/irc         the chat connection (WebSocket), see chat.ts
 //  POST /api/bbs/presence a BBS reports its members (bearer: its tunnel token)
 //  GET  /bbs              your BBSes, and registering a new one
 //  POST /bbs              register a BBS: shows its token and agent config, once
@@ -19,6 +21,8 @@
 //  POST /signout
 
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
+import type { Duplex } from 'node:stream';
+import { ChatPath, type Chat } from './chat.ts';
 import type { HubConfig } from './config.ts';
 import { HubError } from './errors.ts';
 import { agentConfig } from './generate.ts';
@@ -50,6 +54,8 @@ export interface SiteDeps {
     //  BBS listings from the AT network, and looking up accounts
     directory?: Directory | null;
     at?: AtClient | null;
+    //  the common space's chat, if it's on
+    chat?: Chat | null;
     log?: (line: string) => void;
     now?: () => number;
 }
@@ -140,6 +146,12 @@ export function createSite(deps: SiteDeps): Server {
     const profiles = config.space.enabled ? new Profiles(registry.db, () => new Date(now())) : null;
     const presence = profiles ? new Presence(registry, config, profiles, deps.directory ?? null, now) : null;
     const reportLimit = new Limiter(30, 60 * 1000, now);
+    const chatLimit = new Limiter(30, 60 * 1000, now);
+    const chat = presence ? (deps.chat ?? null) : null;
+    chat?.bind({
+        mayJoin: did => !!presence?.mayJoin(did),
+        sessionValid: session => !!signin.session(session),
+    });
     //  where signing in leads
     const home = profiles ? '/me' : '/bbs';
 
@@ -407,6 +419,28 @@ the name the BBS gives, never as your own account.</p>
                 return json(res, 400, { error: e.message });
             }
             throw e;
+        }
+    }
+
+    //  A single-use chat login for the person signed in
+    async function chatToken(res: ServerResponse, who: WebSession | null): Promise<void> {
+        if (!chat) {
+            return json(res, 404, { error: 'This hub has no chat.' });
+        }
+        if (!who) {
+            return json(res, 401, { error: 'Sign in first.' });
+        }
+        if (!chatLimit.allow(who.did)) {
+            return json(res, 429, { error: 'Too many attempts; try again in a minute.' });
+        }
+        try {
+            return json(res, 200, await chat.issue(who));
+        } catch (e) {
+            if (e instanceof HubError && 'chat-not-allowed' === e.code) {
+                return json(res, 403, { error: e.message });
+            }
+            log(`chat: no login for ${who.did}: ${(e as Error).message}`);
+            return json(res, 503, { error: 'Chat is not available right now.' });
         }
     }
 
@@ -678,6 +712,10 @@ ${others.map(otherCard).join('\n')}`
             }
             const form = await readForm(req);
 
+            if ('/space/chat/token' === path) {
+                return chatToken(res, who);
+            }
+
             if ('/signin' === path) {
                 const handle = (form.get('handle') ?? '').trim().replace(/^@/, '');
                 if (!HandleRe.test(handle) || handle.length > 253) {
@@ -704,6 +742,7 @@ ${others.map(otherCard).join('\n')}`
 
             if ('/signout' === path) {
                 signin.endSession(token);
+                chat?.sweep();
                 return redirect(res, '/', { 'Set-Cookie': sessionCookie('', 0) });
             }
 
@@ -736,6 +775,7 @@ ${others.map(otherCard).join('\n')}`
             if (profiles && ('/me/presence' === path || '/me/forget' === path)) {
                 if ('/me/forget' === path) {
                     profiles.remove(who.did);
+                    chat?.sweep();
                     log(`site: ${who.did} removed their profile`);
                     return redirect(res, '/', { 'Set-Cookie': sessionCookie('', 0) });
                 }
@@ -878,6 +918,41 @@ ${others.map(otherCard).join('\n')}`
             }
         });
     });
+    //  The chat connection: only from the hub's own pages, for someone signed
+    //  in. chat.ts checks the join rule and holds the connection
+    if (chat) {
+        server.on('upgrade', (req: IncomingMessage, socket: Duplex, head: Buffer) => {
+            const refuse = (status: number) => {
+                socket.on('error', () => {});
+                socket.end(`HTTP/1.1 ${status} Refused\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`);
+            };
+            try {
+                const url = new URL(req.url ?? '/', config.site.publicUrl);
+                if (labelForHost(req.headers.host, config.domain) || ChatPath !== url.pathname) {
+                    return refuse(404);
+                }
+                if (req.headers.origin !== config.site.publicUrl) {
+                    return refuse(403);
+                }
+                const session = cookies(req)[Cookie];
+                const who = signin.session(session);
+                if (!who || !session) {
+                    return refuse(401);
+                }
+                const refused = chat.attach(req, socket, head, {
+                    did: who.did,
+                    session,
+                    address: clientAddress(req),
+                });
+                if (refused) {
+                    refuse(refused);
+                }
+            } catch (e) {
+                log(`chat: connection failed: ${(e as Error).message}`);
+                refuse(500);
+            }
+        });
+    }
     server.keepAliveTimeout = 120_000;
     server.headersTimeout = 125_000;
     return server;

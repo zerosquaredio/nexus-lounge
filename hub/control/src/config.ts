@@ -90,6 +90,21 @@ export interface HubConfig {
         //  a BBS that has sent no report for this long counts as having
         //  nobody on (it reports every minute)
         reportTimeoutSeconds: number;
+        //  chat (H15), on a freeq server only the hub can reach: see chat.ts.
+        //  Needs HUB_CHAT_SECRET, shared with freeq
+        chat: {
+            enabled: boolean;
+            //  freeq's ports, on 127.0.0.1
+            ircPort: number;
+            webPort: number;
+            room: string;
+            //  freeq's keys; messages are never written anywhere
+            dataDir: string;
+            //  connections one person may have at once
+            maxConnections: number;
+            //  how often access is checked for everyone connected
+            checkSeconds: number;
+        };
     };
     edge: {
         //  "internal": Caddy's own test CA (development); "onDemand": public
@@ -143,6 +158,15 @@ export const Defaults: HubConfig = {
         excludeOpenBbses: false,
         vouchedFrom: [],
         reportTimeoutSeconds: 180,
+        chat: {
+            enabled: false,
+            ircPort: 16667,
+            webPort: 18080,
+            room: '#space',
+            dataDir: './data/chat',
+            maxConnections: 5,
+            checkSeconds: 30,
+        },
     },
     edge: { tls: 'internal', bindAddr: '127.0.0.1', httpPort: 7081, httpsPort: 7443 },
     registration: { open: true, reservedNames: DefaultReservedNames, maxBbsPerSysop: 3 },
@@ -161,7 +185,14 @@ export function makeConfig(overrides: Partial<Record<keyof HubConfig, unknown>> 
         site: { ...Defaults.site, ...(overrides.site as object) },
         webTerminal: { ...Defaults.webTerminal, ...(overrides.webTerminal as object) },
         directory: { ...Defaults.directory, ...(overrides.directory as object) },
-        space: { ...Defaults.space, ...(overrides.space as object) },
+        space: {
+            ...Defaults.space,
+            ...(overrides.space as object),
+            chat: {
+                ...Defaults.space.chat,
+                ...((overrides.space as { chat?: object } | undefined)?.chat ?? {}),
+            },
+        },
         edge: { ...Defaults.edge, ...(overrides.edge as object) },
         registration: { ...Defaults.registration, ...(overrides.registration as object) },
     };
@@ -186,12 +217,33 @@ export function makeConfig(overrides: Partial<Record<keyof HubConfig, unknown>> 
     ) {
         throw new HubError('config', 'space.vouchedFrom is a list of BBS names');
     }
+    const chat = config.space.chat;
+    if ('boolean' !== typeof chat.enabled) {
+        throw new HubError('config', 'space.chat.enabled is true or false');
+    }
+    if (chat.enabled && !config.space.enabled) {
+        throw new HubError('config', 'space.chat needs space.enabled');
+    }
+    if (!/^#[a-z0-9_-]{1,32}$/.test(chat.room)) {
+        throw new HubError('config', 'space.chat.room is # and up to 32 lower-case letters, digits, - or _');
+    }
+    if (chat.ircPort === chat.webPort) {
+        throw new HubError('config', 'space.chat.ircPort and webPort are different ports');
+    }
+    if ('string' !== typeof chat.dataDir || !/^[\w./-]+$/.test(chat.dataDir)) {
+        throw new HubError('config', 'space.chat.dataDir is a plain path');
+    }
+    if (!Number.isInteger(chat.maxConnections) || chat.maxConnections < 1 || !(chat.checkSeconds >= 1)) {
+        throw new HubError('config', 'space.chat.maxConnections and checkSeconds are 1 or more');
+    }
     if (!['network', 'hub'].includes(config.directory.scope)) {
         throw new HubError('config', 'directory.scope is "network" or "hub"');
     }
     for (const [what, port] of [
         ['tunnel.adminPort', config.tunnel.adminPort],
         ['hubAccount.callbackPort', config.hubAccount.callbackPort],
+        ['space.chat.ircPort', chat.ircPort],
+        ['space.chat.webPort', chat.webPort],
     ] as const) {
         if (!Number.isInteger(port) || port < 1 || port > 65535) {
             throw new HubError('config', `${what} is a port, 1 to 65535`);

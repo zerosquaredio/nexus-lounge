@@ -1,6 +1,7 @@
 //  Config files generated from the hub's config and rules.ts, so the edge,
 //  the tunnel server and every agent agree on names, ports and paths.
 
+import { chatDomain, ChatSecretEnv } from './chat.ts';
 import { FrpsAdminPasswordEnv, type HubConfig } from './config.ts';
 import { BbsExactPaths, BbsPrefixPaths, OddPathRe2 } from './rules.ts';
 
@@ -83,6 +84,23 @@ addr = ${tomlString(control)}
 path = "/frp/handler"
 ops = ["Login", "NewProxy", "CloseProxy", "Ping"]
 `;
+}
+
+//  How to start the chat server (freeq, hub plan H15). On this machine only,
+//  with no database, so messages stay in memory; no guests; and only the
+//  identities the hub issues (chat.ts)
+export function chatCommand(config: HubConfig, binary = 'freeq-server'): string {
+    const chat = config.space.chat;
+    return [
+        `BROKER_SHARED_SECRET="$${ChatSecretEnv}"`,
+        binary,
+        `--listen-addr 127.0.0.1:${chat.ircPort}`,
+        `--web-addr 127.0.0.1:${chat.webPort}`,
+        `--server-name ${config.domain}`,
+        `--data-dir ${chat.dataDir}`,
+        '--no-guest',
+        `--allowed-did-domains ${chatDomain(config.domain)}`,
+    ].join(' ');
 }
 
 //  The edge's config (Caddy). One catch-all site: certificates are made on

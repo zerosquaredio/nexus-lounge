@@ -9,7 +9,7 @@ import { HubAccount, HubAccountCallbackPath } from './hub_account.ts';
 import { ObservedStatus } from './observed.ts';
 import { loadConfig, type HubConfig } from './config.ts';
 import { HubError } from './errors.ts';
-import { agentConfig, caddyfile, frpsConfig } from './generate.ts';
+import { agentConfig, caddyfile, chatCommand, frpsConfig } from './generate.ts';
 import { Registry, type Bbs } from './registry.ts';
 import { loadWebTerm } from './webterm.ts';
 import { atClient } from './atproto.ts';
@@ -37,6 +37,9 @@ Generated configs
   agent-config NAME --token TOKEN [--web-port N] [--ws-port N]
   frps-config            the tunnel server's config
   caddyfile              the edge's config
+  chat-command [--binary PATH]
+                         how to start the chat server (freeq); it needs
+                         HUB_CHAT_SECRET set, as the control plane does
   web-terminal-digest    the fingerprint of webTerminal.root, to pin it
 
 The directory
@@ -156,6 +159,9 @@ export async function run(argv: string[]): Promise<void> {
             return;
         case 'caddyfile':
             process.stdout.write(caddyfile(config));
+            return;
+        case 'chat-command':
+            console.log(chatCommand(config, options.binary));
             return;
         case 'web-terminal-digest': {
             if (!config.webTerminal.root) {
