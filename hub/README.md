@@ -106,7 +106,10 @@ WebSocket at `/space/live` on the hub's address, for people allowed in. It
 sends the whole state, then changes. The format is in
 [docs/live_model.md](../docs/live_model.md). With it on, `/space` is a map
 drawn from that stream, and opening a board from the map shows the person
-there while they keep it open.
+there while they keep it open. A BBS's door (F19 in the BBS plan) uses the
+same stream, and the chat room, for its members, with its tunnel token:
+`/api/bbs/live`, `/api/bbs/chat/token` and `/api/bbs/chat`. Only members
+who confirmed that BBS at the hub can chat from it.
 
 ### Observed status
 

@@ -225,6 +225,7 @@ describe('chat through the hub', () => {
     let port: number;
     let sessions: Sessions;
     let presence: Presence;
+    let bbsToken: string;
     const sockets = new Set<Socket>();
 
     function report(members: { did: string }[]): void {
@@ -244,7 +245,7 @@ describe('chat through the hub', () => {
             space: { enabled: true, chat: { enabled: true, ircPort: freeq.ircPort, webPort: freeq.webPort, maxConnections: 2 } },
         });
         registry = new Registry(':memory:', config.registration);
-        registry.add('coolbbs', SysopDid, null, { web: 8080, ws: 8810 });
+        bbsToken = registry.add('coolbbs', SysopDid, null, { web: 8080, ws: 8810 }).token;
         presence = new Presence(registry, config, new Profiles(registry.db));
         report([{ did: Member }]);
         sessions = new Sessions();
@@ -315,7 +316,39 @@ describe('chat through the hub', () => {
     }
 
     //  opens the chat connection; resolves with the status line and socket
-    function open(session?: string, options: { origin?: string; path?: string; host?: string; key?: string } = {}) {
+    //  as a BBS's door would: its token, no web page behind it
+    function asBbs(method: string, path: string, token: string = bbsToken, origin?: string) {
+        return new Promise<{ status: number; body: Record<string, unknown> }>((resolve, reject) => {
+            const req = request(
+                {
+                    host: '127.0.0.1',
+                    port,
+                    method,
+                    path,
+                    agent: false,
+                    headers: { Host: Domain, Authorization: `Bearer ${token}`, ...(origin ? { Origin: origin } : {}) },
+                },
+                res => {
+                    let text = '';
+                    res.on('data', d => (text += d));
+                    res.on('end', () => {
+                        let body = {};
+                        try {
+                            body = JSON.parse(text);
+                        } catch {}
+                        resolve({ status: res.statusCode ?? 0, body });
+                    });
+                }
+            );
+            req.on('error', reject);
+            req.end();
+        });
+    }
+
+    function open(
+        session?: string,
+        options: { origin?: string | null; path?: string; host?: string; key?: string; auth?: string } = {}
+    ) {
         return new Promise<{ status: string; socket: Socket; text: () => string }>(resolve => {
             const socket = connect(port, '127.0.0.1');
             sockets.add(socket);
@@ -340,7 +373,9 @@ describe('chat through the hub', () => {
                 socket.write(
                     `GET ${options.path ?? '/chat/irc'} HTTP/1.1\r\nHost: ${options.host ?? Domain}\r\n` +
                         `Connection: Upgrade\r\nUpgrade: websocket\r\nSec-WebSocket-Version: 13\r\n` +
-                        `Sec-WebSocket-Key: ${options.key ?? Key}\r\nOrigin: ${options.origin ?? Origin}\r\n` +
+                        `Sec-WebSocket-Key: ${options.key ?? Key}\r\n` +
+                        `${null === options.origin ? '' : `Origin: ${options.origin ?? Origin}\r\n`}` +
+                        `${options.auth ? `Authorization: Bearer ${options.auth}\r\n` : ''}` +
                         `${session ? `Cookie: hub_session=${session}; other=1\r\n` : ''}X-Forwarded-For: 203.0.113.9\r\n\r\n`
                 )
             );
@@ -477,6 +512,44 @@ describe('chat through the hub', () => {
         chat.sweep();
         await until(() => c.socket.destroyed || c.socket.readableEnded, 'the connection to close');
         await until(() => 0 === freeq.upstream.size, 'freeq to be told');
+        assert.equal(chat.connections(Member), 0);
+    });
+
+    it("lets a BBS's door chat for a member who confirmed that BBS, and nobody else", async () => {
+        registry.proxyOpened('coolbbs', 'web', null);
+        const profiles = new Profiles(registry.db);
+        profiles.signedIn({ did: Member, handle: 'alice.bsky.social' });
+        const door = `bbs=coolbbs&did=${encodeURIComponent(Member)}`;
+        //  the BBS's word alone isn't enough to speak as someone
+        assert.equal((await asBbs('POST', `/api/bbs/chat/token?${door}`)).status, 403);
+        assert.match((await open(undefined, { path: `/api/bbs/chat?${door}`, origin: null, auth: bbsToken })).status, / 403 /);
+        presence.answer(Member, 'coolbbs', 'confirmed');
+        const ticket = await asBbs('POST', `/api/bbs/chat/token?${door}`);
+        assert.equal(ticket.status, 200);
+        assert.equal(ticket.body.path, '/api/bbs/chat');
+        assert.equal(ticket.body.label, '@alice.bsky.social');
+        assert.equal((await asBbs('POST', `/api/bbs/chat/token?${door}`, 'wrong')).status, 401);
+        assert.equal((await asBbs('POST', `/api/bbs/chat/token?${door}`, bbsToken, Origin)).status, 403);
+        assert.equal((await asBbs('POST', `/api/bbs/chat/token?bbs=coolbbs&did=${encodeURIComponent(Stranger)}`)).status, 403);
+        assert.equal((await asBbs('POST', '/api/bbs/chat/token?bbs=coolbbs')).status, 400);
+
+        const c = await open(undefined, { path: `/api/bbs/chat?${door}`, origin: null, auth: bbsToken });
+        assert.match(c.status, / 101 /);
+        assert.equal(freeq.upgrades[0]?.authorization, undefined, "the BBS's token stays with the hub");
+        c.socket.write('frame');
+        await until(() => c.text().includes('echo:frame'), 'the echo');
+        assert.equal(chat.connections(Member), 1);
+        assert.match((await open(undefined, { path: `/api/bbs/chat?${door}`, auth: bbsToken })).status, / 403 /);
+        assert.match((await open(undefined, { path: `/api/bbs/chat?${door}`, origin: null, auth: 'wrong' })).status, / 401 /);
+
+        const people = await asBbs('GET', `/api/bbs/chat/people?${door}&label=${encodeURIComponent(Member)}`);
+        assert.equal(people.status, 200);
+        assert.deepEqual(people.body.here, [{ did: Member, label: '@alice.bsky.social' }]);
+
+        //  the member takes it back at the hub: the BBS can't speak for them
+        presence.answer(Member, 'coolbbs', 'denied');
+        chat.sweep();
+        await until(() => c.socket.destroyed || c.socket.readableEnded, 'the connection to close');
         assert.equal(chat.connections(Member), 0);
     });
 

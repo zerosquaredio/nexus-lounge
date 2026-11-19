@@ -5,7 +5,7 @@ import { request, type Server } from 'node:http';
 import { connect, type AddressInfo, type Socket } from 'node:net';
 import type { Chat } from '../src/chat.ts';
 import { makeConfig, type HubConfig } from '../src/config.ts';
-import { AccessEnded, buildState, diffState, type LiveState } from '../src/live.ts';
+import { AccessEnded, buildState, diffState, personId, type LiveState } from '../src/live.ts';
 import { Presence, type ReportedMember } from '../src/presence.ts';
 import { Profiles } from '../src/profiles.ts';
 import { Registry } from '../src/registry.ts';
@@ -154,6 +154,47 @@ describe('the live model', () => {
         assert.equal(leaf && 'leaf' === leaf.type && leaf.terminal, 'https://coolbbs.hub.test:7443/_enig/ws-term/?connect=1');
     });
 
+    it("shows the space inside a BBS only to members it reported who may join", () => {
+        const { registry, profiles, presence } = setup({ vouchedFrom: ['coolbbs'] });
+        presence.report(registry.mustGet('coolbbs'), [
+            member(Alice, 'Alice'),
+            member(Bob, 'Bob'),
+            member(Carol, 'Carol'),
+            member(null, 'Dave', 'dave'),
+        ]);
+        profiles.signedIn({ did: Alice, handle: 'alice.example' });
+        presence.answer(Alice, 'coolbbs', 'confirmed');
+        presence.answer(Carol, 'coolbbs', 'denied');
+        const cool = registry.mustGet('coolbbs');
+        assert.deepEqual(presence.doorAccess(cool, Alice, null), {
+            bbs: 'coolbbs',
+            did: Alice,
+            kind: 'account',
+            label: '@alice.example',
+            chat: true,
+        });
+        //  the BBS's word about Bob: never his DID, and no speaking as him
+        assert.deepEqual(presence.doorAccess(cool, Bob, null), {
+            bbs: 'coolbbs',
+            did: null,
+            kind: 'via',
+            label: 'Bob via coolbbs',
+            chat: false,
+        });
+        assert.equal(presence.doorAccess(cool, Carol, null), null, 'Carol said it is not her');
+        assert.equal(presence.doorAccess(cool, 'did:plc:eeeeeeeeeeeeeeeeeeeeeeee', null), null, 'not reported');
+        assert.equal(presence.doorAccess(cool, null, 'dave')?.label, 'Dave@coolbbs');
+        assert.equal(presence.doorAccess(registry.mustGet('quietbbs'), Alice, null), null, 'quietbbs is not up');
+        registry.proxyClosed('coolbbs', 'web');
+        assert.equal(presence.doorAccess(registry.mustGet('coolbbs'), Alice, null), null, 'nor is coolbbs now');
+    });
+
+    it('leaves members without AT accounts out, unless the hub takes them from that BBS', () => {
+        const { registry, presence } = setup();
+        presence.report(registry.mustGet('coolbbs'), [member(null, 'Dave', 'dave')]);
+        assert.equal(presence.doorAccess(registry.mustGet('coolbbs'), null, 'dave'), null);
+    });
+
     it('sends only what changed', () => {
         const empty: LiveState = { entities: [], presence: [], groups: [], links: [] };
         const one: LiveState = {
@@ -179,7 +220,10 @@ class Client {
     upgraded = false;
     ready: Promise<string>;
 
-    constructor(port: number, options: { session?: string; origin?: string; key?: string; path?: string } = {}) {
+    constructor(
+        port: number,
+        options: { session?: string; origin?: string | null; key?: string; path?: string; auth?: string } = {}
+    ) {
         this.socket = connect(port, '127.0.0.1');
         this.socket.on('error', () => {});
         this.ready = new Promise(resolve => {
@@ -207,7 +251,8 @@ class Client {
                 `GET ${options.path ?? '/space/live'} HTTP/1.1\r\nHost: ${Domain}\r\nConnection: Upgrade\r\n` +
                     `Upgrade: websocket\r\nSec-WebSocket-Version: 13\r\n` +
                     `Sec-WebSocket-Key: ${options.key ?? randomBytes(16).toString('base64')}\r\n` +
-                    `Origin: ${options.origin ?? Origin}\r\n` +
+                    `${null === options.origin ? '' : `Origin: ${options.origin ?? Origin}\r\n`}` +
+                    `${options.auth ? `Authorization: Bearer ${options.auth}\r\n` : ''}` +
                     `${options.session ? `Cookie: hub_session=${options.session}\r\n` : ''}\r\n`
             )
         );
@@ -509,6 +554,56 @@ describe('the live model on the site', () => {
         const outsider = await get('/space', 'carol-session');
         assert.doesNotMatch(outsider.body, /map\.js/);
         assert.doesNotMatch(String(outsider.headers['content-security-policy']), /connect-src/);
+    });
+
+    //  a BBS's door, for one of its members
+    function door(query: string, options: { token?: string; origin?: string | null } = {}): Client {
+        return open({
+            path: `/api/bbs/live?${query}`,
+            origin: options.origin === undefined ? null : options.origin,
+            auth: options.token ?? bbsToken,
+        });
+    }
+
+    it("streams the space to a BBS's door, as the member it is for", async () => {
+        const c = door(`bbs=coolbbs&did=${encodeURIComponent(Bob)}`);
+        assert.match(await c.ready, / 101 /);
+        await until(() => c.messages.length > 0, 'the snapshot');
+        const snap = c.messages[0] as { you: string } & LiveState;
+        //  Bob hasn't confirmed coolbbs: he is who coolbbs says, not his DID
+        assert.equal(snap.you, personId({ kind: 'via', did: null, bbs: 'coolbbs', label: 'Bob via coolbbs' }));
+        assert.ok(snap.entities.some(e => e.id === snap.you));
+        assert.equal(JSON.stringify(snap).includes(Bob), false);
+        //  a door can't say it has opened a board
+        at(c, 'leaf:coolbbs');
+        await wait(300);
+        assert.equal(c.messages.length, 1);
+
+        const alice = door(`bbs=coolbbs&did=${encodeURIComponent(Alice)}`);
+        await until(() => alice.messages.length > 0, "Alice's snapshot");
+        assert.equal((alice.messages[0] as { you: string }).you, `person:${Alice}`);
+    });
+
+    it('refuses doors that should not get through', async () => {
+        const bob = `bbs=coolbbs&did=${encodeURIComponent(Bob)}`;
+        for (const [query, options, expected] of [
+            [bob, { token: 'wrong' }, / 401 /],
+            [bob, { origin: Origin }, / 403 /],
+            [`bbs=coolbbs&did=${encodeURIComponent(Carol)}`, {}, / 403 /],
+            ['bbs=coolbbs', {}, / 400 /],
+            [`${bob}&user=bob`, {}, / 400 /],
+            [`bbs=quietbbs&did=${encodeURIComponent(Bob)}`, {}, / 401 /],
+        ] as const) {
+            assert.match(await door(query, options).ready, expected, query);
+        }
+    });
+
+    it('closes a door when the BBS stops reporting the member', async () => {
+        const c = door(`bbs=coolbbs&did=${encodeURIComponent(Bob)}`);
+        await until(() => c.messages.length > 0, 'the snapshot');
+        assert.equal(await report([member(Alice, 'Alice')]), 200);
+        await until(() => c.closed, 'the door to close');
+        assert.equal(c.closeCode, AccessEnded);
     });
 
     it('answers pings, and closes on what a client may not send', async () => {

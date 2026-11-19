@@ -6,8 +6,10 @@
 //
 //    - Who may connect is decided here. A browser reaches freeq through the
 //      hub's own /chat/irc, which needs a signed-in session and the join rule
-//      (hub plan H14), and the hub holds that connection. When someone's
-//      access ends the hub closes it: freeq has no command to do that.
+//      (hub plan H14), and the hub holds that connection. A BBS's door (F19)
+//      comes in the same way at /api/bbs/chat, for a member who confirmed
+//      that BBS at the hub. When someone's access ends the hub closes their
+//      connection: freeq has no command to do that.
 //    - Who someone is comes from here too. The hub asks freeq for a single-use
 //      login token for the DID it signed in, with a handle under chat.<domain>,
 //      and freeq is started to accept only those (generate.ts), so nobody can
@@ -29,6 +31,8 @@ export const ChatSecretEnv = 'HUB_CHAT_SECRET';
 export const MinChatSecret = 32;
 //  where the browser connects, on the hub's own address
 export const ChatPath = '/chat/irc';
+//  where a BBS's door connects for one of its members
+export const BbsChatPath = '/api/bbs/chat';
 
 const Host = '127.0.0.1';
 const BotNick = 'hub';
@@ -56,6 +60,8 @@ export interface ChatPerson {
     did: string;
     session: string;
     address: string;
+    //  for a BBS's member, in place of a browser session: whether it holds
+    valid?: () => boolean;
 }
 
 interface Link {
@@ -171,7 +177,7 @@ export class Chat {
 
     //  A single-use login for someone allowed in. Refused until the hub holds
     //  the room, so nobody can get there first
-    async issue(who: { did: string; handle: string | null }): Promise<ChatTicket> {
+    async issue(who: { did: string; handle: string | null }, path: string = ChatPath): Promise<ChatTicket> {
         if (!this.hooks.mayJoin(who.did)) {
             throw new HubError('chat-not-allowed', "You can't join this hub's common space yet.");
         }
@@ -185,7 +191,7 @@ export class Chat {
             nick: chatNick(who.handle, who.did),
             label: who.handle ? `@${who.handle}` : who.did,
             room: this.chat.room,
-            path: ChatPath,
+            path,
         };
     }
 
@@ -248,7 +254,9 @@ export class Chat {
     //  Close the connection of anyone who should no longer have one
     sweep(): void {
         this.closeLinks(
-            ({ person }) => !this.hooks.sessionValid(person.session) || !this.hooks.mayJoin(person.did),
+            ({ person }) =>
+                !(person.valid ? person.valid() : this.hooks.sessionValid(person.session)) ||
+                !this.hooks.mayJoin(person.did),
             'access ended'
         );
     }

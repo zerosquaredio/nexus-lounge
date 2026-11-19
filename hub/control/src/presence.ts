@@ -132,6 +132,18 @@ function memberKey(did: string | undefined, user: string | undefined): string {
     return did ? `did:${did}` : `user:${(user ?? '').trim().toLowerCase()}`;
 }
 
+//  A BBS's member looking at the space from inside the BBS (F19, the door)
+export interface DoorAccess {
+    bbs: string;
+    //  set only where the hub knows this is them: they confirmed the BBS
+    did: string | null;
+    //  how the live model knows them, whether or not they are shown
+    kind: 'account' | 'via' | 'vouched';
+    label: string;
+    //  only someone the hub knows as themselves may speak in the room
+    chat: boolean;
+}
+
 export class Presence {
     db: DatabaseSync;
     registry: Registry;
@@ -221,6 +233,47 @@ export class Presence {
             }
         }
         return true;
+    }
+
+    //  Whether a BBS may show the space to one of its members, inside the
+    //  BBS: a member it reported (by DID, or by user name), on a BBS that is
+    //  live and shown here, who may join (by DID) or whose BBS this hub takes
+    //  members without AT accounts from. Null if not
+    doorAccess(bbs: Bbs, did: string | null, user: string | null): DoorAccess | null {
+        if (!this.live(bbs) || !this.ratingAllowed(bbs)) {
+            return null;
+        }
+        const row = this.db
+            .prepare('SELECT * FROM bbs_member WHERE bbs = ? AND member = ?')
+            .get(bbs.name, memberKey(did ?? undefined, user ?? undefined)) as unknown as MemberRow | undefined;
+        if (!row) {
+            return null;
+        }
+        if (!row.did) {
+            if (!this.config.space.vouchedFrom.includes(bbs.name) || !this.counts(bbs)) {
+                return null;
+            }
+            return { bbs: bbs.name, did: null, kind: 'vouched', label: `${row.name}@${bbs.name}`, chat: false };
+        }
+        const answer = (
+            this.db.prepare('SELECT answer FROM profile_bbs WHERE did = ? AND bbs = ?').get(row.did, bbs.name) as
+                | { answer: string }
+                | undefined
+        )?.answer;
+        if ('denied' === answer || !this.mayJoin(row.did)) {
+            return null;
+        }
+        const profile = this.profiles.get(row.did);
+        if ('confirmed' === answer && profile) {
+            return {
+                bbs: bbs.name,
+                did: row.did,
+                kind: 'account',
+                label: profile.handle ? `@${profile.handle}` : row.did,
+                chat: true,
+            };
+        }
+        return { bbs: bbs.name, did: null, kind: 'via', label: `${row.name} via ${bbs.name}`, chat: false };
     }
 
     //  What BBSes on this hub say about a DID, and the person's answers

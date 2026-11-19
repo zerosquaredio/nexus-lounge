@@ -13,6 +13,9 @@
 //  about themselves, like their presence setting, so it is shown only with
 //  that setting on, only at a board that is up, and only while they keep
 //  both the board and the stream open.
+//
+//  A BBS may also open the stream for one of its members, to show the space
+//  inside the BBS (F19, the door): see Presence.doorAccess for who.
 
 import { createHash } from 'node:crypto';
 import type { IncomingMessage } from 'node:http';
@@ -20,7 +23,7 @@ import type { Duplex } from 'node:stream';
 import type { Chat } from './chat.ts';
 import type { HubConfig } from './config.ts';
 import type { Directory } from './directory.ts';
-import type { Presence } from './presence.ts';
+import type { DoorAccess, Presence } from './presence.ts';
 import type { Profiles } from './profiles.ts';
 import type { Registry } from './registry.ts';
 import { WebTermPath } from './webterm.ts';
@@ -33,6 +36,8 @@ const PokeMs = 100;
 //  a viewer this far behind is dropped; reconnecting starts afresh
 const MaxBacklog = 1024 * 1024;
 const MaxViewers = 1000;
+//  streams one BBS may hold for its members at once
+const MaxPerBbs = 100;
 //  what one viewer may tell the hub in a minute; more is ignored
 const MaxSaid = 20;
 const BbsNameRe = /^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/;
@@ -125,6 +130,12 @@ function short(value: string): string {
     return createHash('sha256').update(value).digest('hex').slice(0, 12);
 }
 
+//  How the model names a person: by DID where the hub knows it is them,
+//  otherwise by what the BBS calls them, which never reveals a DID
+export function personId(p: { kind: string; did: string | null; bbs: string; label: string }): string {
+    return 'account' === p.kind && p.did ? `person:${p.did}` : `person:${p.kind}:${p.bbs}:${short(`${p.bbs}\n${p.label}`)}`;
+}
+
 export function hubUrl(config: HubConfig, host: string): string {
     return `https://${host}${443 === config.edge.httpsPort ? '' : `:${config.edge.httpsPort}`}`;
 }
@@ -164,10 +175,7 @@ export function buildState(s: LiveSources, visits: Visit[] = []): LiveState {
     }
 
     for (const p of s.presence.around()) {
-        const id =
-            'account' === p.kind && p.did
-                ? `person:${p.did}`
-                : `person:${p.kind}:${p.bbs}:${short(`${p.bbs}\n${p.label}`)}`;
+        const id = personId(p);
         if (!people.has(id)) {
             people.set(id, { id, type: 'person', label: p.label, did: p.did, kind: p.kind });
         }
@@ -252,8 +260,12 @@ export interface LiveHooks {
 }
 
 interface Viewer {
-    did: string;
-    session: string;
+    //  who they are in the model, shown or not
+    you: string;
+    //  a browser on the hub's page (did set), or a BBS's member (bbs set)
+    did: string | null;
+    bbs: string | null;
+    allowed: () => boolean;
     peer: WsPeer;
     //  the board they say they have open from the hub's page, and since when
     at: string | null;
@@ -323,10 +335,51 @@ export class Live {
         if (!isUpgrade(req)) {
             return 400;
         }
-        const mine = [...this.viewers].filter(v => v.did === viewer.did).length;
-        if (mine >= this.sources.config.space.live.maxConnections || this.viewers.size >= MaxViewers) {
+        const you = `person:${viewer.did}`;
+        if (this.full(you)) {
             return 429;
         }
+        const session = viewer.session;
+        this.open(req, socket, head, {
+            you,
+            did: viewer.did,
+            bbs: null,
+            allowed: () => this.hooks.sessionValid(session) && this.sources.presence.mayJoin(viewer.did),
+        });
+        return null;
+    }
+
+    //  A BBS's connection for one of its members, already checked (site.ts):
+    //  the same stream, as that member. `allowed` says whether it still holds
+    attachBbs(
+        req: IncomingMessage,
+        socket: Duplex,
+        head: Buffer,
+        door: DoorAccess,
+        allowed: () => boolean
+    ): number | null {
+        if (!isUpgrade(req)) {
+            return 400;
+        }
+        const you = personId(door);
+        if (this.full(you) || [...this.viewers].filter(v => v.bbs === door.bbs).length >= MaxPerBbs) {
+            return 429;
+        }
+        this.open(req, socket, head, { you, did: null, bbs: door.bbs, allowed });
+        return null;
+    }
+
+    full(you: string): boolean {
+        const mine = [...this.viewers].filter(v => v.you === you).length;
+        return mine >= this.sources.config.space.live.maxConnections || this.viewers.size >= MaxViewers;
+    }
+
+    open(
+        req: IncomingMessage,
+        socket: Duplex,
+        head: Buffer,
+        who: Pick<Viewer, 'you' | 'did' | 'bbs' | 'allowed'>
+    ): void {
         //  bring everyone else up to date first, so the snapshot and the
         //  changes they have been sent agree
         this.tick();
@@ -334,7 +387,7 @@ export class Live {
             this.state = buildState(this.sources, this.visits());
         }
         const peer = acceptWebSocket(req, socket, head);
-        const v: Viewer = { did: viewer.did, session: viewer.session, peer, at: null, atSince: '', said: [] };
+        const v: Viewer = { ...who, peer, at: null, atSince: '', said: [] };
         this.viewers.add(v);
         peer.onClose(() => {
             this.viewers.delete(v);
@@ -342,24 +395,26 @@ export class Live {
                 this.poke();
             }
         });
-        peer.onText(text => this.hear(v, text));
+        //  only the hub's own page opens boards; a BBS reports its own
+        if (v.did) {
+            peer.onText(text => this.hear(v, text));
+        }
         peer.send(
             JSON.stringify({
                 $type: `${this.nsid}.snapshot`,
                 version: LiveVersion,
                 seq: this.seq,
                 //  their own person, whether or not they are shown now
-                you: `person:${viewer.did}`,
+                you: v.you,
                 ...this.state,
             })
         );
-        return null;
     }
 
     tick(): void {
         for (const v of [...this.viewers]) {
-            if (!this.hooks.sessionValid(v.session) || !this.sources.presence.mayJoin(v.did)) {
-                this.log(`live: closed ${v.did}: access ended`);
+            if (!v.allowed()) {
+                this.log(`live: closed ${v.did ?? `a viewer from ${v.bbs}`}: access ended`);
                 v.peer.close(AccessEnded, 'access ended');
             }
         }
@@ -417,7 +472,7 @@ export class Live {
 
     //  Boards people have open from the hub's page, by their own word
     visits(): Visit[] {
-        return [...this.viewers].flatMap(v => (v.at ? [{ did: v.did, bbs: v.at, since: v.atSince }] : []));
+        return [...this.viewers].flatMap(v => (v.at && v.did ? [{ did: v.did, bbs: v.at, since: v.atSince }] : []));
     }
 
     viewing(did: string): number {

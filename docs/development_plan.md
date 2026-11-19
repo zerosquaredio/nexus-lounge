@@ -666,6 +666,7 @@ in.
 | Config | A menu entry (commented out in the templates); art |
 | Depends on | F18; hub H15 to H17 |
 | Done when | A caller opens it from the main menu, sees people from another BBS and from the hub's web page, and chats with them |
+| Status | **Working locally** (2026-11-18), with hub H17. A new menu module (`hubSpace`, behind a commented out `HS`; art `HUBSPACE`) using the `atProto.hub` settings of F18, nothing more. It shows who is around, one line a place (the room, then boards up, then the rest), redrawn at most once a second as the hub's live model changes, and the hub's chat room below it. The board connects for the member with its token, naming them as its presence report does; only members who confirmed the board at the hub can talk, others watch. Names and messages from elsewhere reach the screen without control codes, with pipe codes escaped. Idle logoff is off inside, as in MRC, unless set. 10 new tests. **Tested live** on the VM: the test board behind the dev hub with the real freeq, a member with a key login opening it from the main menu, seeing a member of another board, talking with her in a browser both ways, a pipe code sent as text, the door cut off within seconds when the member withdrew their confirmation at the hub (the map cleared, with the reason), and leaving it taking them out of the room. Also fixes the F18 Hub Presence menu entry, whose art was set where its module doesn't look and which closed the connection when opened |
 
 ## 4. Milestones
 

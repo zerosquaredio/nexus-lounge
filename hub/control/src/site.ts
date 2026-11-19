@@ -19,6 +19,11 @@
 //  GET  /chat/irc         the chat connection (WebSocket), see chat.ts
 //  GET  /space/live       the live model (WebSocket), see live.ts
 //  POST /api/bbs/presence a BBS reports its members (bearer: its tunnel token)
+//  GET  /api/bbs/live     the live model for one of a BBS's members (WebSocket; F19)
+//  POST /api/bbs/chat/token  a chat login for one of a BBS's members
+//  GET  /api/bbs/chat     their chat connection (WebSocket)
+//  GET  /api/bbs/chat/people  who is in the room, and names for DIDs
+//    (the door's calls: bearer, ?bbs=name and ?did= or ?user= for the member)
 //  GET  /bbs              your BBSes, and registering a new one
 //  POST /bbs              register a BBS: shows its token and agent config, once
 //  POST /bbs/rotate       a new token and agent config
@@ -27,7 +32,7 @@
 
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { Duplex } from 'node:stream';
-import { ChatPath, type Chat } from './chat.ts';
+import { BbsChatPath, ChatPath, type Chat } from './chat.ts';
 import { chatPageBody, ChatScript, ChatScriptPath, MaxLabelLookups } from './chat_page.ts';
 import { Live, LivePath } from './live.ts';
 import { mapPageBody, MapScript, MapScriptPath } from './map_page.ts';
@@ -40,7 +45,7 @@ import type { AtClient } from './atproto.ts';
 import type { Directory, DirectoryEntry } from './directory.ts';
 import type { Listing } from './listing.ts';
 import { Profiles, type Profile } from './profiles.ts';
-import { parseReport, Presence } from './presence.ts';
+import { parseReport, Presence, type DoorAccess } from './presence.ts';
 import { isDid, labelForHost } from './rules.ts';
 import { CallbackPath, SessionDays, type Identity, type WebSession } from './signin.ts';
 import { clientConfig, fileFor, policy, WebTermPath, type WebTerm } from './webterm.ts';
@@ -458,6 +463,94 @@ the name the BBS gives, never as your own account.</p>
         }
     }
 
+    //  A BBS asking for one of its members, inside the BBS (F19): the BBS by
+    //  its tunnel token, the member by what it reported. Never from a web
+    //  page. A status if not; `allowed` checks again later
+    function doorFor(
+        req: IncomingMessage,
+        url: URL
+    ): { bbs: Bbs; door: DoorAccess; allowed: () => boolean } | number {
+        if (!presence) {
+            return 404;
+        }
+        if (req.headers.origin) {
+            return 403;
+        }
+        const auth = String(req.headers.authorization ?? '');
+        const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
+        const name = url.searchParams.get('bbs');
+        const bbs = registry.authenticate(name, token);
+        if (!bbs) {
+            return 401;
+        }
+        const did = url.searchParams.get('did');
+        const user = url.searchParams.get('user');
+        if (!!did === !!user || (did && !isDid(did)) || (user && user.length > 64)) {
+            return 400;
+        }
+        const door = presence.doorAccess(bbs, did, user);
+        if (!door) {
+            return 403;
+        }
+        const allowed = () => {
+            const now = registry.authenticate(name, token);
+            const still = now ? presence.doorAccess(now, did, user) : null;
+            return !!still && still.kind === door.kind && still.did === door.did;
+        };
+        return { bbs, door, allowed };
+    }
+
+    //  Why a door was refused, for the BBS to show its member
+    function doorError(status: number): string {
+        return (
+            {
+                400: 'Name the BBS, and its member by did or user.',
+                401: 'Not a BBS on this hub, or the wrong token.',
+                403: "This member can't join the hub's space from this BBS right now.",
+                404: 'This hub has no common space.',
+            }[status] ?? 'Refused.'
+        );
+    }
+
+    async function doorChatToken(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
+        const found = doorFor(req, url);
+        if ('number' === typeof found) {
+            return json(res, found, { error: doorError(found) });
+        }
+        if (!chat) {
+            return json(res, 404, { error: 'This hub has no chat.' });
+        }
+        const { door } = found;
+        if (!door.chat || !door.did) {
+            return json(res, 403, {
+                error: 'Only members who confirmed this BBS at the hub can chat from it.',
+            });
+        }
+        if (!chatLimit.allow(door.did)) {
+            return json(res, 429, { error: 'Too many attempts; try again in a minute.' });
+        }
+        try {
+            return json(res, 200, await chat.issue({ did: door.did, handle: profiles?.get(door.did)?.handle ?? null }, BbsChatPath));
+        } catch (e) {
+            if (e instanceof HubError && 'chat-not-allowed' === e.code) {
+                return json(res, 403, { error: e.message });
+            }
+            log(`chat: no login for ${door.did} from ${door.bbs}: ${(e as Error).message}`);
+            return json(res, 503, { error: 'Chat is not available right now.' });
+        }
+    }
+
+    function doorChatPeople(req: IncomingMessage, res: ServerResponse, url: URL): void {
+        const found = doorFor(req, url);
+        if ('number' === typeof found) {
+            return json(res, found, { error: doorError(found) });
+        }
+        if (!chat) {
+            return json(res, 404, { error: 'This hub has no chat.' });
+        }
+        return json(res, 200, peopleInRoom(url.searchParams.getAll('label')));
+    }
+
     //  How someone appears in chat: from who they signed in as, never from
     //  anything their client says
     function chatLabel(did: string): string | null {
@@ -475,14 +568,18 @@ the name the BBS gives, never as your own account.</p>
         if (!chat || !presence?.mayJoin(who.did)) {
             return json(res, 403, { error: "You can't join this room." });
         }
+        return json(res, 200, peopleInRoom(url.searchParams.getAll('did')));
+    }
+
+    function peopleInRoom(dids: string[]): { here: { did: string; label: string }[]; labels: Record<string, string> } {
         const labels: Record<string, string> = {};
-        for (const did of url.searchParams.getAll('did').slice(0, MaxLabelLookups)) {
+        for (const did of dids.slice(0, MaxLabelLookups)) {
             if (isDid(did)) {
                 labels[did] = chatLabel(did) ?? did;
             }
         }
-        const here = chat.connected().map(did => ({ did, label: chatLabel(did) ?? did }));
-        return json(res, 200, { here, labels });
+        const here = (chat?.connected() ?? []).map(did => ({ did, label: chatLabel(did) ?? did }));
+        return { here, labels };
     }
 
     function chatPage(res: ServerResponse, who: WebSession): void {
@@ -777,6 +874,12 @@ ${others.map(otherCard).join('\n')}`
         if ('POST' === req.method && '/api/bbs/presence' === path) {
             return presenceReport(req, res);
         }
+        if ('POST' === req.method && '/api/bbs/chat/token' === path) {
+            return doorChatToken(req, res, url);
+        }
+        if ('GET' === req.method && '/api/bbs/chat/people' === path) {
+            return doorChatPeople(req, res, url);
+        }
 
         if ('POST' === req.method) {
             //  forms are only accepted from the hub's own pages
@@ -1033,6 +1136,37 @@ ${others.map(otherCard).join('\n')}`
             };
             try {
                 const url = new URL(req.url ?? '/', config.site.publicUrl);
+                //  a BBS's door, for one of its members (F19)
+                if (!labelForHost(req.headers.host, config.domain) && url.pathname.startsWith('/api/bbs/')) {
+                    const forLive = live && '/api/bbs/live' === url.pathname;
+                    const forChat = chat && BbsChatPath === url.pathname;
+                    if (!forLive && !forChat) {
+                        return refuse(404);
+                    }
+                    const found = doorFor(req, url);
+                    if ('number' === typeof found) {
+                        return refuse(found);
+                    }
+                    const { bbs, door, allowed } = found;
+                    let refused: number | null;
+                    if (forLive) {
+                        refused = live.attachBbs(req, socket, head, door, allowed);
+                    } else if (!chat || !door.chat || !door.did) {
+                        refused = 403;
+                    } else {
+                        refused = chat.attach(req, socket, head, {
+                            did: door.did,
+                            session: `bbs:${bbs.name}`,
+                            address: clientAddress(req),
+                            //  still the same member, known as themselves
+                            valid: allowed,
+                        });
+                    }
+                    if (refused) {
+                        refuse(refused);
+                    }
+                    return;
+                }
                 const service =
                     chat && ChatPath === url.pathname ? chat : live && LivePath === url.pathname ? live : null;
                 if (labelForHost(req.headers.host, config.domain) || !service) {

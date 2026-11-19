@@ -16,7 +16,15 @@ join rule lets into the space, and closes it with code **4403** when that
 stops being true (signed out, or no longer a member). A client shouldn't
 reconnect after 4403.
 
-A client may send one kind of message, saying which board the viewer has
+A BBS can open the same stream for one of its members, to show the space
+inside the BBS (its door): a WebSocket to `/api/bbs/live?bbs=<name>&did=<did>`
+(or `&user=<name>` for a member with no AT account), with
+`Authorization: Bearer <its tunnel token>` and no `Origin`. The hub accepts
+it for a member the BBS reported, on a BBS that is up and shown on this hub,
+who may join; `you` is how the model knows that member, which is their DID
+only once they confirmed that BBS at the hub.
+
+A browser may send one kind of message, saying which board the viewer has
 opened from the hub's page (or `null` when they close it):
 
 ```json
