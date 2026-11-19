@@ -113,6 +113,47 @@ describe('the live model', () => {
         assert.equal(JSON.stringify(state).includes(Carol), false);
     });
 
+    it("shows a board opened from the hub page, by the person's own word and setting", () => {
+        const { config, registry, profiles, presence } = setup();
+        presence.report(registry.mustGet('coolbbs'), [member(Alice, 'Alice'), member(Bob, 'Bob')]);
+        profiles.signedIn({ did: Alice, handle: 'alice.example' });
+        profiles.setPresence(Alice, true);
+        presence.answer(Alice, 'coolbbs', 'confirmed');
+        profiles.signedIn({ did: Bob, handle: 'bob.example' });
+        profiles.signedIn({ did: Carol, handle: 'carol.example' });
+        profiles.setPresence(Carol, true);
+        const visits = [
+            //  Alice: the BBS says so already, so once, from the BBS
+            { did: Alice, bbs: 'coolbbs', since: Since },
+            //  quietbbs isn't up
+            { did: Alice, bbs: 'quietbbs', since: Since },
+            //  Bob's own setting is off; Carol is no member
+            { did: Bob, bbs: 'coolbbs', since: Since },
+            { did: Carol, bbs: 'coolbbs', since: Since },
+        ];
+        let state = buildState({ config, registry, presence, profiles }, visits);
+        assert.deepEqual(
+            state.presence.map(p => [p.person, p.place, p.source]).filter(p => !String(p[0]).includes(':via:')),
+            [[`person:${Alice}`, 'leaf:coolbbs', 'bbs']]
+        );
+        assert.equal(JSON.stringify(state).includes(Bob), false);
+        assert.equal(JSON.stringify(state).includes(Carol), false);
+
+        profiles.setPresence(Bob, true);
+        state = buildState({ config, registry, presence, profiles, webterm: true }, visits);
+        const bob = state.presence.find(p => p.person === `person:${Bob}`);
+        assert.deepEqual(bob, {
+            id: `person:${Bob}@leaf:coolbbs`,
+            person: `person:${Bob}`,
+            place: 'leaf:coolbbs',
+            since: Since,
+            source: 'hub',
+        });
+        assert.ok(state.entities.some(e => e.id === `person:${Bob}` && 'person' === e.type && '@bob.example' === e.label));
+        const leaf = state.entities.find(e => 'leaf:coolbbs' === e.id);
+        assert.equal(leaf && 'leaf' === leaf.type && leaf.terminal, 'https://coolbbs.hub.test:7443/_enig/ws-term/?connect=1');
+    });
+
     it('sends only what changed', () => {
         const empty: LiveState = { entities: [], presence: [], groups: [], links: [] };
         const one: LiveState = {
@@ -276,6 +317,31 @@ describe('the live model on the site', () => {
         });
     }
 
+    function get(path: string, session?: string): Promise<{ status: number; headers: Record<string, unknown>; body: string }> {
+        return new Promise((resolve, reject) => {
+            const req = request(
+                {
+                    host: '127.0.0.1',
+                    port,
+                    path,
+                    agent: false,
+                    headers: { Host: Domain, ...(session ? { Cookie: `hub_session=${session}` } : {}) },
+                },
+                res => {
+                    let body = '';
+                    res.on('data', d => (body += d));
+                    res.on('end', () => resolve({ status: res.statusCode ?? 0, headers: res.headers, body }));
+                }
+            );
+            req.on('error', reject);
+            req.end();
+        });
+    }
+
+    function at(c: Client, place: unknown, type = 'nexus.cyberspace.dev.space.at'): void {
+        c.send(1, Buffer.from(JSON.stringify({ $type: type, place })));
+    }
+
     function open(options: ConstructorParameters<typeof Client>[1] = {}): Client {
         const c = new Client(port, options);
         clients.push(c);
@@ -326,7 +392,8 @@ describe('the live model on the site', () => {
     it('sends changes as they happen', async () => {
         const c = open({ session: 'bob-session' });
         await until(() => c.messages.length > 0, 'the snapshot');
-        assert.equal((c.messages[0] as { you: unknown }).you, null);
+        assert.equal((c.messages[0] as { you: unknown }).you, `person:${Bob}`);
+        assert.equal((c.messages[0] as LiveState).entities.some(e => e.id === `person:${Bob}`), false);
         assert.equal(await report([member(Alice, 'Alice'), member(Bob, 'Bob'), member(Carol, 'Carol')]), 200);
         await until(() => c.messages.length > 1, 'a change');
         const change = c.messages[1] as { $type: string; seq: number; put: LiveState; remove: Record<string, string[]> };
@@ -373,6 +440,75 @@ describe('the live model on the site', () => {
         await until(() => c.messages.length > 0, 'the snapshot');
         c.socket.end();
         await until(() => c.closed, 'the hub to close its side too');
+    });
+
+    it('shows someone at a board they opened from the hub page, while they keep it open', async () => {
+        profiles.signedIn({ did: Bob, handle: 'bob.example' });
+        profiles.setPresence(Bob, true);
+        const viewer = open({ session: 'alice-session' });
+        await until(() => viewer.messages.length > 0, 'the snapshot');
+        const bob = open({ session: 'bob-session' });
+        await until(() => bob.messages.length > 0, "Bob's snapshot");
+        const seen = () =>
+            viewer.messages.flatMap(m => ((m as { put?: LiveState }).put?.presence ?? []).map(p => p.id));
+        //  what isn't an open board is ignored
+        at(bob, 'leaf:quietbbs');
+        at(bob, 'leaf:Not A Name');
+        at(bob, 'room:#space');
+        at(bob, 'leaf:coolbbs', 'something.else');
+        bob.send(1, Buffer.from('not json'));
+        await wait(300);
+        assert.deepEqual(seen(), []);
+        assert.equal(bob.closed, false);
+
+        at(bob, 'leaf:coolbbs');
+        await until(() => seen().includes(`person:${Bob}@leaf:coolbbs`), 'Bob at coolbbs');
+        const put = viewer.messages.at(-1) as { put: LiveState };
+        assert.equal(put.put.presence[0]?.source, 'hub');
+
+        at(bob, null);
+        await until(
+            () => viewer.messages.some(m => (m as { remove?: Record<string, string[]> }).remove?.presence?.includes(`person:${Bob}@leaf:coolbbs`)),
+            'Bob gone when the board closes'
+        );
+        const count = viewer.messages.length;
+        at(bob, 'leaf:coolbbs');
+        await until(() => viewer.messages.length > count, 'Bob back');
+        bob.socket.destroy();
+        await until(
+            () => viewer.messages.slice(count + 1).some(m => (m as { remove?: Record<string, string[]> }).remove?.presence?.includes(`person:${Bob}@leaf:coolbbs`)),
+            'Bob gone when the map closes'
+        );
+    });
+
+    it('ignores someone who says too much', async () => {
+        profiles.signedIn({ did: Bob, handle: 'bob.example' });
+        profiles.setPresence(Bob, true);
+        const bob = open({ session: 'bob-session' });
+        await until(() => bob.messages.length > 0, 'the snapshot');
+        for (let i = 0; i < 20; i++) {
+            at(bob, null);
+        }
+        at(bob, 'leaf:coolbbs');
+        await wait(400);
+        assert.equal(bob.messages.length, 1, 'nothing changed');
+        assert.equal(bob.closed, false);
+    });
+
+    it('serves the map to those allowed in, able to reach only the stream', async () => {
+        const map = await get('/space', 'alice-session');
+        assert.equal(map.status, 200);
+        assert.match(map.body, /<script src="\/space\/map\.js" defer>/);
+        assert.match(String(map.headers['content-security-policy']), /script-src 'self'; connect-src 'self' wss:\/\/hub\.test;/);
+        //  the plain list is there for when the script can't run
+        assert.match(map.body, /Bob via coolbbs/);
+        const script = await get('/space/map.js');
+        assert.equal(script.status, 200);
+        assert.match(String(script.headers['content-type']), /javascript/);
+        assert.match(script.body, /\.at'/);
+        const outsider = await get('/space', 'carol-session');
+        assert.doesNotMatch(outsider.body, /map\.js/);
+        assert.doesNotMatch(String(outsider.headers['content-security-policy']), /connect-src/);
     });
 
     it('answers pings, and closes on what a client may not send', async () => {

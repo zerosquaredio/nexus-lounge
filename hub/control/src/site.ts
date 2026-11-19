@@ -10,7 +10,8 @@
 //  POST /me/presence      show you in the common space, or not
 //  POST /me/forget        remove your profile and sign out everywhere
 //  POST /me/bbs           confirm or deny a BBS that says you are a member
-//  GET  /space            who is around (common space on)
+//  GET  /space            who is around (common space on); the map, with the live model on
+//  GET  /space/map.js     the map's script
 //  GET  /space/chat       the chat page
 //  GET  /space/chat.js    its script
 //  GET  /space/chat/people  who is in the room, and names for DIDs
@@ -29,6 +30,7 @@ import type { Duplex } from 'node:stream';
 import { ChatPath, type Chat } from './chat.ts';
 import { chatPageBody, ChatScript, ChatScriptPath, MaxLabelLookups } from './chat_page.ts';
 import { Live, LivePath } from './live.ts';
+import { mapPageBody, MapScript, MapScriptPath } from './map_page.ts';
 import type { HubConfig } from './config.ts';
 import { HubError } from './errors.ts';
 import { agentConfig } from './generate.ts';
@@ -161,9 +163,10 @@ export function createSite(deps: SiteDeps): Server {
     const live =
         presence && profiles && config.space.live.enabled
             ? new Live(
-                  { config, registry, presence, profiles, directory: deps.directory ?? null, chat },
+                  { config, registry, presence, profiles, directory: deps.directory ?? null, chat, webterm: !!deps.webterm },
                   { sessionValid: session => !!signin.session(session) },
-                  log
+                  log,
+                  now
               )
             : null;
     if (chat && live) {
@@ -378,21 +381,36 @@ the name the BBS gives, never as your own account.</p>
         for (const p of people) {
             byBbs.set(p.bbs, [...(byBbs.get(p.bbs) ?? []), p]);
         }
-        const groups = [...byBbs.entries()]
-            .map(
-                ([bbs, list]) => `<article>
+        const groups =
+            [...byBbs.entries()]
+                .map(
+                    ([bbs, list]) => `<article>
 <h3>${esc(bbs)} <span class="dim">${list.length} on</span></h3>
 <p>${list.map(p => esc(p.label)).join(', ')}</p>
 </article>`
-            )
-            .join('\n');
+                )
+                .join('\n') || '<p class="dim">Nobody is around right now.</p>';
+        if (live) {
+            return page("Who's around", mapPageBody(groups, !!chat), who);
+        }
         return page(
             "Who's around",
-            `${groups || '<p class="dim">Nobody is around right now.</p>'}
+            `${groups}
 <p class="hint">Only people who chose to be shown appear here.</p>
 <p>${chat ? '<a href="/space/chat">Chat</a> · ' : ''}<a href="/me">Your profile</a> · <a href="/">The directory</a></p>`,
             who
         );
+    }
+
+    //  The map's page may open the live stream, and nothing else
+    function spaceHeaders(who: WebSession): Record<string, string> {
+        if (!live || !presence?.mayJoin(who.did)) {
+            return {};
+        }
+        const socket = config.site.publicUrl.replace(/^http/, 'ws');
+        return {
+            'Content-Security-Policy': `default-src 'none'; script-src 'self'; connect-src 'self' ${socket}; style-src 'unsafe-inline'; img-src 'self'; form-action 'self' https:; frame-ancestors 'none'; base-uri 'none'`,
+        };
     }
 
     function json(res: ServerResponse, status: number, body: unknown): void {
@@ -968,8 +986,17 @@ ${others.map(otherCard).join('\n')}`
             return who ? chatPage(res, who) : redirect(res, '/signin');
         }
 
+        if (live && MapScriptPath === path) {
+            res.writeHead(200, {
+                'Content-Type': 'text/javascript; charset=utf-8',
+                'Cache-Control': 'no-cache',
+                'X-Content-Type-Options': 'nosniff',
+            });
+            return void res.end('HEAD' === req.method ? undefined : MapScript);
+        }
+
         if ('/space' === path && presence) {
-            return who ? send(res, 200, spacePage(who)) : redirect(res, '/signin');
+            return who ? send(res, 200, spacePage(who), spaceHeaders(who)) : redirect(res, '/signin');
         }
 
         if ('/me' === path && profiles) {

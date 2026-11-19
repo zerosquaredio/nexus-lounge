@@ -104,7 +104,9 @@ The chat itself is at `/space/chat`, for anyone signed in who may join.
 who is where, for views of the space such as a map or a BBS door: a
 WebSocket at `/space/live` on the hub's address, for people allowed in. It
 sends the whole state, then changes. The format is in
-[docs/live_model.md](../docs/live_model.md).
+[docs/live_model.md](../docs/live_model.md). With it on, `/space` is a map
+drawn from that stream, and opening a board from the map shows the person
+there while they keep it open.
 
 ### Observed status
 

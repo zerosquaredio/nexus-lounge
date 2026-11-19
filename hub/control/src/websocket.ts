@@ -1,13 +1,14 @@
 //  A small WebSocket server side (RFC 6455) for streams the hub sends itself,
-//  such as the live model (live.ts). Text from the hub, nothing expected back
-//  beyond control frames: anything else a client sends is read and dropped.
+//  such as the live model (live.ts). Text from the hub; a client may send
+//  short text messages back, each in one frame, and anything else it sends
+//  beyond control frames is read and dropped.
 
 import { createHash } from 'node:crypto';
 import type { IncomingMessage } from 'node:http';
 import type { Duplex } from 'node:stream';
 
 const Guid = '258EAFA5-E914-47DA-95CA-C5AB0DC85B11';
-//  the most a client may send in one frame; it has nothing to say
+//  the most a client may send in one frame; it has little to say
 export const MaxClientFrame = 4096;
 const PingMs = 30_000;
 const SilentMs = 75_000;
@@ -19,6 +20,8 @@ export interface WsPeer {
     send(text: string): boolean;
     close(code?: number, reason?: string): void;
     onClose(handler: () => void): void;
+    //  a whole text message from the client (fragmented ones are dropped)
+    onText(handler: (text: string) => void): void;
     //  bytes waiting to be written: how far behind this peer is
     backlog(): number;
 }
@@ -64,6 +67,7 @@ export function acceptWebSocket(req: IncomingMessage, socket: Duplex, head: Buff
     let buffer = Buffer.alloc(0);
     let heard = Date.now();
     const handlers: (() => void)[] = [];
+    const listeners: ((text: string) => void)[] = [];
     const write = (opcode: number, payload: Buffer) => {
         if (open && !socket.destroyed) {
             socket.write(frame(opcode, payload));
@@ -146,8 +150,13 @@ export function acceptWebSocket(req: IncomingMessage, socket: Duplex, head: Buff
                 case 9:
                     write(10, payload);
                     break;
-                case 0:
                 case 1:
+                    if (b0 & 0x80) {
+                        const text = payload.toString('utf8');
+                        listeners.forEach(l => l(text));
+                    }
+                    break;
+                case 0:
                 case 2:
                 case 10:
                     break;
@@ -182,6 +191,9 @@ export function acceptWebSocket(req: IncomingMessage, socket: Duplex, head: Buff
         close,
         onClose(handler: () => void) {
             handlers.push(handler);
+        },
+        onText(handler: (text: string) => void) {
+            listeners.push(handler);
         },
         backlog() {
             return socket.writableLength;

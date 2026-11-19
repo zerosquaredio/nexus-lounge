@@ -14,8 +14,19 @@ A WebSocket to `/space/live` on the hub's own address, from the hub's own
 pages, with the person signed in. The hub accepts it only for someone the
 join rule lets into the space, and closes it with code **4403** when that
 stops being true (signed out, or no longer a member). A client shouldn't
-reconnect after 4403. Clients send nothing; the hub ignores what they send
-apart from WebSocket control frames.
+reconnect after 4403.
+
+A client may send one kind of message, saying which board the viewer has
+opened from the hub's page (or `null` when they close it):
+
+```json
+{ "$type": "nexus.cyberspace.dev.space.at", "place": "leaf:coolbbs" }
+```
+
+The hub shows them there (`source` `hub`, below) while their presence is
+on, the board is online, and the connection stays open. It is the viewer's
+own word about themselves. Anything else a client sends is ignored, and so
+is more than 20 messages a minute.
 
 ## Messages
 
@@ -37,8 +48,8 @@ counts up across the hub's messages.
 }
 ```
 
-`you` is the viewer's own person, or `null` if they aren't shown (their
-presence is off, for example).
+`you` is the id of the viewer's own person. It is in `entities` only while
+they are shown (not with their presence off, for example).
 
 **Change,** whenever something changes:
 
@@ -68,11 +79,13 @@ grows within a version.
 | `type` | Fields | Notes |
 |---|---|---|
 | `person` | `label`, `did`, `kind` | `kind`: `account` (signed in to the hub, or a BBS they confirmed), `via` (a BBS's word, unconfirmed: `label` is "name via bbs", `did` is null), `vouched` (a BBS member with no AT account: "name@bbs") |
-| `leaf` | `name`, `title`, `url`, `online` | A BBS on this hub. `title` comes from its listing, if it has one; `online` is whether its tunnel is up |
+| `leaf` | `name`, `title`, `url`, `online`, `terminal` | A BBS on this hub. `title` comes from its listing, if it has one; `online` is whether its tunnel is up; `terminal` is the hub's web terminal for it, or null |
 | `room` | `name` | The chat room |
 
-**presence:** `person`, `place` (a leaf or room id), `since`.
-One item per person per place.
+**presence:** `person`, `place` (a leaf or room id), `since`, and
+`source`: how the hub knows (`bbs`, the BBS's report; `hub`, a board opened
+from the hub's page; `chat`, the room). One item per person per place; when
+a BBS and the hub's page both say so, the BBS's report is the one shown.
 
 **groups:** `place`, `members` (person ids). Who is together: for now,
 who is in the room.

@@ -7,6 +7,12 @@
 //  Who appears follows presence (presence.ts): nobody whose own setting is
 //  off, nobody a BBS isn't allowed to show. A BBS's unconfirmed word about a
 //  DID stays "name via bbs", never linked to the account behind it.
+//
+//  A viewer may tell the hub one thing: which board they have opened from
+//  the hub's page (hub plan H14's first source). That is their own word
+//  about themselves, like their presence setting, so it is shown only with
+//  that setting on, only at a board that is up, and only while they keep
+//  both the board and the stream open.
 
 import { createHash } from 'node:crypto';
 import type { IncomingMessage } from 'node:http';
@@ -17,6 +23,7 @@ import type { Directory } from './directory.ts';
 import type { Presence } from './presence.ts';
 import type { Profiles } from './profiles.ts';
 import type { Registry } from './registry.ts';
+import { WebTermPath } from './webterm.ts';
 import { acceptWebSocket, isUpgrade, type WsPeer } from './websocket.ts';
 
 export const LivePath = '/space/live';
@@ -26,6 +33,9 @@ const PokeMs = 100;
 //  a viewer this far behind is dropped; reconnecting starts afresh
 const MaxBacklog = 1024 * 1024;
 const MaxViewers = 1000;
+//  what one viewer may tell the hub in a minute; more is ignored
+const MaxSaid = 20;
+const BbsNameRe = /^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/;
 //  closed because access ended (a client should not just reconnect)
 export const AccessEnded = 4403;
 
@@ -47,6 +57,8 @@ export interface LeafEntity {
     title: string | null;
     url: string;
     online: boolean;
+    //  the hub's web terminal for it, if the hub serves one
+    terminal: string | null;
 }
 
 export interface RoomEntity {
@@ -63,6 +75,8 @@ export interface PresenceItem {
     //  a leaf or a room
     place: string;
     since: string | null;
+    //  how the hub knows: a BBS's report, the hub's own page, or the chat
+    source: 'bbs' | 'hub' | 'chat';
 }
 
 export interface Group {
@@ -96,6 +110,15 @@ export interface LiveSources {
     profiles: Profiles;
     directory?: Directory | null;
     chat?: Chat | null;
+    //  whether the hub serves the web terminal
+    webterm?: boolean;
+}
+
+//  Someone the hub's page says has a board open
+export interface Visit {
+    did: string;
+    bbs: string;
+    since: string;
 }
 
 function short(value: string): string {
@@ -107,25 +130,36 @@ export function hubUrl(config: HubConfig, host: string): string {
 }
 
 //  The state as anyone allowed in sees it
-export function buildState(s: LiveSources): LiveState {
+export function buildState(s: LiveSources, visits: Visit[] = []): LiveState {
     const people = new Map<string, PersonEntity>();
     const presence: PresenceItem[] = [];
     const leaves: LeafEntity[] = [];
     const rooms: RoomEntity[] = [];
     const groups: Group[] = [];
+    //  someone signed in to the hub, as their own account
+    const account = (did: string): string => {
+        const id = `person:${did}`;
+        if (!people.has(id)) {
+            const handle = s.profiles.get(did)?.handle;
+            people.set(id, { id, type: 'person', label: handle ? `@${handle}` : did, did, kind: 'account' });
+        }
+        return id;
+    };
 
     for (const bbs of s.registry.list()) {
         if ('active' !== bbs.state || !s.presence.ratingAllowed(bbs)) {
             continue;
         }
         const entry = s.directory?.forBbs(bbs) ?? null;
+        const url = hubUrl(s.config, `${bbs.name}.${s.config.domain}`);
         leaves.push({
             id: `leaf:${bbs.name}`,
             type: 'leaf',
             name: bbs.name,
             title: entry?.listing.name ?? null,
-            url: hubUrl(s.config, `${bbs.name}.${s.config.domain}`),
+            url,
             online: bbs.connected,
+            terminal: s.webterm ? `${url}${WebTermPath}?connect=1` : null,
         });
     }
 
@@ -137,7 +171,29 @@ export function buildState(s: LiveSources): LiveState {
         if (!people.has(id)) {
             people.set(id, { id, type: 'person', label: p.label, did: p.did, kind: p.kind });
         }
-        presence.push({ id: `${id}@leaf:${p.bbs}`, person: id, place: `leaf:${p.bbs}`, since: p.onlineSince });
+        presence.push({
+            id: `${id}@leaf:${p.bbs}`,
+            person: id,
+            place: `leaf:${p.bbs}`,
+            since: p.onlineSince,
+            source: 'bbs',
+        });
+    }
+
+    //  boards opened from the hub's page, where the BBS hasn't said so itself
+    const up = new Set(leaves.filter(l => l.online).map(l => l.name));
+    const said = new Set(presence.map(p => p.id));
+    for (const v of [...visits].sort((a, b) => a.since.localeCompare(b.since))) {
+        if (!up.has(v.bbs) || !s.profiles.get(v.did)?.presence || !s.presence.mayJoin(v.did)) {
+            continue;
+        }
+        const id = `person:${v.did}`;
+        const at = `${id}@leaf:${v.bbs}`;
+        if (said.has(at)) {
+            continue;
+        }
+        said.add(at);
+        presence.push({ id: at, person: account(v.did), place: `leaf:${v.bbs}`, since: v.since, source: 'hub' });
     }
 
     //  the room: people in it with their own setting on, as their account
@@ -146,21 +202,11 @@ export function buildState(s: LiveSources): LiveState {
         rooms.push({ id: room, type: 'room', name: s.config.space.chat.room });
         const members: string[] = [];
         for (const { did, since } of s.chat.present()) {
-            const profile = s.profiles.get(did);
-            if (!profile?.presence || !s.presence.mayJoin(did)) {
+            if (!s.profiles.get(did)?.presence || !s.presence.mayJoin(did)) {
                 continue;
             }
-            const id = `person:${did}`;
-            if (!people.has(id)) {
-                people.set(id, {
-                    id,
-                    type: 'person',
-                    label: profile.handle ? `@${profile.handle}` : did,
-                    did,
-                    kind: 'account',
-                });
-            }
-            presence.push({ id: `${id}@${room}`, person: id, place: room, since });
+            const id = account(did);
+            presence.push({ id: `${id}@${room}`, person: id, place: room, since, source: 'chat' });
             members.push(id);
         }
         groups.push({ id: `group:${room}`, place: room, members: members.sort() });
@@ -209,6 +255,10 @@ interface Viewer {
     did: string;
     session: string;
     peer: WsPeer;
+    //  the board they say they have open from the hub's page, and since when
+    at: string | null;
+    atSince: string;
+    said: number[];
 }
 
 export class Live {
@@ -220,11 +270,18 @@ export class Live {
     seq = 0;
     timer: NodeJS.Timeout | null = null;
     pokeTimer: NodeJS.Timeout | null = null;
+    now: () => number;
 
-    constructor(sources: LiveSources, hooks: LiveHooks, log: (line: string) => void = () => {}) {
+    constructor(
+        sources: LiveSources,
+        hooks: LiveHooks,
+        log: (line: string) => void = () => {},
+        now: () => number = Date.now
+    ) {
         this.sources = sources;
         this.hooks = hooks;
         this.log = log;
+        this.now = now;
     }
 
     get nsid(): string {
@@ -274,18 +331,25 @@ export class Live {
         //  changes they have been sent agree
         this.tick();
         if (!this.viewers.size) {
-            this.state = buildState(this.sources);
+            this.state = buildState(this.sources, this.visits());
         }
         const peer = acceptWebSocket(req, socket, head);
-        const v: Viewer = { ...viewer, peer };
+        const v: Viewer = { did: viewer.did, session: viewer.session, peer, at: null, atSince: '', said: [] };
         this.viewers.add(v);
-        peer.onClose(() => this.viewers.delete(v));
+        peer.onClose(() => {
+            this.viewers.delete(v);
+            if (v.at) {
+                this.poke();
+            }
+        });
+        peer.onText(text => this.hear(v, text));
         peer.send(
             JSON.stringify({
                 $type: `${this.nsid}.snapshot`,
                 version: LiveVersion,
                 seq: this.seq,
-                you: this.state.entities.some(e => e.id === `person:${viewer.did}`) ? `person:${viewer.did}` : null,
+                //  their own person, whether or not they are shown now
+                you: `person:${viewer.did}`,
                 ...this.state,
             })
         );
@@ -302,7 +366,7 @@ export class Live {
         if (!this.viewers.size) {
             return;
         }
-        const next = buildState(this.sources);
+        const next = buildState(this.sources, this.visits());
         const change = diffState(this.state, next);
         this.state = next;
         if (!change) {
@@ -318,6 +382,42 @@ export class Live {
             }
             v.peer.send(text);
         }
+    }
+
+    //  What a viewer tells the hub: { "$type": "<nsid>.at", "place": "leaf:<name>" | null }
+    hear(v: Viewer, text: string): void {
+        const minute = this.now() - 60_000;
+        v.said = v.said.filter(t => t > minute);
+        if (v.said.length >= MaxSaid) {
+            return;
+        }
+        v.said.push(this.now());
+        let message: { $type?: unknown; place?: unknown };
+        try {
+            message = JSON.parse(text) as typeof message;
+        } catch {
+            return;
+        }
+        if (`${this.nsid}.at` !== message?.$type) {
+            return;
+        }
+        const place = message.place;
+        let at: string | null = null;
+        if (typeof place === 'string' && place.startsWith('leaf:') && BbsNameRe.test(place.slice(5))) {
+            at = place.slice(5);
+        } else if (null !== place) {
+            return;
+        }
+        if (at !== v.at) {
+            v.at = at;
+            v.atSince = new Date(this.now()).toISOString();
+            this.poke();
+        }
+    }
+
+    //  Boards people have open from the hub's page, by their own word
+    visits(): Visit[] {
+        return [...this.viewers].flatMap(v => (v.at ? [{ did: v.did, bbs: v.at, since: v.atSince }] : []));
     }
 
     viewing(did: string): number {
