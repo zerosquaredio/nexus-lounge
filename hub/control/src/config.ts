@@ -105,6 +105,12 @@ export interface HubConfig {
             //  how often access is checked for everyone connected
             checkSeconds: number;
         };
+        //  the live model (H16), a stream of who is where, at /space/live
+        live: {
+            enabled: boolean;
+            //  streams one person may have open at once
+            maxConnections: number;
+        };
     };
     edge: {
         //  "internal": Caddy's own test CA (development); "onDemand": public
@@ -167,6 +173,7 @@ export const Defaults: HubConfig = {
             maxConnections: 5,
             checkSeconds: 30,
         },
+        live: { enabled: false, maxConnections: 5 },
     },
     edge: { tls: 'internal', bindAddr: '127.0.0.1', httpPort: 7081, httpsPort: 7443 },
     registration: { open: true, reservedNames: DefaultReservedNames, maxBbsPerSysop: 3 },
@@ -191,6 +198,10 @@ export function makeConfig(overrides: Partial<Record<keyof HubConfig, unknown>> 
             chat: {
                 ...Defaults.space.chat,
                 ...((overrides.space as { chat?: object } | undefined)?.chat ?? {}),
+            },
+            live: {
+                ...Defaults.space.live,
+                ...((overrides.space as { live?: object } | undefined)?.live ?? {}),
             },
         },
         edge: { ...Defaults.edge, ...(overrides.edge as object) },
@@ -235,6 +246,16 @@ export function makeConfig(overrides: Partial<Record<keyof HubConfig, unknown>> 
     }
     if (!Number.isInteger(chat.maxConnections) || chat.maxConnections < 1 || !(chat.checkSeconds >= 1)) {
         throw new HubError('config', 'space.chat.maxConnections and checkSeconds are 1 or more');
+    }
+    const live = config.space.live;
+    if ('boolean' !== typeof live.enabled) {
+        throw new HubError('config', 'space.live.enabled is true or false');
+    }
+    if (live.enabled && !config.space.enabled) {
+        throw new HubError('config', 'space.live needs space.enabled');
+    }
+    if (!Number.isInteger(live.maxConnections) || live.maxConnections < 1) {
+        throw new HubError('config', 'space.live.maxConnections is 1 or more');
     }
     if (!['network', 'hub'].includes(config.directory.scope)) {
         throw new HubError('config', 'directory.scope is "network" or "hub"');

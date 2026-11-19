@@ -16,6 +16,7 @@
 //  GET  /space/chat/people  who is in the room, and names for DIDs
 //  POST /space/chat/token a single-use chat login, for someone allowed in
 //  GET  /chat/irc         the chat connection (WebSocket), see chat.ts
+//  GET  /space/live       the live model (WebSocket), see live.ts
 //  POST /api/bbs/presence a BBS reports its members (bearer: its tunnel token)
 //  GET  /bbs              your BBSes, and registering a new one
 //  POST /bbs              register a BBS: shows its token and agent config, once
@@ -27,6 +28,7 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { Duplex } from 'node:stream';
 import { ChatPath, type Chat } from './chat.ts';
 import { chatPageBody, ChatScript, ChatScriptPath, MaxLabelLookups } from './chat_page.ts';
+import { Live, LivePath } from './live.ts';
 import type { HubConfig } from './config.ts';
 import { HubError } from './errors.ts';
 import { agentConfig } from './generate.ts';
@@ -156,6 +158,17 @@ export function createSite(deps: SiteDeps): Server {
         mayJoin: did => !!presence?.mayJoin(did),
         sessionValid: session => !!signin.session(session),
     });
+    const live =
+        presence && profiles && config.space.live.enabled
+            ? new Live(
+                  { config, registry, presence, profiles, directory: deps.directory ?? null, chat },
+                  { sessionValid: session => !!signin.session(session) },
+                  log
+              )
+            : null;
+    if (chat && live) {
+        chat.onChange = () => live.poke();
+    }
     //  where signing in leads
     const home = profiles ? '/me' : '/bbs';
 
@@ -417,6 +430,7 @@ the name the BBS gives, never as your own account.</p>
         try {
             const members = parseReport(body);
             presence.report(bbs, members);
+            live?.poke();
             return json(res, 200, { ok: true, members: members.length });
         } catch (e) {
             if (e instanceof HubError) {
@@ -784,6 +798,7 @@ ${others.map(otherCard).join('\n')}`
             if ('/signout' === path) {
                 signin.endSession(token);
                 chat?.sweep();
+                live?.tick();
                 return redirect(res, '/', { 'Set-Cookie': sessionCookie('', 0) });
             }
 
@@ -809,6 +824,7 @@ ${others.map(otherCard).join('\n')}`
                 }
                 profiles?.get(who.did) ?? profiles?.signedIn(who);
                 presence.answer(who.did, name, answer);
+                live?.poke();
                 log(`site: ${who.did} ${answer} ${name}`);
                 return redirect(res, '/me');
             }
@@ -817,6 +833,7 @@ ${others.map(otherCard).join('\n')}`
                 if ('/me/forget' === path) {
                     profiles.remove(who.did);
                     chat?.sweep();
+                    live?.tick();
                     log(`site: ${who.did} removed their profile`);
                     return redirect(res, '/', { 'Set-Cookie': sessionCookie('', 0) });
                 }
@@ -833,6 +850,7 @@ ${others.map(otherCard).join('\n')}`
                 }
                 profiles.get(who.did) ?? profiles.signedIn(who);
                 profiles.setPresence(who.did, 'on' === value);
+                live?.poke();
                 return redirect(res, '/me');
             }
 
@@ -976,9 +994,11 @@ ${others.map(otherCard).join('\n')}`
             }
         });
     });
-    //  The chat connection: only from the hub's own pages, for someone signed
-    //  in. chat.ts checks the join rule and holds the connection
-    if (chat) {
+    //  The chat connection and the live model: only from the hub's own pages,
+    //  for someone signed in. chat.ts and live.ts check the join rule
+    if (chat || live) {
+        live?.start();
+        server.on('close', () => live?.stop());
         server.on('upgrade', (req: IncomingMessage, socket: Duplex, head: Buffer) => {
             const refuse = (status: number) => {
                 socket.on('error', () => {});
@@ -986,7 +1006,9 @@ ${others.map(otherCard).join('\n')}`
             };
             try {
                 const url = new URL(req.url ?? '/', config.site.publicUrl);
-                if (labelForHost(req.headers.host, config.domain) || ChatPath !== url.pathname) {
+                const service =
+                    chat && ChatPath === url.pathname ? chat : live && LivePath === url.pathname ? live : null;
+                if (labelForHost(req.headers.host, config.domain) || !service) {
                     return refuse(404);
                 }
                 if (req.headers.origin !== config.site.publicUrl) {
@@ -997,7 +1019,7 @@ ${others.map(otherCard).join('\n')}`
                 if (!who || !session) {
                     return refuse(401);
                 }
-                const refused = chat.attach(req, socket, head, {
+                const refused = service.attach(req, socket, head, {
                     did: who.did,
                     session,
                     address: clientAddress(req),
@@ -1006,7 +1028,7 @@ ${others.map(otherCard).join('\n')}`
                     refuse(refused);
                 }
             } catch (e) {
-                log(`chat: connection failed: ${(e as Error).message}`);
+                log(`site: WebSocket failed: ${(e as Error).message}`);
                 refuse(500);
             }
         });

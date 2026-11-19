@@ -62,6 +62,7 @@ interface Link {
     person: ChatPerson;
     client: Duplex;
     upstream: Socket;
+    since: string;
 }
 
 function hash(value: string): string {
@@ -117,6 +118,8 @@ export class Chat {
     secret: string;
     log: (line: string) => void;
     hooks: ChatHooks = { mayJoin: () => false, sessionValid: () => false };
+    //  told when someone joins or leaves
+    onChange: () => void = () => {};
     links = new Set<Link>();
     ready = false;
     stopped = true;
@@ -210,10 +213,13 @@ export class Chat {
         }
         const upstream = connect({ host: Host, port: this.chat.webPort });
         upstream.setTimeout(ConnectMs, () => upstream.destroy());
-        const link: Link = { person, client, upstream };
+        const link: Link = { person, client, upstream, since: new Date().toISOString() };
         this.links.add(link);
+        this.onChange();
         const close = () => {
-            this.links.delete(link);
+            if (this.links.delete(link)) {
+                this.onChange();
+            }
             client.destroy();
             upstream.destroy();
         };
@@ -250,6 +256,18 @@ export class Chat {
     //  Who is connected now
     connected(): string[] {
         return [...new Set([...this.links].map(l => l.person.did))];
+    }
+
+    //  Who is connected, and since when (their first connection still open)
+    present(): { did: string; since: string }[] {
+        const out = new Map<string, string>();
+        for (const l of this.links) {
+            const was = out.get(l.person.did);
+            if (!was || l.since < was) {
+                out.set(l.person.did, l.since);
+            }
+        }
+        return [...out.entries()].map(([did, since]) => ({ did, since }));
     }
 
     connections(did: string): number {

@@ -100,6 +100,12 @@ message, not by their nick. The hub closes that connection when they
 sign out or stop being allowed (checked every `checkSeconds`, 30 by default).
 The chat itself is at `/space/chat`, for anyone signed in who may join.
 
+**The live model** (`"live": { "enabled": true }` in `space`) is a stream of
+who is where, for views of the space such as a map or a BBS door: a
+WebSocket at `/space/live` on the hub's address, for people allowed in. It
+sends the whole state, then changes. The format is in
+[docs/live_model.md](../docs/live_model.md).
+
 ### Observed status
 
 The hub publishes whether each BBS's tunnel is up, from its own AT account,
