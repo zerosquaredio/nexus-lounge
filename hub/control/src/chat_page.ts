@@ -11,7 +11,8 @@ export const MaxLabelLookups = 50;
 //  an IRC line has room for about this much text
 export const MaxChatMessage = 400;
 
-export function chatPageBody(room: string): string {
+//  panel: muting and reporting someone (moderation_page.ts)
+export function chatPageBody(room: string, panel = ''): string {
     return `<style>
 .chat { display: grid; grid-template-columns: 1fr 11rem; gap: 1rem; }
 .chat-log { height: 26rem; overflow-y: auto; border: 1px solid var(--line); border-radius: 4px; padding: .5rem; overflow-wrap: anywhere; }
@@ -19,6 +20,7 @@ export function chatPageBody(room: string): string {
 .chat-log time { color: var(--dim); font-size: .8rem; margin-right: .4rem; }
 .chat-log strong { color: var(--accent); margin-right: .4rem; }
 .chat-log .system { color: var(--dim); font-style: italic; }
+.chat-log strong[data-did] { cursor: pointer; }
 .chat-people { margin: 0; padding: 0; list-style: none; overflow-wrap: anywhere; font-size: .9rem; }
 .chat-say { display: flex; gap: .5rem; margin-top: .5rem; }
 .chat-say button { margin-top: 0; }
@@ -36,6 +38,7 @@ export function chatPageBody(room: string): string {
 </div>
 <aside aria-label="In the room"><h2>Here now</h2><ul id="chat-people" class="chat-people"></ul></aside>
 </div>
+${panel}
 <p class="hint">Messages aren't kept: the room holds only the last few, in memory. Everyone here can see that
 you are in the room, whether or not you are shown as around.</p>
 <p><a href="/space">Who's around</a> · <a href="/me">Your profile</a> · <a href="/">The directory</a></p>
@@ -47,7 +50,7 @@ export const ChatScript = String.raw`(function () {
     var byId = function (id) { return document.getElementById(id); };
     var log = byId('chat-log'), status = byId('chat-status'), people = byId('chat-people');
     var form = byId('chat-say'), input = byId('chat-text'), send = byId('chat-send'), roomName = byId('chat-room');
-    var labels = {}, waiting = {}, seen = {}, ticket = null, ws = null, retries = 0, stopped = false;
+    var labels = {}, waiting = {}, seen = {}, muted = {}, ticket = null, ws = null, retries = 0, stopped = false;
     var lookupTimer = null, peopleTimer = null, MaxLines = 500;
 
     function setStatus(text) { status.textContent = text; }
@@ -84,6 +87,8 @@ export const ChatScript = String.raw`(function () {
         var action = /^\x01ACTION (.*?)\x01?$/.exec(text);
         if (!action && 1 === text.charCodeAt(0)) { return; }
         var did = tags.account || '';
+        //  someone you muted: not shown
+        if (did && muted[did]) { return; }
         var p = document.createElement('p');
         var when = tags.time ? new Date(tags.time) : new Date();
         var time = document.createElement('time');
@@ -122,17 +127,47 @@ export const ChatScript = String.raw`(function () {
                 Object.keys(waiting).forEach(function (d) { if (d in data.labels) { delete waiting[d]; } });
                 Object.keys(data.labels).forEach(function (d) { labels[d] = data.labels[d]; });
                 data.here.forEach(function (p) { labels[p.did] = p.label; });
+                (data.muted || []).forEach(hide);
                 log.querySelectorAll('strong[data-did]').forEach(function (n) {
                     n.textContent = nameOf(n.dataset.did);
                 });
                 people.textContent = '';
                 data.here.forEach(function (p) {
                     var li = document.createElement('li');
-                    li.textContent = p.label;
+                    if (ticket && p.did !== ticket.did && window.hubWho) {
+                        var b = document.createElement('button');
+                        b.type = 'button';
+                        b.className = 'who';
+                        b.title = 'Mute or report';
+                        b.textContent = p.label;
+                        b.addEventListener('click', function () { window.hubWho.show('person:' + p.did, p.label); });
+                        li.appendChild(b);
+                    } else {
+                        li.textContent = p.label;
+                    }
                     people.appendChild(li);
                 });
             })
             .catch(function () {});
+    }
+    //  someone muted: their lines go, and so do any later ones
+    function hide(did) {
+        muted[did] = true;
+        log.querySelectorAll('strong[data-did]').forEach(function (n) {
+            if (n.dataset.did === did && n.parentNode) { n.parentNode.remove(); }
+        });
+    }
+    log.addEventListener('click', function (e) {
+        var n = e.target.closest ? e.target.closest('strong[data-did]') : null;
+        if (n && ticket && n.dataset.did !== ticket.did && window.hubWho) {
+            window.hubWho.show('person:' + n.dataset.did, nameOf(n.dataset.did));
+        }
+    });
+    if (window.hubWho) {
+        window.hubWho.onMute(function (person) {
+            if (0 === person.indexOf('person:did:')) { hide(person.slice(7)); }
+            refreshPeople();
+        });
     }
     function soon() {
         clearTimeout(peopleTimer);
@@ -218,7 +253,11 @@ export const ChatScript = String.raw`(function () {
         fetch('/space/chat/token', { method: 'POST', credentials: 'same-origin' })
             .then(function (r) {
                 if (401 === r.status) { return stop('Sign in to chat.'); }
-                if (403 === r.status) { return stop('You are not able to join this room right now.'); }
+                if (403 === r.status) {
+                    return r.json().catch(function () { return {}; }).then(function (body) {
+                        stop(body.error || 'You are not able to join this room right now.');
+                    });
+                }
                 if (!r.ok) { return retry(); }
                 return r.json().then(open);
             })

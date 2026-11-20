@@ -107,5 +107,13 @@ The same rules as presence (hub plan H14): only people whose own setting
 is on, only from BBSes that are connected, reporting, and rated for this
 hub, and a BBS's unconfirmed word about a DID is never tied to that DID.
 Someone in the chat room appears there only with their hub presence on.
-Every viewer currently sees the same state; blocking (H18) will make it
-differ per viewer.
+Someone the hub's admin blocked from the space is in nobody's state
+(hub plan H18). The state differs between viewers only by whom each one
+muted: those people are left out of that viewer's state, from the
+snapshot on, and nobody else's. A viewer who mutes or unmutes someone gets
+an ordinary change. A BBS's door has mutes only for members the hub knows
+as themselves (they confirmed that BBS).
+
+When the hub closes a stream with **4403**, its reason says why:
+`blocked by the admin of <hub>` if the admin blocked them, otherwise
+`access ended`. `seq` still counts up, but a viewer may see gaps in it.

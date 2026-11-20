@@ -10,6 +10,7 @@
 //  POST /me/presence      show you in the common space, or not
 //  POST /me/forget        remove your profile and sign out everywhere
 //  POST /me/bbs           confirm or deny a BBS that says you are a member
+//  POST /me/unmute        stop muting someone
 //  GET  /space            who is around (common space on); the map, with the live model on
 //  GET  /space/map.js     the map's script
 //  GET  /space/chat       the chat page
@@ -18,11 +19,17 @@
 //  POST /space/chat/token a single-use chat login, for someone allowed in
 //  GET  /chat/irc         the chat connection (WebSocket), see chat.ts
 //  GET  /space/live       the live model (WebSocket), see live.ts
+//  GET  /space/who.js     muting and reporting someone, on the map and chat pages
+//  POST /space/mute       mute someone, for yourself (H18)
+//  POST /space/report     report someone to the hub's admin, with what was just said
 //  POST /api/bbs/presence a BBS reports its members (bearer: its tunnel token)
 //  GET  /api/bbs/live     the live model for one of a BBS's members (WebSocket; F19)
 //  POST /api/bbs/chat/token  a chat login for one of a BBS's members
 //  GET  /api/bbs/chat     their chat connection (WebSocket)
 //  GET  /api/bbs/chat/people  who is in the room, and names for DIDs
+//  POST /api/bbs/mute     a member mutes someone, for themselves (JSON body)
+//  GET  /api/bbs/mutes    who they muted
+//  POST /api/bbs/report   a member reports someone (JSON body)
 //    (the door's calls: bearer, ?bbs=name and ?did= or ?user= for the member)
 //  GET  /bbs              your BBSes, and registering a new one
 //  POST /bbs              register a BBS: shows its token and agent config, once
@@ -34,8 +41,10 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { Duplex } from 'node:stream';
 import { BbsChatPath, ChatPath, type Chat } from './chat.ts';
 import { chatPageBody, ChatScript, ChatScriptPath, MaxLabelLookups } from './chat_page.ts';
-import { Live, LivePath } from './live.ts';
+import { Live, LivePath, personId } from './live.ts';
 import { mapPageBody, MapScript, MapScriptPath } from './map_page.ts';
+import { blockText, isPersonId, MaxNote } from './moderation.ts';
+import { whoPanel, WhoScript, WhoScriptPath } from './moderation_page.ts';
 import type { HubConfig } from './config.ts';
 import { HubError } from './errors.ts';
 import { agentConfig } from './generate.ts';
@@ -71,6 +80,16 @@ export interface SiteDeps {
     chat?: Chat | null;
     log?: (line: string) => void;
     now?: () => number;
+}
+
+//  A BBS's member, found for its door
+interface DoorFound {
+    bbs: Bbs;
+    door: DoorAccess;
+    //  whether it still holds
+    allowed: () => boolean;
+    //  how the BBS named them
+    member: { did: string | null; user: string | null };
 }
 
 const Cookie = 'hub_session';
@@ -162,7 +181,7 @@ export function createSite(deps: SiteDeps): Server {
     const chatLimit = new Limiter(30, 60 * 1000, now);
     const chat = presence ? (deps.chat ?? null) : null;
     chat?.bind({
-        mayJoin: did => !!presence?.mayJoin(did),
+        mayJoin: did => !!presence?.mayChat(did),
         sessionValid: session => !!signin.session(session),
     });
     const live =
@@ -177,6 +196,10 @@ export function createSite(deps: SiteDeps): Server {
     if (chat && live) {
         chat.onChange = () => live.poke();
     }
+    const moderation = presence?.moderation ?? null;
+    //  reports, and mutes, one person may make in an hour
+    const complaintLimit = new Limiter(5, 60 * 60 * 1000, now);
+    const muteLimit = new Limiter(60, 60 * 60 * 1000, now);
     //  where signing in leads
     const home = profiles ? '/me' : '/bbs';
 
@@ -325,11 +348,13 @@ BBS you are on.</p>
 <tr><th>Account</th><td><code>${esc(profile.did)}</code></td></tr>
 <tr><th>On this hub since</th><td>${esc(profile.createdAt.slice(0, 10))}</td></tr>
 </table>
+${blockNotice(who.did)}
 <h2>Being shown in the common space</h2>
 ${shown}
 <p class="hint">Off unless you turn it on. A BBS that reports who is on it has its own setting for you
 too, and the stricter one wins.</p>
 ${membershipsSection(who)}
+${mutesSection(who)}
 <p>${bbses} · <a href="/space">Who's around</a> · <a href="/">The directory</a></p>
 <h2>Remove your profile</h2>
 <form method="post" action="/me/forget"><button>Remove it and sign out</button></form>
@@ -337,6 +362,35 @@ ${membershipsSection(who)}
 again starts a new profile, with presence off.</p>`,
             who
         );
+    }
+
+    //  The admin's block on someone, as they are told it
+    function blockedFrom(did: string, scope: 'space' | 'room'): string | null {
+        const block = presence?.blockOf(did, scope);
+        return block ? blockText(block, config.domain) : null;
+    }
+
+    function blockNotice(did: string): string {
+        const text = blockedFrom(did, 'space') ?? blockedFrom(did, 'room');
+        return text ? `<p class="warn">${esc(text)}</p>` : '';
+    }
+
+    function mutesSection(who: WebSession): string {
+        const list = moderation?.mutes(who.did) ?? [];
+        if (!list.length) {
+            return '';
+        }
+        const rows = list
+            .map(
+                m => `<tr><td>${esc(m.label)}</td><td class="dim">since ${esc(m.createdAt.slice(0, 10))}</td><td>
+<form class="inline" method="post" action="/me/unmute"><input type="hidden" name="person" value="${esc(
+                    m.person
+                )}"><button>Unmute</button></form></td></tr>`
+            )
+            .join('');
+        return `<h2>People you muted</h2>
+<p class="hint">Hidden from you in the common space and its chat, here and in BBS doors. They aren't told.</p>
+<table>${rows}</table>`;
     }
 
     function membershipsSection(who: WebSession): string {
@@ -372,6 +426,15 @@ the name the BBS gives, never as your own account.</p>
     }
 
     function spacePage(who: WebSession): string {
+        const blocked = blockedFrom(who.did, 'space');
+        if (blocked) {
+            return page(
+                "Who's around",
+                `<p class="warn">${esc(blocked)}</p>
+<p><a href="/me">Your profile</a> · <a href="/">The directory</a></p>`,
+                who
+            );
+        }
         if (!presence?.mayJoin(who.did)) {
             return page(
                 "Who's around",
@@ -396,7 +459,7 @@ the name the BBS gives, never as your own account.</p>
                 )
                 .join('\n') || '<p class="dim">Nobody is around right now.</p>';
         if (live) {
-            return page("Who's around", mapPageBody(groups, !!chat), who);
+            return page("Who's around", mapPageBody(groups, !!chat, whoPanel(config.space.chat.reportMinutes)), who);
         }
         return page(
             "Who's around",
@@ -466,38 +529,38 @@ the name the BBS gives, never as your own account.</p>
     //  A BBS asking for one of its members, inside the BBS (F19): the BBS by
     //  its tunnel token, the member by what it reported. Never from a web
     //  page. A status if not; `allowed` checks again later
-    function doorFor(
-        req: IncomingMessage,
-        url: URL
-    ): { bbs: Bbs; door: DoorAccess; allowed: () => boolean } | number {
+    function doorFor(req: IncomingMessage, url: URL): DoorFound | { status: number; error: string } {
+        const refused = (status: number) => ({ status, error: doorError(status) });
         if (!presence) {
-            return 404;
+            return refused(404);
         }
         if (req.headers.origin) {
-            return 403;
+            return refused(403);
         }
         const auth = String(req.headers.authorization ?? '');
         const token = auth.startsWith('Bearer ') ? auth.slice(7).trim() : '';
         const name = url.searchParams.get('bbs');
         const bbs = registry.authenticate(name, token);
         if (!bbs) {
-            return 401;
+            return refused(401);
         }
         const did = url.searchParams.get('did');
         const user = url.searchParams.get('user');
         if (!!did === !!user || (did && !isDid(did)) || (user && user.length > 64)) {
-            return 400;
+            return refused(400);
         }
         const door = presence.doorAccess(bbs, did, user);
         if (!door) {
-            return 403;
+            //  told who, if it was the hub's admin
+            const blocked = presence.memberBlock(bbs.name, did, user);
+            return blocked ? { status: 403, error: blockText(blocked, config.domain) } : refused(403);
         }
         const allowed = () => {
             const now = registry.authenticate(name, token);
             const still = now ? presence.doorAccess(now, did, user) : null;
             return !!still && still.kind === door.kind && still.did === door.did;
         };
-        return { bbs, door, allowed };
+        return { bbs, door, allowed, member: { did, user } };
     }
 
     //  Why a door was refused, for the BBS to show its member
@@ -508,23 +571,29 @@ the name the BBS gives, never as your own account.</p>
                 401: 'Not a BBS on this hub, or the wrong token.',
                 403: "This member can't join the hub's space from this BBS right now.",
                 404: 'This hub has no common space.',
+                429: 'Too many connections for this member.',
+                503: 'Chat is not available right now.',
             }[status] ?? 'Refused.'
         );
     }
 
+    const NotThemselves = 'Only members who confirmed this BBS at the hub can chat from it.';
+
     async function doorChatToken(req: IncomingMessage, res: ServerResponse, url: URL): Promise<void> {
         const found = doorFor(req, url);
-        if ('number' === typeof found) {
-            return json(res, found, { error: doorError(found) });
+        if ('status' in found) {
+            return json(res, found.status, { error: found.error });
         }
         if (!chat) {
             return json(res, 404, { error: 'This hub has no chat.' });
         }
         const { door } = found;
         if (!door.chat || !door.did) {
-            return json(res, 403, {
-                error: 'Only members who confirmed this BBS at the hub can chat from it.',
-            });
+            return json(res, 403, { error: NotThemselves });
+        }
+        const blocked = blockedFrom(door.did, 'room');
+        if (blocked) {
+            return json(res, 403, { error: blocked });
         }
         if (!chatLimit.allow(door.did)) {
             return json(res, 429, { error: 'Too many attempts; try again in a minute.' });
@@ -542,13 +611,124 @@ the name the BBS gives, never as your own account.</p>
 
     function doorChatPeople(req: IncomingMessage, res: ServerResponse, url: URL): void {
         const found = doorFor(req, url);
-        if ('number' === typeof found) {
-            return json(res, found, { error: doorError(found) });
+        if ('status' in found) {
+            return json(res, found.status, { error: found.error });
         }
         if (!chat) {
             return json(res, 404, { error: 'This hub has no chat.' });
         }
-        return json(res, 200, peopleInRoom(url.searchParams.getAll('label')));
+        const { door } = found;
+        return json(res, 200, peopleInRoom(url.searchParams.getAll('label'), 'account' === door.kind ? door.did : null));
+    }
+
+    //  Who a member muted, to unmute them from inside their BBS
+    function doorMutes(req: IncomingMessage, res: ServerResponse, url: URL): void {
+        const found = doorFor(req, url);
+        if ('status' in found) {
+            return json(res, found.status, { error: found.error });
+        }
+        const { door } = found;
+        if ('account' !== door.kind || !door.did || !moderation) {
+            return json(res, 403, { error: 'Only members who confirmed this BBS at the hub can mute people from it.' });
+        }
+        return json(res, 200, { mutes: moderation.mutes(door.did).map(m => ({ person: m.person, label: m.label })) });
+    }
+
+    //  A member muting or reporting someone from inside their BBS
+    async function doorAct(req: IncomingMessage, res: ServerResponse, url: URL, what: 'mute' | 'report'): Promise<void> {
+        const found = doorFor(req, url);
+        if ('status' in found) {
+            return json(res, found.status, { error: found.error });
+        }
+        let body: { person?: unknown; mute?: unknown; note?: unknown } | null;
+        try {
+            body = JSON.parse(await readBody(req, MaxForm)) as typeof body;
+        } catch {
+            body = null;
+        }
+        if (!body || 'object' !== typeof body) {
+            return json(res, 400, { error: 'Send a JSON object.' });
+        }
+        const { door } = found;
+        if ('mute' === what) {
+            //  mutes belong to an account: someone the hub knows as themselves
+            if ('account' !== door.kind || !door.did) {
+                return json(res, 403, { error: 'Only members who confirmed this BBS at the hub can mute people from it.' });
+            }
+            return muteFor(res, door.did, body.person, false !== body.mute);
+        }
+        return reportFrom(res, door.did ?? personId(door), body.person, body.note);
+    }
+
+    //  Someone in the space, by the live model's id: how they are shown, and
+    //  what the admin would block. Null if the hub can't tell who now
+    function personNow(person: string): { label: string; subject: string | null } | null {
+        if (!presence || !isPersonId(person)) {
+            return null;
+        }
+        if (person.startsWith('person:did:')) {
+            const did = person.slice(7);
+            return did === chat?.botDid ? null : { label: chatLabel(did) ?? did, subject: did };
+        }
+        const shown = presence.around().find(p => personId(p) === person);
+        return shown ? { label: shown.label, subject: shown.subject } : null;
+    }
+
+    function muteFor(res: ServerResponse, did: string, person: unknown, on: boolean): void {
+        if (!moderation || !isPersonId(person)) {
+            return json(res, 400, { error: 'Name someone to mute.' });
+        }
+        if (person === `person:${did}`) {
+            return json(res, 400, { error: "You can't mute yourself." });
+        }
+        if (!muteLimit.allow(did)) {
+            return json(res, 429, { error: 'Too many changes; try again later.' });
+        }
+        if (on) {
+            const found = personNow(person);
+            if (!found) {
+                return json(res, 404, { error: "That person isn't here now." });
+            }
+            try {
+                moderation.mute(did, person, found.label);
+            } catch (e) {
+                if (e instanceof HubError) {
+                    return json(res, 400, { error: e.message });
+                }
+                throw e;
+            }
+        } else {
+            moderation.unmute(did, person);
+        }
+        live?.poke();
+        return json(res, 200, { ok: true });
+    }
+
+    function reportFrom(res: ServerResponse, reporter: string, person: unknown, note: unknown): void {
+        if (!moderation || !isPersonId(person)) {
+            return json(res, 400, { error: 'Name someone to report.' });
+        }
+        const text = 'string' === typeof note ? note.trim() : '';
+        if (!text || text.length > MaxNote) {
+            return json(res, 400, { error: `Say what happened, in up to ${MaxNote} characters.` });
+        }
+        const found = personNow(person);
+        if (!found) {
+            return json(res, 404, { error: "That person isn't here now." });
+        }
+        if (!complaintLimit.allow(reporter)) {
+            return json(res, 429, { error: 'You have sent several reports lately; try again later.' });
+        }
+        const report = moderation.report({
+            reporter,
+            person,
+            subject: found.subject,
+            label: found.label,
+            note: text,
+            messages: chat?.recent() ?? [],
+        });
+        log(`moderation: report ${report.id} about ${person}`);
+        return json(res, 200, { ok: true });
     }
 
     //  How someone appears in chat: from who they signed in as, never from
@@ -568,26 +748,46 @@ the name the BBS gives, never as your own account.</p>
         if (!chat || !presence?.mayJoin(who.did)) {
             return json(res, 403, { error: "You can't join this room." });
         }
-        return json(res, 200, peopleInRoom(url.searchParams.getAll('did')));
+        return json(res, 200, peopleInRoom(url.searchParams.getAll('did'), who.did));
     }
 
-    function peopleInRoom(dids: string[]): { here: { did: string; label: string }[]; labels: Record<string, string> } {
+    //  Who is in the room, less anyone |muter| muted, whose messages their
+    //  chat hides (muted)
+    function peopleInRoom(
+        dids: string[],
+        muter: string | null
+    ): { here: { did: string; label: string }[]; labels: Record<string, string>; muted: string[] } {
         const labels: Record<string, string> = {};
         for (const did of dids.slice(0, MaxLabelLookups)) {
             if (isDid(did)) {
                 labels[did] = chatLabel(did) ?? did;
             }
         }
-        const here = (chat?.connected() ?? []).map(did => ({ did, label: chatLabel(did) ?? did }));
-        return { here, labels };
+        const muted = muter
+            ? [...(moderation?.muted(muter) ?? [])].filter(p => p.startsWith('person:did:')).map(p => p.slice(7))
+            : [];
+        const hidden = new Set(muted);
+        const here = (chat?.connected() ?? [])
+            .filter(did => !hidden.has(did))
+            .map(did => ({ did, label: chatLabel(did) ?? did }));
+        return { here, labels, muted };
     }
 
     function chatPage(res: ServerResponse, who: WebSession): void {
         if (!presence?.mayJoin(who.did)) {
             return send(res, 200, spacePage(who));
         }
+        const blocked = blockedFrom(who.did, 'room');
+        if (blocked) {
+            return send(
+                res,
+                200,
+                page('Chat', `<p class="warn">${esc(blocked)}</p><p><a href="/space">Who's around</a> · <a href="/me">Your profile</a></p>`, who)
+            );
+        }
         const socket = config.site.publicUrl.replace(/^http/, 'ws');
-        return send(res, 200, page('Chat', chatPageBody(config.space.chat.room), who), {
+        const panel = whoPanel(config.space.chat.reportMinutes);
+        return send(res, 200, page('Chat', chatPageBody(config.space.chat.room, panel), who), {
             'Content-Security-Policy': `default-src 'none'; script-src 'self'; connect-src 'self' ${socket}; style-src 'unsafe-inline'; img-src 'self'; form-action 'self' https:; frame-ancestors 'none'; base-uri 'none'`,
         });
     }
@@ -599,6 +799,10 @@ the name the BBS gives, never as your own account.</p>
         }
         if (!who) {
             return json(res, 401, { error: 'Sign in first.' });
+        }
+        const blocked = blockedFrom(who.did, 'room');
+        if (blocked) {
+            return json(res, 403, { error: blocked });
         }
         if (!chatLimit.allow(who.did)) {
             return json(res, 429, { error: 'Too many attempts; try again in a minute.' });
@@ -880,6 +1084,12 @@ ${others.map(otherCard).join('\n')}`
         if ('GET' === req.method && '/api/bbs/chat/people' === path) {
             return doorChatPeople(req, res, url);
         }
+        if ('GET' === req.method && '/api/bbs/mutes' === path) {
+            return doorMutes(req, res, url);
+        }
+        if ('POST' === req.method && ('/api/bbs/mute' === path || '/api/bbs/report' === path)) {
+            return doorAct(req, res, url, '/api/bbs/mute' === path ? 'mute' : 'report');
+        }
 
         if ('POST' === req.method) {
             //  forms are only accepted from the hub's own pages
@@ -890,6 +1100,21 @@ ${others.map(otherCard).join('\n')}`
 
             if ('/space/chat/token' === path) {
                 return chatToken(res, who);
+            }
+
+            if (moderation && ('/space/mute' === path || '/space/report' === path)) {
+                if (!who) {
+                    return json(res, 401, { error: 'Sign in first.' });
+                }
+                if (!presence?.mayJoin(who.did)) {
+                    return json(res, 403, {
+                        error: blockedFrom(who.did, 'space') ?? "You can't join this hub's common space.",
+                    });
+                }
+                if ('/space/mute' === path) {
+                    return muteFor(res, who.did, form.get('person'), 'off' !== form.get('mute'));
+                }
+                return reportFrom(res, who.did, form.get('person'), form.get('note'));
             }
 
             if ('/signin' === path) {
@@ -950,9 +1175,19 @@ ${others.map(otherCard).join('\n')}`
                 return redirect(res, '/me');
             }
 
+            if (moderation && '/me/unmute' === path) {
+                const person = form.get('person');
+                if (isPersonId(person)) {
+                    moderation.unmute(who.did, person);
+                    live?.poke();
+                }
+                return redirect(res, '/me');
+            }
+
             if (profiles && ('/me/presence' === path || '/me/forget' === path)) {
                 if ('/me/forget' === path) {
                     profiles.remove(who.did);
+                    moderation?.forget(who.did);
                     chat?.sweep();
                     live?.tick();
                     log(`site: ${who.did} removed their profile`);
@@ -1081,6 +1316,15 @@ ${others.map(otherCard).join('\n')}`
             return void res.end('HEAD' === req.method ? undefined : ChatScript);
         }
 
+        if (moderation && (chat || live) && WhoScriptPath === path) {
+            res.writeHead(200, {
+                'Content-Type': 'text/javascript; charset=utf-8',
+                'Cache-Control': 'no-cache',
+                'X-Content-Type-Options': 'nosniff',
+            });
+            return void res.end('HEAD' === req.method ? undefined : WhoScript);
+        }
+
         if (chat && '/space/chat/people' === path) {
             return chatPeople(res, who, url);
         }
@@ -1128,11 +1372,34 @@ ${others.map(otherCard).join('\n')}`
     //  for someone signed in. chat.ts and live.ts check the join rule
     if (chat || live) {
         live?.start();
-        server.on('close', () => live?.stop());
+        //  the admin acts from the command line: act on it within seconds
+        let seen = moderation?.version() ?? 0;
+        const watch = moderation
+            ? setInterval(() => {
+                  const version = moderation.version();
+                  if (version !== seen) {
+                      seen = version;
+                      chat?.sweep();
+                      live?.tick();
+                  }
+              }, 2_000)
+            : null;
+        watch?.unref();
+        server.on('close', () => {
+            live?.stop();
+            if (watch) {
+                clearInterval(watch);
+            }
+        });
         server.on('upgrade', (req: IncomingMessage, socket: Duplex, head: Buffer) => {
-            const refuse = (status: number) => {
+            //  a door is told why
+            const refuse = (status: number, error?: string) => {
                 socket.on('error', () => {});
-                socket.end(`HTTP/1.1 ${status} Refused\r\nConnection: close\r\nContent-Length: 0\r\n\r\n`);
+                const body = error ? JSON.stringify({ error }) : '';
+                socket.end(
+                    `HTTP/1.1 ${status} Refused\r\nConnection: close\r\n` +
+                        `${body ? 'Content-Type: application/json\r\n' : ''}Content-Length: ${Buffer.byteLength(body)}\r\n\r\n${body}`
+                );
             };
             try {
                 const url = new URL(req.url ?? '/', config.site.publicUrl);
@@ -1144,15 +1411,17 @@ ${others.map(otherCard).join('\n')}`
                         return refuse(404);
                     }
                     const found = doorFor(req, url);
-                    if ('number' === typeof found) {
-                        return refuse(found);
+                    if ('status' in found) {
+                        return refuse(found.status, found.error);
                     }
-                    const { bbs, door, allowed } = found;
+                    const { bbs, door, allowed, member } = found;
                     let refused: number | null;
                     if (forLive) {
-                        refused = live.attachBbs(req, socket, head, door, allowed);
+                        refused = live.attachBbs(req, socket, head, door, allowed, member);
                     } else if (!chat || !door.chat || !door.did) {
-                        refused = 403;
+                        return refuse(403, NotThemselves);
+                    } else if (blockedFrom(door.did, 'room')) {
+                        return refuse(403, blockedFrom(door.did, 'room') ?? undefined);
                     } else {
                         refused = chat.attach(req, socket, head, {
                             did: door.did,
@@ -1163,7 +1432,7 @@ ${others.map(otherCard).join('\n')}`
                         });
                     }
                     if (refused) {
-                        refuse(refused);
+                        refuse(refused, doorError(refused));
                     }
                     return;
                 }

@@ -19,6 +19,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import type { HubConfig } from './config.ts';
 import type { Directory } from './directory.ts';
 import { HubError } from './errors.ts';
+import { Moderation, vouchedSubjects, type Block } from './moderation.ts';
 import type { Profiles } from './profiles.ts';
 import type { Bbs, Registry } from './registry.ts';
 import { isDid } from './rules.ts';
@@ -56,6 +57,10 @@ export interface PersonShown {
     kind: 'account' | 'via' | 'vouched';
     bbs: string;
     onlineSince: string | null;
+    //  what the hub's admin would block (moderation.ts): their DID (for
+    //  "via", the BBS's word for it), or the BBS member without one. Never
+    //  sent to anyone
+    subject: string;
 }
 
 interface MemberRow {
@@ -150,6 +155,7 @@ export class Presence {
     config: HubConfig;
     profiles: Profiles;
     directory: Directory | null;
+    moderation: Moderation;
     now: () => number;
 
     constructor(
@@ -165,6 +171,24 @@ export class Presence {
         this.profiles = profiles;
         this.directory = directory;
         this.now = now;
+        this.moderation = new Moderation(this.db, now);
+    }
+
+    //  The hub admin's block on someone with an AT account, for the whole
+    //  space, or (scope room) for its chat room
+    blockOf(did: string, scope: 'space' | 'room' = 'space'): Block | null {
+        return this.moderation.blockOf([did], scope);
+    }
+
+    //  ...on a BBS's member, named as the BBS names them
+    memberBlock(bbs: string, did: string | null, user: string | null): Block | null {
+        return did ? this.blockOf(did) : this.moderation.blockOf(vouchedSubjects(bbs, user ?? ''), 'space');
+    }
+
+    //  Whether someone may be in the chat room: in the space, and not
+    //  blocked from the room
+    mayChat(did: string): boolean {
+        return this.mayJoin(did) && !this.blockOf(did, 'room');
     }
 
     //  A BBS's report replaces everything it said before, at once
@@ -250,7 +274,11 @@ export class Presence {
             return null;
         }
         if (!row.did) {
-            if (!this.config.space.vouchedFrom.includes(bbs.name) || !this.counts(bbs)) {
+            if (
+                !this.config.space.vouchedFrom.includes(bbs.name) ||
+                !this.counts(bbs) ||
+                this.moderation.blockOf(vouchedSubjects(bbs.name, row.member.slice(5)), 'space')
+            ) {
                 return null;
             }
             return { bbs: bbs.name, did: null, kind: 'vouched', label: `${row.name}@${bbs.name}`, chat: false };
@@ -309,6 +337,9 @@ export class Presence {
     //  default: a member of a BBS on this hub that counts, for long enough,
     //  that they haven't denied
     mayJoin(did: string): boolean {
+        if (this.blockOf(did)) {
+            return false;
+        }
         if ('anyone' === this.config.space.join) {
             return true;
         }
@@ -332,13 +363,15 @@ export class Presence {
                 .all(bbs.name) as unknown as MemberRow[];
             for (const row of rows) {
                 if (!row.did) {
-                    if (vouched.has(bbs.name)) {
+                    const subjects = vouchedSubjects(bbs.name, row.member.slice(5));
+                    if (vouched.has(bbs.name) && !this.moderation.blockOf(subjects, 'space')) {
                         out.push({
                             label: `${row.name}@${bbs.name}`,
                             did: null,
                             kind: 'vouched',
                             bbs: bbs.name,
                             onlineSince: row.online_since,
+                            subject: subjects[0] as string,
                         });
                     }
                     continue;
@@ -371,6 +404,7 @@ export class Presence {
                     kind: own ? 'account' : 'via',
                     bbs: bbs.name,
                     onlineSince: row.online_since,
+                    subject: row.did,
                 });
             }
         }

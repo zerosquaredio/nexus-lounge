@@ -16,6 +16,10 @@
 //
 //  A BBS may also open the stream for one of its members, to show the space
 //  inside the BBS (F19, the door): see Presence.doorAccess for who.
+//
+//  What each viewer sees differs only by whom they muted (H18): those people
+//  are left out of their state, and nobody else's. Someone the hub's admin
+//  blocked is in nobody's, and their own stream is closed, saying so.
 
 import { createHash } from 'node:crypto';
 import type { IncomingMessage } from 'node:http';
@@ -210,7 +214,7 @@ export function buildState(s: LiveSources, visits: Visit[] = []): LiveState {
         rooms.push({ id: room, type: 'room', name: s.config.space.chat.room });
         const members: string[] = [];
         for (const { did, since } of s.chat.present()) {
-            if (!s.profiles.get(did)?.presence || !s.presence.mayJoin(did)) {
+            if (!s.profiles.get(did)?.presence || !s.presence.mayChat(did)) {
                 continue;
             }
             const id = account(did);
@@ -226,6 +230,19 @@ export function buildState(s: LiveSources, visits: Visit[] = []): LiveState {
         presence: presence.sort(byId),
         groups,
         links: [],
+    };
+}
+
+//  The state without the people a viewer muted
+export function hideMuted(state: LiveState, muted: ReadonlySet<string>): LiveState {
+    if (!muted.size) {
+        return state;
+    }
+    return {
+        entities: state.entities.filter(e => !muted.has(e.id)),
+        presence: state.presence.filter(p => !muted.has(p.person)),
+        groups: state.groups.map(g => ({ ...g, members: g.members.filter(m => !muted.has(m)) })),
+        links: state.links.filter(l => !muted.has(l.from) && !muted.has(l.to)),
     };
 }
 
@@ -266,6 +283,12 @@ interface Viewer {
     did: string | null;
     bbs: string | null;
     allowed: () => boolean;
+    //  why it ended, for the close frame: who blocked them, if someone did
+    why: () => string;
+    //  whose mutes apply: the viewer's own account, where the hub knows it
+    muter: string | null;
+    //  what they were last sent
+    view: LiveState;
     peer: WsPeer;
     //  the board they say they have open from the hub's page, and since when
     at: string | null;
@@ -345,8 +368,16 @@ export class Live {
             did: viewer.did,
             bbs: null,
             allowed: () => this.hooks.sessionValid(session) && this.sources.presence.mayJoin(viewer.did),
+            why: () => this.why(viewer.did),
+            muter: viewer.did,
         });
         return null;
+    }
+
+    //  The close frame's reason: short, and saying who, for a block
+    why(did: string | null, bbs?: string, user?: string | null): string {
+        const blocked = bbs ? this.sources.presence.memberBlock(bbs, did, user ?? null) : did ? this.sources.presence.blockOf(did) : null;
+        return blocked ? `blocked by the admin of ${this.sources.config.domain}`.slice(0, 120) : 'access ended';
     }
 
     //  A BBS's connection for one of its members, already checked (site.ts):
@@ -356,7 +387,8 @@ export class Live {
         socket: Duplex,
         head: Buffer,
         door: DoorAccess,
-        allowed: () => boolean
+        allowed: () => boolean,
+        member: { did: string | null; user: string | null } = { did: door.did, user: null }
     ): number | null {
         if (!isUpgrade(req)) {
             return 400;
@@ -365,7 +397,15 @@ export class Live {
         if (this.full(you) || [...this.viewers].filter(v => v.bbs === door.bbs).length >= MaxPerBbs) {
             return 429;
         }
-        this.open(req, socket, head, { you, did: null, bbs: door.bbs, allowed });
+        this.open(req, socket, head, {
+            you,
+            did: null,
+            bbs: door.bbs,
+            allowed,
+            why: () => this.why(member.did, door.bbs, member.user),
+            //  only someone the hub knows as themselves has mutes here
+            muter: 'account' === door.kind ? door.did : null,
+        });
         return null;
     }
 
@@ -378,7 +418,7 @@ export class Live {
         req: IncomingMessage,
         socket: Duplex,
         head: Buffer,
-        who: Pick<Viewer, 'you' | 'did' | 'bbs' | 'allowed'>
+        who: Pick<Viewer, 'you' | 'did' | 'bbs' | 'allowed' | 'why' | 'muter'>
     ): void {
         //  bring everyone else up to date first, so the snapshot and the
         //  changes they have been sent agree
@@ -387,7 +427,8 @@ export class Live {
             this.state = buildState(this.sources, this.visits());
         }
         const peer = acceptWebSocket(req, socket, head);
-        const v: Viewer = { ...who, peer, at: null, atSince: '', said: [] };
+        const view = hideMuted(this.state, this.muted(who.muter));
+        const v: Viewer = { ...who, view, peer, at: null, atSince: '', said: [] };
         this.viewers.add(v);
         peer.onClose(() => {
             this.viewers.delete(v);
@@ -406,36 +447,65 @@ export class Live {
                 seq: this.seq,
                 //  their own person, whether or not they are shown now
                 you: v.you,
-                ...this.state,
+                ...view,
             })
         );
+    }
+
+    muted(did: string | null): Set<string> {
+        return did ? this.sources.presence.moderation.muted(did) : new Set();
     }
 
     tick(): void {
         for (const v of [...this.viewers]) {
             if (!v.allowed()) {
-                this.log(`live: closed ${v.did ?? `a viewer from ${v.bbs}`}: access ended`);
-                v.peer.close(AccessEnded, 'access ended');
+                const why = v.why();
+                this.log(`live: closed ${v.did ?? `a viewer from ${v.bbs}`}: ${why}`);
+                v.peer.close(AccessEnded, why);
             }
         }
         if (!this.viewers.size) {
             return;
         }
+        const before = this.state;
         const next = buildState(this.sources, this.visits());
-        const change = diffState(this.state, next);
+        const shared = diffState(before, next);
         this.state = next;
-        if (!change) {
-            return;
-        }
-        this.seq++;
-        const text = JSON.stringify({ $type: `${this.nsid}.change`, version: LiveVersion, seq: this.seq, ...change });
+        const seq = this.seq + 1;
+        const message = (change: LiveChange) =>
+            JSON.stringify({ $type: `${this.nsid}.change`, version: LiveVersion, seq, ...change });
+        const sharedText = shared ? message(shared) : null;
+        const mutes = new Map<string, Set<string>>();
+        let sent = false;
         for (const v of [...this.viewers]) {
+            let muted: Set<string> = new Set();
+            if (v.muter) {
+                muted = mutes.get(v.muter) ?? this.muted(v.muter);
+                mutes.set(v.muter, muted);
+            }
+            let text: string | null;
+            if (!muted.size && v.view === before) {
+                text = sharedText;
+                v.view = next;
+            } else {
+                const view = hideMuted(next, muted);
+                const change = diffState(v.view, view);
+                text = change ? message(change) : null;
+                v.view = view;
+            }
+            if (!text) {
+                continue;
+            }
             //  a viewer who can't keep up falls behind alone
             if (v.peer.backlog() > MaxBacklog) {
                 v.peer.close(1013, 'too far behind');
                 continue;
             }
             v.peer.send(text);
+            sent = true;
+        }
+        if (sent) {
+            this.seq = seq;
         }
     }
 

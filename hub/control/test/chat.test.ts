@@ -2,8 +2,10 @@ import { afterEach, beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { createServer as createHttp, request, type Server } from 'node:http';
 import { createServer as createTcp, connect, type AddressInfo, type Server as TcpServer, type Socket } from 'node:net';
-import { Chat, chatHandle, chatNick, MinChatSecret, parseIrc, signBroker } from '../src/chat.ts';
+import { Chat, chatHandle, chatNick, ClientFrames, MinChatSecret, parseIrc, signBroker } from '../src/chat.ts';
+import { Moderation } from '../src/moderation.ts';
 import { ChatScript, ChatScriptPath } from '../src/chat_page.ts';
+import { WhoScript, WhoScriptPath } from '../src/moderation_page.ts';
 import { makeConfig, type HubConfig } from '../src/config.ts';
 import { chatCommand } from '../src/generate.ts';
 import { Presence } from '../src/presence.ts';
@@ -25,6 +27,23 @@ async function until(check: () => boolean, what: string): Promise<void> {
     }
     assert.fail(`timed out: ${what}`);
 }
+//  A WebSocket frame as a client sends it: masked, here with a key of zeros
+//  so what freeq echoes back can be read
+function frame(text: string, o: { fin?: boolean; opcode?: number; masked?: boolean; rsv?: number } = {}): Buffer {
+    const payload = Buffer.from(text);
+    const b0 = (false === o.fin ? 0 : 0x80) | (o.rsv ?? 0) | (o.opcode ?? 1);
+    const m = false === o.masked ? 0 : 0x80;
+    const head =
+        payload.length < 126
+            ? Buffer.from([b0, m | payload.length])
+            : Buffer.from([b0, m | 126, payload.length >> 8, payload.length & 255]);
+    return Buffer.concat([head, false === o.masked ? Buffer.alloc(0) : Buffer.alloc(4), payload]);
+}
+
+function answer(did: string): string {
+    return Buffer.from(JSON.stringify({ did, method: 'web-token', signature: 'token-1' })).toString('base64url');
+}
+
 const listening = (s: Server | TcpServer) =>
     new Promise<number>(resolve => s.listen(0, '127.0.0.1', () => resolve((s.address() as AddressInfo).port)));
 
@@ -168,12 +187,68 @@ describe('chat names', () => {
 
     it('reads IRC lines', () => {
         assert.deepEqual(parseIrc(':s 353 me = #space :@hub alice'), {
+            tags: {},
             prefix: 's',
             command: '353',
             params: ['me', '=', '#space', '@hub alice'],
         });
         assert.deepEqual(parseIrc('PING :abc').params, ['abc']);
         assert.equal(parseIrc('AUTHENTICATE xyz').command, 'AUTHENTICATE');
+        const tagged = parseIrc('@account=did:plc:x;time=2026-11-19T10:00:00.000Z;x=a\\sb :n!u@h PRIVMSG #space :hi there');
+        assert.deepEqual(tagged.tags, { account: 'did:plc:x', time: '2026-11-19T10:00:00.000Z', x: 'a b' });
+        assert.equal(tagged.command, 'PRIVMSG');
+        assert.deepEqual(tagged.params, ['#space', 'hi there']);
+    });
+});
+
+describe('what a chat client sends', () => {
+    const lines = (...l: string[]) => frame(l.map(x => `${x}\r\n`).join(''));
+
+    it('passes it on, signing in as the person it was let in for', () => {
+        const f = new ClientFrames(Member);
+        const sent = Buffer.concat([lines('CAP LS 302', 'NICK alice'), lines('AUTHENTICATE ATPROTO-CHALLENGE'), lines(`AUTHENTICATE ${answer(Member)}`)]);
+        assert.deepEqual(f.push(sent), sent);
+        assert.ok(f.push(lines('PRIVMSG #space :AUTHENTICATE me, please'))?.length);
+    });
+
+    it('waits for whole frames, however they arrive', () => {
+        const f = new ClientFrames(Member);
+        const sent = lines('NICK alice');
+        assert.equal(f.push(sent.subarray(0, 1))?.length, 0);
+        assert.equal(f.push(sent.subarray(1, 5))?.length, 0);
+        assert.deepEqual(f.push(sent.subarray(5)), sent);
+    });
+
+    it('refuses a sign-in as anyone else, however it is put', () => {
+        const signIn = (f: ClientFrames, ...l: string[]) => f.push(lines('AUTHENTICATE ATPROTO-CHALLENGE', ...l));
+        assert.equal(signIn(new ClientFrames(Member), `AUTHENTICATE ${answer(Stranger)}`), null);
+        assert.equal(signIn(new ClientFrames(Member), `@x=y AUTHENTICATE :${answer(Stranger)}`), null);
+        assert.equal(signIn(new ClientFrames(Member), `authenticate ${answer(Stranger)}`), null);
+        assert.equal(signIn(new ClientFrames(Member), 'AUTHENTICATE not-json'), null);
+        //  an answer in 400-byte chunks is read whole, as freeq does
+        const long = Buffer.from(JSON.stringify({ did: Stranger, method: 'web-token', signature: 'x'.repeat(400) })).toString('base64url');
+        const chunks = long.match(/.{1,400}/g) ?? [];
+        assert.ok(chunks.length > 1);
+        assert.equal(signIn(new ClientFrames(Member), ...chunks.map(c => `AUTHENTICATE ${c}`)), null);
+        const mine = Buffer.from(JSON.stringify({ did: Member, method: 'web-token', signature: 'x'.repeat(400) })).toString('base64url');
+        assert.ok(signIn(new ClientFrames(Member), ...(mine.match(/.{1,400}/g) ?? []).map(c => `AUTHENTICATE ${c}`)));
+        //  nothing before the challenge, and nothing freeq may split otherwise
+        assert.equal(new ClientFrames(Member).push(lines(`AUTHENTICATE ${answer(Member)}`)), null);
+        assert.equal(new ClientFrames(Member).push(frame(`NICK a\rAUTHENTICATE ${answer(Stranger)}\r\n`)), null);
+    });
+
+    it('refuses frames it could not read as freeq does', () => {
+        for (const bad of [
+            frame('NICK a\r\n', { masked: false }),
+            frame('NICK a\r\n', { fin: false }),
+            frame('NICK a\r\n', { opcode: 0 }),
+            frame('NICK a\r\n', { rsv: 0x40 }),
+            frame('NICK a\r\n', { opcode: 3 }),
+            Buffer.from([0x81, 0xff, 0, 0, 0, 1, 0, 0, 0, 0]),
+        ]) {
+            assert.equal(new ClientFrames(Member).push(bad), null, bad.toString('hex').slice(0, 8));
+        }
+        assert.ok(new ClientFrames(Member).push(frame('', { opcode: 9 })));
     });
 });
 
@@ -414,7 +489,18 @@ describe('chat through the hub', () => {
     });
 
     it('never puts text from others into the page as HTML', () => {
-        assert.doesNotMatch(ChatScript, /innerHTML|outerHTML|insertAdjacentHTML|document\.write|eval\(/);
+        for (const script of [ChatScript, WhoScript]) {
+            assert.doesNotMatch(script, /innerHTML|outerHTML|insertAdjacentHTML|document\.write|eval\(/);
+        }
+    });
+
+    it('serves muting and reporting, as a script, with the chat page', async () => {
+        const reply = await get(WhoScriptPath);
+        assert.equal(reply.status, 200);
+        assert.match(String(reply.headers['content-type']), /^text\/javascript/);
+        assert.doesNotThrow(() => new Function(reply.text));
+        const page = (await get('/space/chat', 'member-session')).text;
+        assert.ok(page.indexOf(WhoScriptPath) < page.indexOf(ChatScriptPath), 'loaded first');
     });
 
     it('names people by who signed in, for those allowed in', async () => {
@@ -426,6 +512,7 @@ describe('chat through the hub', () => {
         assert.deepEqual(JSON.parse(reply.text), {
             here: [{ did: Member, label: '@alice.bsky.social' }],
             labels: { [Member]: '@alice.bsky.social', [Stranger]: Stranger },
+            muted: [],
         });
         assert.equal((await get(query)).status, 401);
         assert.equal((await get(query, 'stranger-session')).status, 403);
@@ -479,8 +566,8 @@ describe('chat through the hub', () => {
         assert.equal(sent['x-forwarded-for'], '203.0.113.9');
         assert.equal(sent.cookie, undefined);
         assert.equal(sent.origin, undefined);
-        c.socket.write('frame');
-        await until(() => c.text().includes('echo:frame'), 'the echo');
+        c.socket.write(frame('PING :x\r\n'));
+        await until(() => c.text().includes('PING :x'), 'the echo');
         assert.equal(chat.connections(Member), 1);
     });
 
@@ -536,8 +623,8 @@ describe('chat through the hub', () => {
         const c = await open(undefined, { path: `/api/bbs/chat?${door}`, origin: null, auth: bbsToken });
         assert.match(c.status, / 101 /);
         assert.equal(freeq.upgrades[0]?.authorization, undefined, "the BBS's token stays with the hub");
-        c.socket.write('frame');
-        await until(() => c.text().includes('echo:frame'), 'the echo');
+        c.socket.write(frame('PING :x\r\n'));
+        await until(() => c.text().includes('PING :x'), 'the echo');
         assert.equal(chat.connections(Member), 1);
         assert.match((await open(undefined, { path: `/api/bbs/chat?${door}`, auth: bbsToken })).status, / 403 /);
         assert.match((await open(undefined, { path: `/api/bbs/chat?${door}`, origin: null, auth: 'wrong' })).status, / 401 /);
@@ -551,6 +638,114 @@ describe('chat through the hub', () => {
         chat.sweep();
         await until(() => c.socket.destroyed || c.socket.readableEnded, 'the connection to close');
         assert.equal(chat.connections(Member), 0);
+    });
+
+    it("closes a door that signs in as another of the BBS's members", async () => {
+        registry.proxyOpened('coolbbs', 'web', null);
+        const profiles = new Profiles(registry.db);
+        profiles.signedIn({ did: Member, handle: 'alice.bsky.social' });
+        profiles.signedIn({ did: Stranger, handle: 'bob.example' });
+        report([{ did: Member }, { did: Stranger }]);
+        presence.answer(Member, 'coolbbs', 'confirmed');
+        presence.answer(Stranger, 'coolbbs', 'confirmed');
+        const door = `bbs=coolbbs&did=${encodeURIComponent(Member)}`;
+        const c = await open(undefined, { path: `/api/bbs/chat?${door}`, origin: null, auth: bbsToken });
+        assert.match(c.status, / 101 /);
+        c.socket.write(frame('AUTHENTICATE ATPROTO-CHALLENGE\r\n'));
+        await until(() => freeq.received.includes('ATPROTO-CHALLENGE'), 'the challenge to reach freeq');
+        //  Bob's login, on Alice's door
+        c.socket.write(frame(`AUTHENTICATE ${answer(Stranger)}\r\n`));
+        await until(() => c.socket.destroyed || c.socket.readableEnded, 'the connection to close');
+        assert.equal(freeq.received.includes(answer(Stranger)), false, 'freeq never saw it');
+        assert.equal(chat.connections(Member), 0);
+    });
+
+    it('remembers what was said in the room for a while, and who said it', async () => {
+        const bot = [...freeq.botSockets][0] as Socket;
+        const at = new Date().toISOString();
+        bot.write(`@account=${Member};time=${at} :alice-1a2b!u@h PRIVMSG #space :hello\r\n`);
+        bot.write(':nobody!u@h PRIVMSG #elsewhere :not here\r\n');
+        bot.write(`@time=${new Date(Date.now() - 60 * 60_000).toISOString()} :old!u@h PRIVMSG #space :long ago\r\n`);
+        await until(() => chat.recentLines.length >= 2, 'the lines');
+        assert.deepEqual(chat.recent(), [{ did: Member, nick: 'alice-1a2b', text: 'hello', time: at }]);
+        assert.ok(freeq.botLines.includes('CAP REQ :sasl message-tags server-time account-tag'));
+    });
+
+    it("keeps someone the admin blocked from the room out of it, and tells them who", async () => {
+        const moderation = new Moderation(registry.db);
+        const c = await open('member-session');
+        const block = moderation.block(Member, 'room', { reason: 'flooding' });
+        chat.sweep();
+        await until(() => c.socket.destroyed || c.socket.readableEnded, 'the connection to close');
+        const refused = await post('/space/chat/token', 'member-session');
+        assert.equal(refused.status, 403);
+        assert.equal(refused.body.error, 'The admin of hub.test has blocked you from its chat room: flooding.');
+        assert.match((await get('/space/chat', 'member-session')).text, /blocked you from its chat room: flooding/);
+        assert.match((await open('member-session')).status, / 403 /);
+        //  the rest of the space is still theirs
+        assert.equal((await get('/space', 'member-session')).text.includes('blocked'), false);
+        moderation.unblock(block.id);
+        assert.equal((await post('/space/chat/token', 'member-session')).status, 200);
+    });
+
+    it('takes reports, with what was just said, and mutes for the one who mutes', async () => {
+        const profiles = new Profiles(registry.db);
+        profiles.signedIn({ did: Member, handle: 'alice.bsky.social' });
+        profiles.signedIn({ did: Stranger, handle: 'mallory.example' });
+        sessions.all.set('second-session', { did: Stranger, handle: 'mallory.example', expiresAt: Expires });
+        report([{ did: Member }, { did: Stranger }]);
+        await open('second-session');
+        const bot = [...freeq.botSockets][0] as Socket;
+        bot.write(`@account=${Stranger} :mallory!u@h PRIVMSG #space :something nasty\r\n`);
+        await until(() => chat.recentLines.length > 0, 'the line');
+
+        const form = (path: string, fields: Record<string, string>, cookie = 'member-session') =>
+            new Promise<{ status: number; body: Record<string, string> }>((resolve, reject) => {
+                const req = request(
+                    {
+                        host: '127.0.0.1',
+                        port,
+                        method: 'POST',
+                        path,
+                        agent: false,
+                        headers: {
+                            Host: Domain,
+                            Origin,
+                            Cookie: `hub_session=${cookie}`,
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                        },
+                    },
+                    res => {
+                        let text = '';
+                        res.on('data', d => (text += d));
+                        res.on('end', () => resolve({ status: res.statusCode ?? 0, body: JSON.parse(text || '{}') }));
+                    }
+                );
+                req.on('error', reject);
+                req.end(new URLSearchParams(fields).toString());
+            });
+        const mallory = `person:${Stranger}`;
+        assert.equal((await form('/space/report', { person: mallory, note: '' })).status, 400);
+        assert.equal((await form('/space/report', { person: 'person:nobody', note: 'x' })).status, 400);
+        assert.equal((await form('/space/report', { person: mallory, note: 'Rude.' })).status, 200);
+        const [filed] = new Moderation(registry.db).reports();
+        assert.equal(filed?.reporter, Member);
+        assert.equal(filed?.subject, Stranger);
+        assert.equal(filed?.label, '@mallory.example');
+        assert.deepEqual(
+            filed?.messages.map(m => [m.did, m.text]),
+            [[Stranger, 'something nasty']]
+        );
+
+        assert.equal((await form('/space/mute', { person: `person:${Member}` })).status, 400, 'not yourself');
+        assert.equal((await form('/space/mute', { person: 'person:did:web:hub.test' })).status, 404, 'not the hub');
+        assert.equal((await form('/space/mute', { person: mallory })).status, 200);
+        const mine = JSON.parse((await get('/space/chat/people', 'member-session')).text);
+        assert.deepEqual(mine.muted, [Stranger]);
+        assert.deepEqual(mine.here, []);
+        const theirs = JSON.parse((await get('/space/chat/people', 'second-session')).text);
+        assert.deepEqual(theirs.muted, []);
+        assert.match((await get('/me', 'member-session')).text, /People you muted[\s\S]*@mallory\.example/);
     });
 
     it('closes the connection on signing out', async () => {
@@ -568,8 +763,8 @@ describe('chat through the hub', () => {
         chat.sweep();
         await until(() => a.socket.destroyed || a.socket.readableEnded, 'the first to close');
         assert.equal(chat.connections(Stranger), 1);
-        b.socket.write('still');
-        await until(() => b.text().includes('echo:still'), 'the other to keep working');
+        b.socket.write(frame('PING :still\r\n'));
+        await until(() => b.text().includes('PING :still'), 'the other to keep working');
     });
 
     it('closes everyone when it loses the room, and takes it back', async () => {

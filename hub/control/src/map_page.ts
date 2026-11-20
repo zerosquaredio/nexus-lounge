@@ -8,8 +8,9 @@
 
 export const MapScriptPath = '/space/map.js';
 
-//  listHtml: who is around, from the server, for when the script can't run
-export function mapPageBody(listHtml: string, chat: boolean): string {
+//  listHtml: who is around, from the server, for when the script can't run;
+//  panel: muting and reporting someone (moderation_page.ts)
+export function mapPageBody(listHtml: string, chat: boolean, panel = ''): string {
     return `<style>
 .map { width: 100%; height: auto; display: block; border: 1px solid var(--line); border-radius: 4px; }
 .map text { fill: var(--fg); font: 13px ui-monospace, Consolas, monospace; }
@@ -31,6 +32,7 @@ export function mapPageBody(listHtml: string, chat: boolean): string {
 <p class="dim"><span id="map-status" role="status">Connecting…</span></p>
 <svg id="map" class="map" viewBox="0 0 800 520" role="img" aria-label="Map of the common space" hidden></svg>
 <div id="space-list" class="space-list" aria-live="polite">${listHtml}</div>
+${panel}
 <p class="hint">Only people who chose to be shown appear here. Open a board from this page and, with being
 shown on, others see you there while its window and this page stay open.</p>
 <p>${chat ? '<a href="/space/chat">Chat</a> · ' : ''}<a href="/me">Your profile</a> · <a href="/">The directory</a></p>
@@ -215,7 +217,17 @@ export const MapScript = String.raw`(function () {
                 h.appendChild(a);
             }
             list.appendChild(h);
-            list.appendChild(html('p', people.length ? people.map(function (x) { return x.label; }).join(', ') : 'Nobody here.', people.length ? '' : 'dim'));
+            var line = html('p', people.length ? '' : 'Nobody here.', people.length ? '' : 'dim');
+            people.forEach(function (x, i) {
+                if (i) { line.appendChild(document.createTextNode(', ')); }
+                if (x.id === you || !window.hubWho) { line.appendChild(document.createTextNode(x.label)); return; }
+                var b = html('button', x.label, 'who');
+                b.type = 'button';
+                b.title = 'Mute or report';
+                b.addEventListener('click', function () { window.hubWho.show(x.id, x.label); });
+                line.appendChild(b);
+            });
+            list.appendChild(line);
         });
     }
 
@@ -236,7 +248,9 @@ export const MapScript = String.raw`(function () {
             ws = null;
             if (4403 === e.code) {
                 stopped = true;
-                setStatus('You are no longer in the common space. Reload the page to try again.');
+                setStatus(/^blocked by /.test(e.reason || '')
+                    ? 'You were ' + e.reason + '. Reload the page to see why.'
+                    : 'You are no longer in the common space. Reload the page to try again.');
                 return;
             }
             retries = started ? 1 : retries + 1;

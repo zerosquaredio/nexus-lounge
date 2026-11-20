@@ -16,6 +16,8 @@ import { atClient } from './atproto.ts';
 import { Directory } from './directory.ts';
 import { fetchPublicJson } from './net.ts';
 import { isDid } from './rules.ts';
+import { describeSubject, Moderation, parseDuration, parseSubject, type Block } from './moderation.ts';
+import { Profiles } from './profiles.ts';
 
 const Usage = `Usage: node src/cli.ts [--config FILE] COMMAND
 
@@ -57,7 +59,40 @@ The hub's own AT account (it publishes observed status)
   hub-account show
   hub-account disconnect gives the session back and forgets the account
   observed               each BBS: what the hub sees, and what it published
+
+The common space: moderation (takes effect within seconds)
+  space block WHO [--room] [--for 30m|12h|7d] [--reason TEXT]
+                         WHO is a DID, user@bbs (a BBS member without an AT
+                         account) or *@bbs (all of that BBS's); from the whole
+                         space, or with --room only its chat; for good unless
+                         --for. They are told it was the hub's admin, and why
+  space unblock ID
+  space blocks [--all]   blocks in force (--all: lifted and ended ones too)
+  space reports [--all]  open reports (--all: closed ones too)
+  space report ID        one report, with what was said in the room
+  space close ID [--outcome TEXT]
+                         done with it: what was said is let go
+  space log [--limit N]  what was done, latest last
 `;
+
+//  options that take no value
+const Flags = new Set(['room', 'all']);
+
+//  What others wrote, safe to print to a terminal
+function plain(text: string): string {
+    return text.replace(/[\p{C}]+/gu, ' ');
+}
+
+function describeBlock(b: Block): string {
+    const state = b.liftedAt
+        ? `lifted ${b.liftedAt}`
+        : b.until && Date.parse(b.until) <= Date.now()
+          ? `ended ${b.until}`
+          : b.until
+            ? `until ${b.until}`
+            : 'for good';
+    return `#${b.id}  ${describeSubject(b.subject)}  ${b.scope}, ${state}${b.reason ? `  "${plain(b.reason)}"` : ''}`;
+}
 
 //  Wait for the browser to come back from approving, on 127.0.0.1 only
 function awaitCallback(port: number, path: string, timeoutMs: number): Promise<URLSearchParams> {
@@ -92,7 +127,9 @@ function parse(argv: string[]): { positional: string[]; options: Record<string, 
     const options: Record<string, string> = {};
     for (let i = 0; i < argv.length; i++) {
         const arg = argv[i] as string;
-        if (arg.startsWith('--')) {
+        if (arg.startsWith('--') && Flags.has(arg.slice(2))) {
+            options[arg.slice(2)] = 'true';
+        } else if (arg.startsWith('--')) {
             const value = argv[i + 1];
             if (undefined === value || value.startsWith('--')) {
                 throw new HubError('usage', `${arg} needs a value`);
@@ -349,6 +386,83 @@ export async function run(argv: string[]): Promise<void> {
                     console.log(`${o.name.padEnd(24)} ${now}; ${was}`);
                 }
                 return;
+            }
+            case 'space': {
+                const moderation = new Moderation(registry.db);
+                const what = need(positional, 1, 'block, unblock, blocks, reports, report, close or log');
+                const id = (): number => {
+                    const n = Number(need(positional, 2, 'ID'));
+                    if (!Number.isInteger(n) || n < 1) {
+                        throw new HubError('usage', 'An ID is a whole number');
+                    }
+                    return n;
+                };
+                if ('block' === what) {
+                    const subject = parseSubject(need(positional, 2, 'WHO'));
+                    const block = moderation.block(subject, options.room ? 'room' : 'space', {
+                        forMs: parseDuration(options.for ?? 'forever'),
+                        reason: options.reason ?? '',
+                    });
+                    console.log(describeBlock(block));
+                    return;
+                }
+                if ('unblock' === what) {
+                    console.log(describeBlock(moderation.unblock(id())));
+                    return;
+                }
+                if ('blocks' === what) {
+                    const all = moderation.blocks(!!options.all);
+                    if (!all.length) {
+                        console.log('No blocks.');
+                    }
+                    all.forEach(b => console.log(describeBlock(b)));
+                    return;
+                }
+                const profiles = new Profiles(registry.db);
+                const who = (did: string | null, nick: string) =>
+                    did ? (profiles.get(did)?.handle ? `@${profiles.get(did)?.handle}` : did) : `${plain(nick)} (unverified)`;
+                if ('reports' === what) {
+                    const all = moderation.reports(!!options.all);
+                    if (!all.length) {
+                        console.log('No reports.');
+                    }
+                    for (const r of all) {
+                        console.log(
+                            `#${r.id}  ${r.createdAt}  about ${plain(r.label)}  from ${who(r.reporter.startsWith('did:') ? r.reporter : null, r.reporter)}` +
+                                `${r.closedAt ? '  (closed)' : ''}`
+                        );
+                    }
+                    return;
+                }
+                if ('report' === what) {
+                    const r = moderation.mustGetReport(id());
+                    console.log(
+                        [
+                            `Report #${r.id}, ${r.createdAt}${r.closedAt ? `, closed ${r.closedAt}: ${plain(r.outcome ?? '')}` : ''}`,
+                            `  about   ${plain(r.label)}`,
+                            `  block   ${r.subject ? describeSubject(r.subject) : '(the hub could not tell)'}` +
+                                `${r.person.startsWith('person:via:') ? '  (a BBS says this is them; they never confirmed it)' : ''}`,
+                            `  from    ${r.reporter.startsWith('did:') ? who(r.reporter, '') : plain(r.reporter)}`,
+                            `  note    ${plain(r.note)}`,
+                            r.messages.length ? '  said in the room before it:' : '  nothing was said in the room before it',
+                            ...r.messages.map(m => `    ${m.time.slice(11, 19)}  ${who(m.did, m.nick)}: ${plain(m.text)}`),
+                        ].join('\n')
+                    );
+                    return;
+                }
+                if ('close' === what) {
+                    const r = moderation.closeReport(id(), options.outcome ?? '');
+                    console.log(`Closed report #${r.id}.`);
+                    return;
+                }
+                if ('log' === what) {
+                    const limit = Number(options.limit ?? 50);
+                    for (const e of moderation.history(Number.isInteger(limit) && limit > 0 ? limit : 50)) {
+                        console.log(`${e.at}  ${e.action.padEnd(12)} ${describeSubject(e.subject)}  ${plain(e.detail)}`);
+                    }
+                    return;
+                }
+                throw new HubError('usage', `Unknown space command "${what}"\n\n${Usage}`);
             }
             default:
                 throw new HubError('usage', `Unknown command "${command}"\n\n${Usage}`);

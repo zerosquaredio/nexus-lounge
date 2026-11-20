@@ -104,6 +104,9 @@ export interface HubConfig {
             maxConnections: number;
             //  how often access is checked for everyone connected
             checkSeconds: number;
+            //  how much of what was said a report carries (H18); kept only
+            //  in memory, by the hub's own connection to the room
+            reportMinutes: number;
         };
         //  the live model (H16), a stream of who is where, at /space/live
         live: {
@@ -172,6 +175,7 @@ export const Defaults: HubConfig = {
             dataDir: './data/chat',
             maxConnections: 5,
             checkSeconds: 30,
+            reportMinutes: 5,
         },
         live: { enabled: false, maxConnections: 5 },
     },
@@ -246,6 +250,9 @@ export function makeConfig(overrides: Partial<Record<keyof HubConfig, unknown>> 
     }
     if (!Number.isInteger(chat.maxConnections) || chat.maxConnections < 1 || !(chat.checkSeconds >= 1)) {
         throw new HubError('config', 'space.chat.maxConnections and checkSeconds are 1 or more');
+    }
+    if (!Number.isInteger(chat.reportMinutes) || chat.reportMinutes < 1 || chat.reportMinutes > 60) {
+        throw new HubError('config', 'space.chat.reportMinutes is 1 to 60');
     }
     const live = config.space.live;
     if ('boolean' !== typeof live.enabled) {

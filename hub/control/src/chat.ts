@@ -17,6 +17,12 @@
 //    - The room belongs to the hub. freeq keeps rooms in memory and gives a
 //      new room to whoever enters first, so after any restart the hub's bot
 //      takes the room back before anyone else is let in.
+//    - Each connection signs in as the person it was let in for, and nobody
+//      else. The hub reads what a client sends freeq (ClientFrames) and closes
+//      the connection if its sign-in names any other DID: a BBS holds logins
+//      for several of its members, and must not use one on another's door.
+//    - The hub's bot remembers what was said in the room for a few minutes,
+//      in memory only, so a report can carry it (H18, moderation.ts).
 
 import { createHash, createHmac } from 'node:crypto';
 import type { IncomingMessage } from 'node:http';
@@ -24,6 +30,7 @@ import { connect, isIP, type Socket } from 'node:net';
 import type { Duplex } from 'node:stream';
 import type { HubConfig } from './config.ts';
 import { HubError } from './errors.ts';
+import type { RecentMessage } from './moderation.ts';
 
 //  What the hub and freeq share (freeq's BROKER_SHARED_SECRET): kept out of
 //  config files
@@ -39,8 +46,17 @@ const BotNick = 'hub';
 const ConnectMs = 5_000;
 const BotHandshakeMs = 15_000;
 const MaxRetryMs = 30_000;
+//  what the bot remembers of the room, at most
+const MaxRecent = 1000;
+//  a client's frames to freeq: IRC lines, small
+const MaxClientFrame = 64 * 1024;
+//  a SASL answer, put back together from its chunks
+const MaxSaslAnswer = 8 * 1024;
+const SaslChunk = 400;
 
 export interface ChatHooks {
+    //  whether someone may be in the room (the space's join rule, and no
+    //  block from the room)
     mayJoin(did: string): boolean;
     //  whether a browser session is still signed in
     sessionValid(session: string): boolean;
@@ -102,9 +118,28 @@ export function signBroker(secret: string, timestamp: string, body: string): str
     return createHmac('sha256', secret).update(`ts=${timestamp}\n`).update(body).digest('base64url');
 }
 
-export function parseIrc(line: string): { prefix: string; command: string; params: string[] } {
-    let rest = line;
+const TagEscapes: Record<string, string> = { ':': ';', s: ' ', r: '\r', n: '\n', '\\': '\\' };
+
+export function parseIrc(line: string): {
+    tags: Record<string, string>;
+    prefix: string;
+    command: string;
+    params: string[];
+} {
+    let rest = line.trimStart();
     let prefix = '';
+    const tags: Record<string, string> = {};
+    if (rest.startsWith('@')) {
+        const space = rest.indexOf(' ');
+        for (const pair of (space < 0 ? rest.slice(1) : rest.slice(1, space)).split(';')) {
+            const eq = pair.indexOf('=');
+            const key = eq < 0 ? pair : pair.slice(0, eq);
+            if (key) {
+                tags[key] = eq < 0 ? '' : pair.slice(eq + 1).replace(/\\(.)/g, (_, c: string) => TagEscapes[c] ?? c);
+            }
+        }
+        rest = space < 0 ? '' : rest.slice(space + 1).trimStart();
+    }
     if (rest.startsWith(':')) {
         const space = rest.indexOf(' ');
         prefix = space < 0 ? rest.slice(1) : rest.slice(1, space);
@@ -116,7 +151,129 @@ export function parseIrc(line: string): { prefix: string; command: string; param
     if (colon >= 0) {
         words.push(rest.slice(0 === colon && rest.startsWith(':') ? 1 : colon + 2));
     }
-    return { prefix, command: (words.shift() ?? '').toUpperCase(), params: words };
+    return { tags, prefix, command: (words.shift() ?? '').toUpperCase(), params: words };
+}
+
+//  What a client sends freeq, read as WebSocket frames: each whole frame is
+//  checked before it goes on, and any sign-in in it must be for |did|. freeq
+//  ends every message with a line break and puts its SASL answer back
+//  together from 400-byte chunks; this does the same, and refuses anything
+//  it can't read the same way: fragments, extensions, stray carriage
+//  returns. push() gives the bytes to pass on, or null to close
+export class ClientFrames {
+    did: string;
+    buffer: Buffer = Buffer.alloc(0);
+    answer = '';
+    signingIn = false;
+
+    constructor(did: string) {
+        this.did = did;
+    }
+
+    push(chunk: Buffer): Buffer | null {
+        this.buffer = this.buffer.length ? Buffer.concat([this.buffer, chunk]) : chunk;
+        const out: Buffer[] = [];
+        while (this.buffer.length >= 2) {
+            const b0 = this.buffer[0] as number;
+            const b1 = this.buffer[1] as number;
+            let length = b1 & 0x7f;
+            let at = 2;
+            if (126 === length) {
+                if (this.buffer.length < 4) {
+                    break;
+                }
+                length = this.buffer.readUInt16BE(2);
+                at = 4;
+            } else if (127 === length) {
+                if (this.buffer.length < 10) {
+                    break;
+                }
+                const big = this.buffer.readBigUInt64BE(2);
+                length = big > BigInt(MaxClientFrame) ? MaxClientFrame + 1 : Number(big);
+                at = 10;
+            }
+            const opcode = b0 & 0x0f;
+            //  masked, no extensions, whole messages, nothing too big
+            if (!(b1 & 0x80) || b0 & 0x70 || length > MaxClientFrame || ![1, 2, 8, 9, 10].includes(opcode)) {
+                return null;
+            }
+            if (opcode <= 2 && !(b0 & 0x80)) {
+                return null;
+            }
+            const end = at + 4 + length;
+            if (this.buffer.length < end) {
+                break;
+            }
+            const frame = this.buffer.subarray(0, end);
+            if (opcode <= 2) {
+                const mask = frame.subarray(at, at + 4);
+                const payload = Buffer.from(frame.subarray(at + 4));
+                for (let i = 0; i < payload.length; i++) {
+                    payload[i] = (payload[i] as number) ^ (mask[i % 4] as number);
+                }
+                if (!this.message(payload.toString('utf8'))) {
+                    return null;
+                }
+            }
+            out.push(Buffer.from(frame));
+            this.buffer = this.buffer.subarray(end);
+        }
+        return Buffer.concat(out);
+    }
+
+    //  One message: lines, each checked
+    message(text: string): boolean {
+        for (const raw of text.split('\n')) {
+            const line = raw.endsWith('\r') ? raw.slice(0, -1) : raw;
+            if (/[\r\0]/.test(line) || !this.line(line)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    line(line: string): boolean {
+        const { command, params } = parseIrc(line);
+        if ('AUTHENTICATE' !== command) {
+            return true;
+        }
+        const param = params[0] ?? '';
+        if ('*' === param) {
+            this.answer = '';
+            return true;
+        }
+        if ('+' === param && !this.answer) {
+            return true;
+        }
+        if ('ATPROTO-CHALLENGE' === param.toUpperCase()) {
+            this.signingIn = true;
+            this.answer = '';
+            return true;
+        }
+        if (!this.signingIn) {
+            return false;
+        }
+        if ('+' !== param) {
+            if (!/^[A-Za-z0-9+/=_-]+$/.test(param)) {
+                return false;
+            }
+            this.answer += param;
+            if (this.answer.length > MaxSaslAnswer) {
+                return false;
+            }
+            if (param.length >= SaslChunk) {
+                return true;
+            }
+        }
+        const answer = this.answer;
+        this.answer = '';
+        try {
+            const said = JSON.parse(Buffer.from(answer, 'base64').toString('utf8')) as { did?: unknown };
+            return said?.did === this.did;
+        } catch {
+            return false;
+        }
+    }
 }
 
 export class Chat {
@@ -133,6 +290,8 @@ export class Chat {
     retries = 0;
     retryTimer: NodeJS.Timeout | null = null;
     sweepTimer: NodeJS.Timeout | null = null;
+    //  what was said in the room lately, oldest first
+    recentLines: RecentMessage[] = [];
 
     constructor(config: HubConfig, secret: string, log: (line: string) => void = () => {}) {
         if (secret.length < MinChatSecret) {
@@ -233,6 +392,17 @@ export class Chat {
             side.once('close', close);
             side.once('error', close);
         }
+        const frames = new ClientFrames(person.did);
+        const pass = (chunk: Buffer): void => {
+            const ok = frames.push(chunk);
+            if (!ok) {
+                this.log(`chat: closed ${person.did}: its sign-in was not theirs, or freeq could read it otherwise`);
+                return close();
+            }
+            if (ok.length) {
+                upstream.write(ok);
+            }
+        };
         upstream.once('connect', () => {
             upstream.setTimeout(0);
             //  only what freeq needs: no cookies, nothing else from the browser
@@ -242,11 +412,11 @@ export class Chat {
                     `Upgrade: websocket\r\nSec-WebSocket-Version: 13\r\nSec-WebSocket-Key: ${key}\r\n` +
                     `${forwarded}\r\n`
             );
-            if (head.length) {
-                upstream.write(head);
-            }
             upstream.pipe(client);
-            client.pipe(upstream);
+            if (head.length) {
+                pass(head);
+            }
+            client.on('data', pass);
         });
         return null;
     }
@@ -259,6 +429,20 @@ export class Chat {
                 !this.hooks.mayJoin(person.did),
             'access ended'
         );
+    }
+
+    //  What was said in the room in the last few minutes
+    recent(): RecentMessage[] {
+        const since = new Date(Date.now() - this.chat.reportMinutes * 60_000).toISOString();
+        this.recentLines = this.recentLines.filter(m => m.time >= since);
+        return [...this.recentLines];
+    }
+
+    heard(m: RecentMessage): void {
+        this.recentLines.push(m);
+        if (this.recentLines.length > MaxRecent) {
+            this.recentLines.splice(0, this.recentLines.length - MaxRecent);
+        }
     }
 
     //  Who is connected now
@@ -358,8 +542,19 @@ export class Chat {
         };
         const handshake = setTimeout(() => fail('the hub could not take the room in time'), BotHandshakeMs);
         const onLine = (line: string) => {
-            const { command, params } = parseIrc(line);
+            const { tags, prefix, command, params } = parseIrc(line);
             switch (command) {
+                case 'PRIVMSG':
+                    if (params[0]?.toLowerCase() === room) {
+                        const time = tags.time && !Number.isNaN(Date.parse(tags.time)) ? tags.time : undefined;
+                        this.heard({
+                            did: tags.account || null,
+                            nick: (prefix.split('!')[0] ?? '').slice(0, 64),
+                            text: (params[1] ?? '').slice(0, 1000),
+                            time: (time ? new Date(time) : new Date()).toISOString(),
+                        });
+                    }
+                    return;
                 case 'PING':
                     return send(`PONG :${params.at(-1) ?? ''}`);
                 case 'CAP':
@@ -406,7 +601,8 @@ export class Chat {
             send('CAP LS 302');
             send(`NICK ${BotNick}`);
             send(`USER ${BotNick} 0 * :${this.config.domain}`);
-            send('CAP REQ :sasl');
+            //  the tags say who said what, for reports
+            send('CAP REQ :sasl message-tags server-time account-tag');
         });
         socket.on('data', (chunk: string) => {
             buffer += chunk;

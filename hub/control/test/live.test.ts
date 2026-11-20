@@ -5,7 +5,8 @@ import { request, type Server } from 'node:http';
 import { connect, type AddressInfo, type Socket } from 'node:net';
 import type { Chat } from '../src/chat.ts';
 import { makeConfig, type HubConfig } from '../src/config.ts';
-import { AccessEnded, buildState, diffState, personId, type LiveState } from '../src/live.ts';
+import { AccessEnded, buildState, diffState, hideMuted, personId, type LiveState } from '../src/live.ts';
+import { Moderation } from '../src/moderation.ts';
 import { Presence, type ReportedMember } from '../src/presence.ts';
 import { Profiles } from '../src/profiles.ts';
 import { Registry } from '../src/registry.ts';
@@ -195,6 +196,83 @@ describe('the live model', () => {
         assert.equal(presence.doorAccess(registry.mustGet('coolbbs'), null, 'dave'), null);
     });
 
+    it("leaves out anyone the hub's admin blocked, however they are reported", () => {
+        const { registry, profiles, presence } = setup({ vouchedFrom: ['coolbbs'] });
+        presence.report(registry.mustGet('coolbbs'), [
+            member(Alice, 'Alice'),
+            member(Bob, 'Bob'),
+            member(null, 'Dave', 'dave'),
+            member(null, 'Erin', 'erin'),
+        ]);
+        profiles.signedIn({ did: Alice, handle: 'alice.example' });
+        profiles.setPresence(Alice, true);
+        presence.answer(Alice, 'coolbbs', 'confirmed');
+        const cool = registry.mustGet('coolbbs');
+        const shown = () => presence.around().map(p => p.label).sort();
+        assert.deepEqual(shown(), ['@alice.example', 'Bob via coolbbs', 'Dave@coolbbs', 'Erin@coolbbs']);
+        const moderation = presence.moderation;
+        //  Bob by his DID: also as the BBS's word about him
+        moderation.block(Bob, 'space');
+        moderation.block('user:coolbbs:dave', 'space');
+        assert.deepEqual(shown(), ['@alice.example', 'Erin@coolbbs']);
+        assert.equal(presence.mayJoin(Bob), false);
+        assert.equal(presence.doorAccess(cool, Bob, null), null);
+        assert.equal(presence.memberBlock('coolbbs', Bob, null)?.subject, Bob);
+        assert.equal(presence.doorAccess(cool, null, 'Dave'), null);
+        assert.equal(presence.memberBlock('coolbbs', null, 'Dave')?.subject, 'user:coolbbs:dave');
+        //  all of coolbbs's members without AT accounts
+        moderation.block('vouched:coolbbs', 'space');
+        assert.deepEqual(shown(), ['@alice.example']);
+        assert.equal(presence.doorAccess(cool, null, 'erin'), null);
+        //  from the room only: still in the space
+        moderation.block(Alice, 'room');
+        assert.deepEqual(shown(), ['@alice.example']);
+        assert.equal(presence.mayJoin(Alice), true);
+        assert.equal(presence.mayChat(Alice), false);
+        assert.equal(presence.doorAccess(cool, Alice, null)?.chat, true, 'still known as herself');
+        assert.deepEqual(
+            presence.around().map(p => p.subject).sort(),
+            [Alice]
+        );
+    });
+
+    it('lets a block for a time run out, and a lifted one stop', () => {
+        const { registry, config, profiles } = setup();
+        let clock = Date.parse('2026-11-19T12:00:00.000Z');
+        const presence = new Presence(registry, config, profiles, null, () => clock);
+        presence.report(registry.mustGet('coolbbs'), [member(Bob, 'Bob')]);
+        const block = presence.moderation.block(Bob, 'space', { forMs: 60 * 60_000 });
+        assert.equal(block.until, '2026-11-19T13:00:00.000Z');
+        assert.equal(presence.mayJoin(Bob), false);
+        clock += 60 * 60_000;
+        assert.equal(presence.mayJoin(Bob), true);
+        const forGood = presence.moderation.block(Bob, 'space');
+        assert.equal(presence.mayJoin(Bob), false);
+        presence.moderation.unblock(forGood.id);
+        assert.equal(presence.mayJoin(Bob), true);
+    });
+
+    it('hides only the people a viewer muted', () => {
+        const state: LiveState = {
+            entities: [
+                { id: 'person:a', type: 'person', label: 'a', did: null, kind: 'via' },
+                { id: 'person:b', type: 'person', label: 'b', did: null, kind: 'via' },
+            ],
+            presence: [
+                { id: 'person:a@room:x', person: 'person:a', place: 'room:x', since: null, source: 'chat' },
+                { id: 'person:b@room:x', person: 'person:b', place: 'room:x', since: null, source: 'chat' },
+            ],
+            groups: [{ id: 'group:room:x', place: 'room:x', members: ['person:a', 'person:b'] }],
+            links: [],
+        };
+        assert.equal(hideMuted(state, new Set()), state);
+        const view = hideMuted(state, new Set(['person:a']));
+        assert.deepEqual(view.entities.map(e => e.id), ['person:b']);
+        assert.deepEqual(view.presence.map(p => p.person), ['person:b']);
+        assert.deepEqual(view.groups[0]?.members, ['person:b']);
+        assert.equal(state.entities.length, 2, 'the shared state is left alone');
+    });
+
     it('sends only what changed', () => {
         const empty: LiveState = { entities: [], presence: [], groups: [], links: [] };
         const one: LiveState = {
@@ -214,6 +292,9 @@ class Client {
     status = '';
     messages: unknown[] = [];
     closeCode: number | null = null;
+    closeReason = '';
+    //  what came with a refusal
+    body = '';
     pongs = 0;
     closed = false;
     buffer = Buffer.alloc(0);
@@ -240,6 +321,14 @@ class Client {
                     }
                     this.status = this.buffer.subarray(0, end).toString().split('\r\n')[0] ?? '';
                     this.buffer = this.buffer.subarray(end + 4);
+                    if (!/ 101 /.test(this.status)) {
+                        this.socket.on('data', (more: Buffer) => (this.body += more.toString()));
+                        this.body = this.buffer.toString();
+                        this.buffer = Buffer.alloc(0);
+                        this.upgraded = true;
+                        resolve(this.status);
+                        return;
+                    }
                     this.upgraded = true;
                     resolve(this.status);
                 }
@@ -279,6 +368,7 @@ class Client {
                 this.messages.push(JSON.parse(payload.toString()));
             } else if (8 === op) {
                 this.closeCode = payload.length >= 2 ? payload.readUInt16BE(0) : null;
+                this.closeReason = payload.subarray(2).toString();
             } else if (10 === op) {
                 this.pongs++;
             }
@@ -596,6 +686,154 @@ describe('the live model on the site', () => {
         ] as const) {
             assert.match(await door(query, options).ready, expected, query);
         }
+    });
+
+    function post(path: string, session: string, fields: Record<string, string>): Promise<{ status: number; body: string; location?: string }> {
+        return new Promise((resolve, reject) => {
+            const req = request(
+                {
+                    host: '127.0.0.1',
+                    port,
+                    method: 'POST',
+                    path,
+                    agent: false,
+                    headers: {
+                        Host: Domain,
+                        Origin,
+                        Cookie: `hub_session=${session}`,
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                    },
+                },
+                res => {
+                    let body = '';
+                    res.on('data', d => (body += d));
+                    res.on('end', () =>
+                        resolve({ status: res.statusCode ?? 0, body, location: res.headers.location as string | undefined })
+                    );
+                }
+            );
+            req.on('error', reject);
+            req.end(new URLSearchParams(fields).toString());
+        });
+    }
+
+    function asBbs(path: string, body: unknown): Promise<{ status: number; body: Record<string, unknown> }> {
+        return new Promise((resolve, reject) => {
+            const req = request(
+                {
+                    host: '127.0.0.1',
+                    port,
+                    method: 'POST',
+                    path,
+                    agent: false,
+                    headers: { Host: Domain, Authorization: `Bearer ${bbsToken}`, 'Content-Type': 'application/json' },
+                },
+                res => {
+                    let text = '';
+                    res.on('data', d => (text += d));
+                    res.on('end', () => resolve({ status: res.statusCode ?? 0, body: JSON.parse(text || '{}') }));
+                }
+            );
+            req.on('error', reject);
+            req.end(JSON.stringify(body));
+        });
+    }
+
+    it("closes a blocked person's stream and door, and tells them who blocked them", async () => {
+        const c = open({ session: 'alice-session' });
+        const d = door(`bbs=coolbbs&did=${encodeURIComponent(Alice)}`);
+        await until(() => c.messages.length > 0 && d.messages.length > 0, 'the snapshots');
+        const bob = open({ session: 'bob-session' });
+        await until(() => bob.messages.length > 0, "Bob's snapshot");
+        new Moderation(registry.db).block(Alice, 'space', { reason: 'spam' });
+        await until(() => c.closed && d.closed, 'both to close');
+        assert.equal(c.closeCode, AccessEnded);
+        assert.equal(c.closeReason, 'blocked by the admin of hub.test');
+        assert.equal(d.closeReason, 'blocked by the admin of hub.test');
+        //  and gone for everyone else
+        await until(
+            () => bob.messages.some(m => ((m as { remove?: { entities?: string[] } }).remove?.entities ?? []).includes(`person:${Alice}`)),
+            'Alice gone from what Bob sees'
+        );
+        const again = door(`bbs=coolbbs&did=${encodeURIComponent(Alice)}`);
+        assert.match(await again.ready, / 403 /);
+        await until(() => again.body.length > 0, 'why');
+        assert.equal(JSON.parse(again.body).error, 'The admin of hub.test has blocked you from its common space: spam.');
+        assert.match((await get('/space', 'alice-session')).body, /blocked you from its common space: spam/);
+        assert.match((await get('/me', 'alice-session')).body, /blocked you from its common space: spam/);
+        assert.match(await open({ session: 'alice-session' }).ready, / 403 /);
+    });
+
+    it('hides someone from whoever muted them, and from nobody else', async () => {
+        const alice = open({ session: 'alice-session' });
+        const bob = open({ session: 'bob-session' });
+        await until(() => alice.messages.length > 0 && bob.messages.length > 0, 'the snapshots');
+        const bobId = personId({ kind: 'via', did: null, bbs: 'coolbbs', label: 'Bob via coolbbs' });
+        assert.ok((alice.messages[0] as LiveState).entities.some(e => e.id === bobId));
+
+        assert.equal((await post('/space/mute', 'alice-session', { person: `person:${Alice}` })).status, 400);
+        assert.equal((await post('/space/mute', 'alice-session', { person: 'person:via:coolbbs:000000000000' })).status, 404);
+        assert.equal((await post('/space/mute', 'alice-session', { person: bobId })).status, 200);
+        await until(
+            () => alice.messages.some(m => ((m as { remove?: { entities?: string[] } }).remove?.entities ?? []).includes(bobId)),
+            'Bob gone for Alice'
+        );
+        assert.equal(bob.messages.length, 1, 'Bob sees no change, and is not told');
+        const page = (await get('/me', 'alice-session')).body;
+        assert.match(page, /People you muted[\s\S]*Bob via coolbbs/);
+
+        //  a fresh stream starts without him too
+        const later = open({ session: 'alice-session' });
+        await until(() => later.messages.length > 0, 'the snapshot');
+        assert.equal((later.messages[0] as LiveState).entities.some(e => e.id === bobId), false);
+        later.socket.destroy();
+
+        const back = await post('/me/unmute', 'alice-session', { person: bobId });
+        assert.equal(back.status, 303);
+        await until(
+            () => alice.messages.some(m => ((m as { put?: { entities?: { id: string }[] } }).put?.entities ?? []).some(e => e.id === bobId)),
+            'Bob back for Alice'
+        );
+    });
+
+    it("lets a member mute and report from their BBS's door, as themselves", async () => {
+        const bobId = personId({ kind: 'via', did: null, bbs: 'coolbbs', label: 'Bob via coolbbs' });
+        const d = door(`bbs=coolbbs&did=${encodeURIComponent(Alice)}`);
+        await until(() => d.messages.length > 0, 'the snapshot');
+        const aliceDoor = `/api/bbs/mute?bbs=coolbbs&did=${encodeURIComponent(Alice)}`;
+        assert.equal((await asBbs(aliceDoor, { person: bobId })).status, 200);
+        await until(
+            () => d.messages.some(m => ((m as { remove?: { entities?: string[] } }).remove?.entities ?? []).includes(bobId)),
+            'Bob gone from her door'
+        );
+        const listed = await new Promise<{ status: number; body: { mutes: { person: string; label: string }[] } }>((resolve, reject) => {
+            const req = request(
+                {
+                    host: '127.0.0.1',
+                    port,
+                    path: `/api/bbs/mutes?bbs=coolbbs&did=${encodeURIComponent(Alice)}`,
+                    agent: false,
+                    headers: { Host: Domain, Authorization: `Bearer ${bbsToken}` },
+                },
+                res => {
+                    let text = '';
+                    res.on('data', d => (text += d));
+                    res.on('end', () => resolve({ status: res.statusCode ?? 0, body: JSON.parse(text) }));
+                }
+            );
+            req.on('error', reject);
+            req.end();
+        });
+        assert.deepEqual(listed.body.mutes, [{ person: bobId, label: 'Bob via coolbbs' }]);
+                //  Bob hasn't confirmed coolbbs: coolbbs can't mute for him
+        const bobDoor = `bbs=coolbbs&did=${encodeURIComponent(Bob)}`;
+        assert.equal((await asBbs(`/api/bbs/mute?${bobDoor}`, { person: `person:${Alice}` })).status, 403);
+        //  but anyone in the space can report
+        assert.equal((await asBbs(`/api/bbs/report?${bobDoor}`, { person: `person:${Alice}`, note: 'Rude.' })).status, 200);
+        const [filed] = new Moderation(registry.db).reports();
+        assert.equal(filed?.reporter, bobId);
+        assert.equal(filed?.subject, Alice);
+        assert.equal((await asBbs(`/api/bbs/report?${bobDoor}`, 'nonsense')).status, 400);
     });
 
     it('closes a door when the BBS stops reporting the member', async () => {

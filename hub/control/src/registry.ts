@@ -39,7 +39,7 @@ interface BbsRow {
     open_proxies: number;
 }
 
-const SchemaVersion = 5;
+const SchemaVersion = 6;
 
 const Schema = `
 CREATE TABLE IF NOT EXISTS bbs (
@@ -155,6 +155,45 @@ CREATE TABLE IF NOT EXISTS profile_bbs (
     answer     TEXT NOT NULL,
     answered_at TEXT NOT NULL,
     PRIMARY KEY (did, bbs)
+);
+--  moderation of the common space (schema 6, moderation.ts): the hub
+--  admin's blocks, each person's own mutes, reports with what was just said
+--  in the room, and a record of what was done
+CREATE TABLE IF NOT EXISTS space_block (
+    id         INTEGER PRIMARY KEY,
+    subject    TEXT NOT NULL,
+    scope      TEXT NOT NULL CHECK (scope IN ('space', 'room')),
+    reason     TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    until      INTEGER,
+    lifted_at  TEXT
+);
+CREATE INDEX IF NOT EXISTS space_block_subject ON space_block (subject);
+CREATE TABLE IF NOT EXISTS space_mute (
+    did        TEXT NOT NULL,
+    person     TEXT NOT NULL,
+    label      TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    PRIMARY KEY (did, person)
+);
+CREATE TABLE IF NOT EXISTS space_report (
+    id         INTEGER PRIMARY KEY,
+    reporter   TEXT NOT NULL,
+    person     TEXT NOT NULL,
+    subject    TEXT,
+    label      TEXT NOT NULL,
+    note       TEXT NOT NULL,
+    messages   TEXT NOT NULL,
+    created_at TEXT NOT NULL,
+    closed_at  TEXT,
+    outcome    TEXT
+);
+CREATE TABLE IF NOT EXISTS moderation_log (
+    id      INTEGER PRIMARY KEY,
+    at      TEXT NOT NULL,
+    action  TEXT NOT NULL,
+    subject TEXT NOT NULL,
+    detail  TEXT NOT NULL DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS web_session (
     token_hash TEXT PRIMARY KEY,

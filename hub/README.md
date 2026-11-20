@@ -111,6 +111,13 @@ same stream, and the chat room, for its members, with its tunnel token:
 `/api/bbs/live`, `/api/bbs/chat/token` and `/api/bbs/chat`. Only members
 who confirmed that BBS at the hub can chat from it.
 
+Moderation (H18): the admin blocks people from the space or its room with
+`node src/cli.ts space block`, and reads reports with `space reports` and
+`space report ID`. A report carries what was said in the room in the last
+`space.chat.reportMinutes`. Anyone in the space can mute someone for
+themselves, from the map or chat page, or `/mute` in a BBS's door. See
+`node src/cli.ts help`.
+
 ### Observed status
 
 The hub publishes whether each BBS's tunnel is up, from its own AT account,
