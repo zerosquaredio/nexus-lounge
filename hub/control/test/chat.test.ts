@@ -289,6 +289,25 @@ describe('chat config', () => {
     it('needs a real secret', () => {
         assert.throws(() => new Chat(makeConfig(), 'short'), /HUB_CHAT_SECRET/);
     });
+
+    it("knows when someone in the room last did something there (H19)", () => {
+        const chat = new Chat(makeConfig(), Secret);
+        const link = (did: string, since: string) =>
+            ({ person: { did }, since }) as unknown as Parameters<typeof chat.links.add>[0];
+        assert.equal(chat.activeAt(SysopDid), null);
+        chat.links.add(link(SysopDid, '2026-01-01T10:00:00.000Z'));
+        chat.links.add(link(SysopDid, '2026-01-01T10:05:00.000Z'));
+        //  connecting counts: the latest connection still open
+        assert.equal(chat.activeAt(SysopDid), Date.parse('2026-01-01T10:05:00.000Z'));
+        //  and so does speaking
+        chat.heard({ did: SysopDid, nick: 'a', text: 'hi', time: '2026-01-01T10:20:00.000Z' });
+        chat.heard({ did: OtherSysopDid, nick: 'b', text: 'hi', time: '2026-01-01T10:30:00.000Z' });
+        assert.equal(chat.activeAt(SysopDid), Date.parse('2026-01-01T10:20:00.000Z'));
+        //  someone not connected isn't active, whatever they said before
+        assert.equal(chat.activeAt(OtherSysopDid), null);
+        chat.links.clear();
+        assert.equal(chat.activeAt(SysopDid), null);
+    });
 });
 
 describe('chat through the hub', () => {

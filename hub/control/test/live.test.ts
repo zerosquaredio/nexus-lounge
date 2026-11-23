@@ -453,6 +453,29 @@ describe('the live model on the site', () => {
         });
     }
 
+    function reportFor(members: ReportedMember[]): Promise<{ status: number; body: Record<string, unknown> }> {
+        const body = JSON.stringify({ bbs: 'coolbbs', members });
+        return new Promise((resolve, reject) => {
+            const req = request(
+                {
+                    host: '127.0.0.1',
+                    port,
+                    method: 'POST',
+                    path: '/api/bbs/presence',
+                    agent: false,
+                    headers: { Host: Domain, Authorization: `Bearer ${bbsToken}`, 'Content-Type': 'application/json' },
+                },
+                res => {
+                    let text = '';
+                    res.on('data', d => (text += d));
+                    res.on('end', () => resolve({ status: res.statusCode ?? 0, body: JSON.parse(text) }));
+                }
+            );
+            req.on('error', reject);
+            req.end(body);
+        });
+    }
+
     function get(path: string, session?: string): Promise<{ status: number; headers: Record<string, unknown>; body: string }> {
         return new Promise((resolve, reject) => {
             const req = request(
@@ -543,6 +566,42 @@ describe('the live model on the site', () => {
         await until(() => c.messages.length > 2, 'Alice leaving');
         const gone = c.messages[2] as { remove: Record<string, string[]> };
         assert.deepEqual(gone.remove.entities, [`person:${Alice}`]);
+    });
+
+    it("tells a BBS which of its members are busy in the space, and since when (H19)", async () => {
+        const everyone = [member(Alice, 'Alice'), member(Bob, 'Bob'), member(Carol, 'Carol')];
+        const active = async () =>
+            ((await reportFor(everyone)).body.active as { did: string; activeAt: string }[]).map(a => a.did);
+        //  nobody has the hub open
+        assert.deepEqual(await active(), []);
+
+        const c = open({ session: 'alice-session' });
+        await until(() => c.messages.length > 0, 'the snapshot');
+        const first = (await reportFor(everyone)).body.active as { did: string; activeAt: string }[];
+        assert.deepEqual(first.map(a => a.did), [Alice]);
+        assert.ok(Math.abs(Date.parse(first[0]?.activeAt ?? '') - Date.now()) < 5000);
+
+        //  opening a board from the map is an action
+        await wait(30);
+        at(c, 'leaf:coolbbs');
+        await wait(100);
+        const later = (await reportFor(everyone)).body.active as { did: string; activeAt: string }[];
+        assert.ok(Date.parse(later[0]?.activeAt ?? '') > Date.parse(first[0]?.activeAt ?? ''));
+
+        //  only members this BBS reported: Carol isn't one here
+        const other = (await reportFor([member(Bob, 'Bob')])).body.active;
+        assert.deepEqual(other, []);
+
+        //  someone with their presence off isn't told about
+        profiles.setPresence(Alice, false);
+        assert.deepEqual(await active(), []);
+        profiles.setPresence(Alice, true);
+        assert.deepEqual(await active(), [Alice]);
+
+        //  and once they close the page, they aren't busy here
+        c.socket.destroy();
+        await wait(50);
+        assert.deepEqual(await active(), []);
     });
 
     it('closes the stream when access ends', async () => {

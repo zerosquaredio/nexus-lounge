@@ -293,6 +293,8 @@ interface Viewer {
     //  the board they say they have open from the hub's page, and since when
     at: string | null;
     atSince: string;
+    //  their last action here (connecting, opening a board), for H19
+    acted: number;
     said: number[];
 }
 
@@ -428,7 +430,7 @@ export class Live {
         }
         const peer = acceptWebSocket(req, socket, head);
         const view = hideMuted(this.state, this.muted(who.muter));
-        const v: Viewer = { ...who, view, peer, at: null, atSince: '', said: [] };
+        const v: Viewer = { ...who, view, peer, at: null, atSince: '', said: [], acted: this.now() };
         this.viewers.add(v);
         peer.onClose(() => {
             this.viewers.delete(v);
@@ -533,11 +535,19 @@ export class Live {
         } else if (null !== place) {
             return;
         }
+        v.acted = this.now();
         if (at !== v.at) {
             v.at = at;
             v.atSince = new Date(this.now()).toISOString();
             this.poke();
         }
+    }
+
+    //  When someone with the hub's page open last did something there, or
+    //  null if they have none open (H19)
+    activeAt(did: string): number | null {
+        const mine = [...this.viewers].filter(v => v.did === did);
+        return mine.length ? Math.max(...mine.map(v => v.acted)) : null;
     }
 
     //  Boards people have open from the hub's page, by their own word

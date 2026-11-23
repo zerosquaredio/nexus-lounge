@@ -55,7 +55,7 @@ import type { AtClient } from './atproto.ts';
 import type { Directory, DirectoryEntry } from './directory.ts';
 import type { Listing } from './listing.ts';
 import { Profiles, type Profile } from './profiles.ts';
-import { parseReport, Presence, type DoorAccess } from './presence.ts';
+import { parseReport, Presence, type DoorAccess, type ReportedMember } from './presence.ts';
 import { isDid, labelForHost } from './rules.ts';
 import {
     CallbackPath,
@@ -510,6 +510,26 @@ the name the BBS gives, never as your own account.</p>
         res.end(JSON.stringify(body));
     }
 
+    //  Which of a BBS's reported members are in the common space now, and
+    //  when they last did something there (H19): so the BBS doesn't log them
+    //  off while they are busy here. Only people allowed in, with their
+    //  presence on, and only by the DID the BBS itself reported
+    function activeMembers(members: ReportedMember[]): { did: string; activeAt: string }[] {
+        const out: { did: string; activeAt: string }[] = [];
+        for (const m of members) {
+            if (!m.did || !presence?.mayJoin(m.did) || false === profiles?.get(m.did)?.presence) {
+                continue;
+            }
+            const times = [live?.activeAt(m.did) ?? null, chat?.activeAt?.(m.did) ?? null].filter(
+                (t): t is number => null !== t
+            );
+            if (times.length) {
+                out.push({ did: m.did, activeAt: new Date(Math.max(...times)).toISOString() });
+            }
+        }
+        return out;
+    }
+
     //  A BBS reports its members (F18): authenticated by its tunnel token,
     //  and speaking only for itself
     async function presenceReport(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -537,7 +557,7 @@ the name the BBS gives, never as your own account.</p>
             const members = parseReport(body);
             presence.report(bbs, members);
             live?.poke();
-            return json(res, 200, { ok: true, members: members.length });
+            return json(res, 200, { ok: true, members: members.length, active: activeMembers(members) });
         } catch (e) {
             if (e instanceof HubError) {
                 return json(res, 400, { error: e.message });

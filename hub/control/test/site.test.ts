@@ -544,7 +544,7 @@ describe('presence on the site', () => {
 
         const ok = await postReport(aliceOn(), token);
         assert.equal(ok.status, 200);
-        assert.deepEqual(JSON.parse(ok.body), { ok: true, members: 1 });
+        assert.deepEqual(JSON.parse(ok.body), { ok: true, members: 1, active: [] });
 
         assert.equal((await postReport({ bbs: 'coolbbs', members: [{ did: 'nope' }] }, token)).status, 400);
         registry.setState('coolbbs', 'suspended');

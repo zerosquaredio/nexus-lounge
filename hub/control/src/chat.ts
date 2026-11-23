@@ -292,6 +292,8 @@ export class Chat {
     sweepTimer: NodeJS.Timeout | null = null;
     //  what was said in the room lately, oldest first
     recentLines: RecentMessage[] = [];
+    //  when each person last spoke in the room, by DID (H19)
+    spoke = new Map<string, number>();
 
     constructor(config: HubConfig, secret: string, log: (line: string) => void = () => {}) {
         if (secret.length < MinChatSecret) {
@@ -439,6 +441,9 @@ export class Chat {
     }
 
     heard(m: RecentMessage): void {
+        if (m.did) {
+            this.spoke.set(m.did, Date.parse(m.time) || Date.now());
+        }
         this.recentLines.push(m);
         if (this.recentLines.length > MaxRecent) {
             this.recentLines.splice(0, this.recentLines.length - MaxRecent);
@@ -460,6 +465,16 @@ export class Chat {
             }
         }
         return [...out.entries()].map(([did, since]) => ({ did, since }));
+    }
+
+    //  When someone connected to the room last did something there
+    //  (connected, or spoke), or null if they aren't connected (H19)
+    activeAt(did: string): number | null {
+        const mine = [...this.links].filter(l => l.person.did === did);
+        if (!mine.length) {
+            return null;
+        }
+        return Math.max(this.spoke.get(did) ?? 0, ...mine.map(l => Date.parse(l.since) || 0));
     }
 
     connections(did: string): number {

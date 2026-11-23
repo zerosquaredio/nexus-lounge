@@ -668,6 +668,17 @@ in.
 | Done when | A caller opens it from the main menu, sees people from another BBS and from the hub's web page, and chats with them |
 | Status | **Working locally** (2026-11-18), with hub H17. A new menu module (`hubSpace`, behind a commented out `HS`; art `HUBSPACE`) using the `atProto.hub` settings of F18, nothing more. It shows who is around, one line a place (the room, then boards up, then the rest), redrawn at most once a second as the hub's live model changes, and the hub's chat room below it. The board connects for the member with its token, naming them as its presence report does; only members who confirmed the board at the hub can talk, others watch. Names and messages from elsewhere reach the screen without control codes, with pipe codes escaped. Idle logoff is off inside, as in MRC, unless set. 10 new tests. **Tested live** on the VM: the test board behind the dev hub with the real freeq, a member with a key login opening it from the main menu, seeing a member of another board, talking with her in a browser both ways, a pipe code sent as text, the door cut off within seconds when the member withdrew their confirmation at the hub (the map cleared, with the reason), and leaving it taking them out of the room. Also fixes the F18 Hub Presence menu entry, whose art was set where its module doesn't look and which closed the connection when opened. **With hub H18** (2026-11-19): `/mute`, `/unmute`, `/mutes` and `/report` typed where you talk (`/help` lists them), the hub's muting applied to the map and chat, and the hub's own reasons shown when it refuses or closes the door (who blocked them, and why). 4 new tests; tested live with H18 |
 
+### F20. Staying on while active on the hub
+
+| | |
+|---|---|
+| Implements | While the hub says a member is in its common space (hub H19, in its answer to each presence report), the board counts their last action there as activity, and gives them a longer idle limit while they are in it. So a member chatting on the hub's page isn't logged off the board they left open, and a forgotten window still frees its node in the end |
+| Track | **Fork-only** (hub integration) |
+| Config | `atProto.hub.presence.hubIdleMinutes`: the idle limit for a member who is in the hub's space, counted from their last action on either side (30 by default; 0 turns this off) |
+| Depends on | F18; hub H19 |
+| Done when | As for H19; and a member the hub no longer lists, or a board whose reports stopped reaching the hub, falls back to the normal idle limit |
+| Status | **Working** (2026-11-23), with hub H19. The presence reporter keeps the hub's latest answer (forgotten 3 minutes after the last report that got through, and never a time from the future); the idle check asks it before logging a member off: they stay while their latest action, on the board or the hub, is within the longer of `users.idleLogoutSeconds` and `atProto.hub.presence.hubIdleMinutes` (30; 0 turns it off). Documented under "Busy on the Hub". 5 new tests. **Tested live** on the public hub's test board, as for H19 |
+
 ## 4. Milestones
 
 | Milestone | Features | Outcome |
@@ -676,7 +687,7 @@ in.
 | **M1** Log in with Bluesky | F1, F2, F3 | Upstream PRs open for the core AT login |
 | **M2** Access control | F4, F5, F6, F14, F16 | AT-only boards, SSH for AT users, invites, provisional access, one-click web sign-in, existing users linking their AT identity |
 | **M3** Public presence | F9, F10, F11, F17 | Publishing (including invite notifications), tunnels, the hub, and ready-made BBS images, for hosted and home-based boards |
-| **M4** Common space, first slice | F18, F19 (with hub H13 to H18) | Members appear on the hub and can chat with people on other BBSes, from a browser or from inside the BBS (decided 2026-11-08, vision §3.2) |
+| **M4** Common space, first slice | F18, F19, F20 (with hub H13 to H19) | Members appear on the hub and can chat with people on other BBSes, from a browser or from inside the BBS (decided 2026-11-08, vision §3.2) |
 | **M5** Networking | F12 | Shared boards between BBSes |
 | Later | F7, F8, F13, F15 | Paid verification, attestation table, clusters, in-BBS user manager |
 | After M4 | (not yet split into features) | Voice, then assets and avatars, then the 3D and VR social space: Overte worlds, AT login through a hub-run metaverse server, a browser client, an in-world BBS terminal. Decision and next steps in [overte_evaluation.md](overte_evaluation.md) |
