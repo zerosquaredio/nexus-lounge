@@ -12,6 +12,7 @@ import { Profiles } from '../src/profiles.ts';
 import { Registry } from '../src/registry.ts';
 import type { WebSession } from '../src/signin.ts';
 import { createSite, type SignInLike } from '../src/site.ts';
+import { SpaceScript, SpaceScriptPath } from '../src/space_page.ts';
 import { MaxClientFrame } from '../src/websocket.ts';
 import { OtherSysopDid, SysopDid } from './helpers.ts';
 
@@ -644,6 +645,60 @@ describe('the live model on the site', () => {
         const outsider = await get('/space', 'carol-session');
         assert.doesNotMatch(outsider.body, /map\.js/);
         assert.doesNotMatch(String(outsider.headers['content-security-policy']), /connect-src/);
+        //  without chat, the map is the space; nothing to pop out of
+        assert.doesNotMatch(map.body, /space\.js|data-pop/);
+        assert.equal((await get(SpaceScriptPath)).status, 404);
+        assert.match((await get('/space/map', 'alice-session')).body, /<script src="\/space\/map\.js" defer>/);
+    });
+
+    it('puts the map beside the chat, each able to pop out to a page of its own', async () => {
+        const s = setup({ live: { enabled: true }, chat: { enabled: true } });
+        s.profiles.signedIn({ did: Alice, handle: 'alice.example' });
+        s.presence.answer(Alice, 'coolbbs', 'confirmed');
+        s.presence.report(s.registry.mustGet('coolbbs'), [member(Alice, 'Alice')]);
+        const chat = { bind() {}, present: () => [], connected: () => [], sweep() {}, recent: () => [] } as unknown as Chat;
+        const both = createSite({ config: s.config, registry: s.registry, signin: new Sessions(), chat });
+        await new Promise<void>(r => both.listen(0, '127.0.0.1', () => r()));
+        const before = port;
+        port = (both.address() as AddressInfo).port;
+        try {
+            const space = await get('/space', 'alice-session');
+            assert.equal(space.status, 200);
+            assert.match(space.body, /<title>The common space<\/title>/);
+            assert.match(space.body, /id="map"/);
+            assert.match(space.body, /id="chat-log"/);
+            //  the chat waits to be joined
+            assert.match(space.body, /id="chat-pane" data-wait="1"/);
+            assert.match(space.body, /Join the chat/);
+            assert.match(space.body, /href="\/space\/map" target="hub-map"/);
+            assert.match(space.body, /href="\/space\/chat" target="hub-chat"/);
+            const order = ['/space/who.js', '/space/map.js', '/space/chat.js', SpaceScriptPath].map(p =>
+                space.body.indexOf(`<script src="${p}" defer></script>`)
+            );
+            assert.ok(order.every(i => i > 0), 'all four scripts');
+            assert.deepEqual([...order].sort((a, b) => a - b), order, 'in order');
+            assert.doesNotMatch(space.body, /<script>/);
+            assert.match(String(space.headers['content-security-policy']), /script-src 'self'; connect-src 'self' wss:\/\/hub\.test;/);
+            //  popped out, each is its own page
+            const map = await get('/space/map', 'alice-session');
+            assert.match(map.body, /<script src="\/space\/map\.js" defer>/);
+            assert.doesNotMatch(map.body, /chat\.js|space\.js/);
+            assert.match(map.body, /href="\/space">The whole space/);
+            assert.match(String(map.headers['content-security-policy']), /connect-src 'self' wss:/);
+            assert.equal((await get('/space/map')).status, 303);
+            const script = await get(SpaceScriptPath);
+            assert.equal(script.status, 200);
+            assert.match(String(script.headers['content-type']), /^text\/javascript/);
+            assert.equal(script.body, SpaceScript);
+            assert.doesNotThrow(() => new Function(script.body));
+            assert.doesNotMatch(SpaceScript, /innerHTML|outerHTML|insertAdjacentHTML|document\.write|eval\(/);
+            //  someone not allowed in gets neither
+            assert.doesNotMatch((await get('/space', 'carol-session')).body, /chat-log|map\.js/);
+        } finally {
+            port = before;
+            await new Promise<void>(r => both.close(() => r()));
+            s.registry.close();
+        }
     });
 
     //  a BBS's door, for one of its members

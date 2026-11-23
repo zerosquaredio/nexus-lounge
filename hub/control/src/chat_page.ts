@@ -11,8 +11,9 @@ export const MaxLabelLookups = 50;
 //  an IRC line has room for about this much text
 export const MaxChatMessage = 400;
 
-//  panel: muting and reporting someone (moderation_page.ts)
-export function chatPageBody(room: string, panel = ''): string {
+//  The chat itself, for its own page or beside the map (space_page.ts).
+//  wait: join only when asked, not as soon as the page opens
+export function chatPane(room: string, wait = false): string {
     return `<style>
 .chat { display: grid; grid-template-columns: 1fr 11rem; gap: 1rem; }
 .chat-log { height: 26rem; overflow-y: auto; border: 1px solid var(--line); border-radius: 4px; padding: .5rem; overflow-wrap: anywhere; }
@@ -25,10 +26,19 @@ export function chatPageBody(room: string, panel = ''): string {
 .chat-say { display: flex; gap: .5rem; margin-top: .5rem; }
 .chat-say button { margin-top: 0; }
 @media (max-width: 40rem) { .chat { grid-template-columns: 1fr; } .chat-log { height: 20rem; } }
+.chat-join button { margin-top: 0; }
 </style>
-<p class="dim"><span id="chat-room">${esc(room)}</span> · <span id="chat-status" role="status">Connecting…</span></p>
+<p class="dim"><span id="chat-room">${esc(room)}</span> · <span id="chat-status" role="status">${
+        wait ? 'Not in the room' : 'Connecting…'
+    }</span></p>
 <noscript><p class="error">Chat needs JavaScript.</p></noscript>
-<div class="chat">
+${
+    wait
+        ? `<p id="chat-join" class="chat-join"><button type="button" id="chat-join-button">Join the chat</button>
+<span class="hint">Everyone in the room sees who is there.</span></p>`
+        : ''
+}
+<div class="chat" id="chat-pane"${wait ? ' data-wait="1"' : ''}>
 <div>
 <div id="chat-log" class="chat-log" role="log" aria-label="Messages" tabindex="0"></div>
 <form id="chat-say" class="chat-say">
@@ -37,10 +47,18 @@ export function chatPageBody(room: string, panel = ''): string {
 </form>
 </div>
 <aside aria-label="In the room"><h2>Here now</h2><ul id="chat-people" class="chat-people"></ul></aside>
-</div>
+</div>`;
+}
+
+export const ChatHint = `<p class="hint">Messages aren't kept: the room holds only the last few, in memory. Everyone here can see that
+you are in the room, whether or not you are shown as around.</p>`;
+
+//  The chat on its own page. panel: muting and reporting someone
+//  (moderation_page.ts)
+export function chatPageBody(room: string, panel = ''): string {
+    return `${chatPane(room)}
 ${panel}
-<p class="hint">Messages aren't kept: the room holds only the last few, in memory. Everyone here can see that
-you are in the room, whether or not you are shown as around.</p>
+${ChatHint}
 <p><a href="/space">Who's around</a> · <a href="/me">Your profile</a> · <a href="/">The directory</a></p>
 <script src="${ChatScriptPath}" defer></script>`;
 }
@@ -51,7 +69,10 @@ export const ChatScript = String.raw`(function () {
     var log = byId('chat-log'), status = byId('chat-status'), people = byId('chat-people');
     var form = byId('chat-say'), input = byId('chat-text'), send = byId('chat-send'), roomName = byId('chat-room');
     var labels = {}, waiting = {}, seen = {}, muted = {}, ticket = null, ws = null, retries = 0, stopped = false;
-    var lookupTimer = null, peopleTimer = null, MaxLines = 500;
+    var lookupTimer = null, peopleTimer = null, retryTimer = null, MaxLines = 500;
+    var pane = byId('chat-pane'), join = byId('chat-join'), joinButton = byId('chat-join-button');
+    //  each time the chat is started; what an older start is still doing is dropped
+    var run = 0, running = false, ended = false;
 
     function setStatus(text) { status.textContent = text; }
     function setOpen(open) {
@@ -242,16 +263,20 @@ export const ChatScript = String.raw`(function () {
         if (stopped) { return; }
         var delay = Math.min(30, Math.pow(2, retries++));
         setStatus('Reconnecting…');
-        setTimeout(connect, delay * 1000);
+        retryTimer = setTimeout(connect, delay * 1000);
     }
     function stop(text) {
         stopped = true;
+        ended = true;
         setOpen(false);
         setStatus(text);
     }
     function connect() {
+        retryTimer = null;
+        var mine = run;
         fetch('/space/chat/token', { method: 'POST', credentials: 'same-origin' })
             .then(function (r) {
+                if (mine !== run) { return; }
                 if (401 === r.status) { return stop('Sign in to chat.'); }
                 if (403 === r.status) {
                     return r.json().catch(function () { return {}; }).then(function (body) {
@@ -259,9 +284,9 @@ export const ChatScript = String.raw`(function () {
                     });
                 }
                 if (!r.ok) { return retry(); }
-                return r.json().then(open);
+                return r.json().then(function (t) { if (mine === run) { open(t); } });
             })
-            .catch(retry);
+            .catch(function () { if (mine === run) { retry(); } });
     }
     function open(t) {
         ticket = t;
@@ -292,6 +317,46 @@ export const ChatScript = String.raw`(function () {
     });
     //  the room isn't always told at once when someone is cut off
     setInterval(function () { if (ws) { refreshPeople(); } }, 10000);
-    connect();
+
+    //  Joining and leaving, for the page beside the map, which can also pop
+    //  the chat out into its own window and back (space_page.ts)
+    function start() {
+        if (running || ended) { return; }
+        running = true;
+        stopped = false;
+        retries = 0;
+        run++;
+        if (join) { join.hidden = true; }
+        setStatus('Connecting…');
+        connect();
+    }
+    function leave() {
+        if (!running) { return; }
+        running = false;
+        stopped = true;
+        run++;
+        clearTimeout(retryTimer);
+        retryTimer = null;
+        if (ws) {
+            var old = ws;
+            ws = null;
+            old.onclose = null;
+            old.close();
+        }
+        setOpen(false);
+        people.textContent = '';
+        if (!ended) { setStatus('Not in the room'); }
+    }
+    if (joinButton) { joinButton.addEventListener('click', start); }
+    window.hubPanes = window.hubPanes || {};
+    window.hubPanes.chat = {
+        start: start,
+        stop: function () {
+            leave();
+            if (join && !ended) { join.hidden = false; }
+        },
+        focus: function () { if (!input.disabled) { input.focus(); } },
+    };
+    if (!pane || !pane.dataset.wait) { start(); }
 })();
 `;

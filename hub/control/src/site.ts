@@ -40,11 +40,12 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { BbsChatPath, ChatPath, type Chat } from './chat.ts';
-import { chatPageBody, ChatScript, ChatScriptPath, MaxLabelLookups } from './chat_page.ts';
+import { chatPageBody, chatPane, ChatScript, ChatScriptPath, MaxLabelLookups } from './chat_page.ts';
 import { Live, LivePath, personId } from './live.ts';
-import { mapPageBody, MapScript, MapScriptPath } from './map_page.ts';
+import { mapPageBody, mapPane, MapScript, MapScriptPath } from './map_page.ts';
 import { blockText, isPersonId, MaxNote } from './moderation.ts';
 import { whoPanel, WhoScript, WhoScriptPath } from './moderation_page.ts';
+import { MapPagePath, spacePageBody, SpaceScript, SpaceScriptPath } from './space_page.ts';
 import type { HubConfig } from './config.ts';
 import { HubError } from './errors.ts';
 import { agentConfig } from './generate.ts';
@@ -425,7 +426,8 @@ the name the BBS gives, never as your own account.</p>
 <table>${list.map(row).join('')}</table>`;
     }
 
-    function spacePage(who: WebSession): string {
+    //  only: 'map' for the map on its own page, popped out of the space's
+    function spacePage(who: WebSession, only?: 'map'): string {
         const blocked = blockedFrom(who.did, 'space');
         if (blocked) {
             return page(
@@ -459,7 +461,16 @@ the name the BBS gives, never as your own account.</p>
                 )
                 .join('\n') || '<p class="dim">Nobody is around right now.</p>';
         if (live) {
-            return page("Who's around", mapPageBody(groups, !!chat, whoPanel(config.space.chat.reportMinutes)), who);
+            const panel = whoPanel(config.space.chat.reportMinutes);
+            //  the map beside the chat, unless only the map was asked for
+            if (chat && 'map' !== only) {
+                return page(
+                    'The common space',
+                    spacePageBody(mapPane(groups), chatPane(config.space.chat.room, true), panel),
+                    who
+                );
+            }
+            return page("Who's around", mapPageBody(groups, !!chat, panel), who);
         }
         return page(
             "Who's around",
@@ -1342,8 +1353,21 @@ ${others.map(otherCard).join('\n')}`
             return void res.end('HEAD' === req.method ? undefined : MapScript);
         }
 
+        if (live && chat && SpaceScriptPath === path) {
+            res.writeHead(200, {
+                'Content-Type': 'text/javascript; charset=utf-8',
+                'Cache-Control': 'no-cache',
+                'X-Content-Type-Options': 'nosniff',
+            });
+            return void res.end('HEAD' === req.method ? undefined : SpaceScript);
+        }
+
         if ('/space' === path && presence) {
             return who ? send(res, 200, spacePage(who), spaceHeaders(who)) : redirect(res, '/signin');
+        }
+
+        if (live && MapPagePath === path) {
+            return who ? send(res, 200, spacePage(who, 'map'), spaceHeaders(who)) : redirect(res, '/signin');
         }
 
         if ('/me' === path && profiles) {

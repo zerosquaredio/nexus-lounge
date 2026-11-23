@@ -8,9 +8,9 @@
 
 export const MapScriptPath = '/space/map.js';
 
-//  listHtml: who is around, from the server, for when the script can't run;
-//  panel: muting and reporting someone (moderation_page.ts)
-export function mapPageBody(listHtml: string, chat: boolean, panel = ''): string {
+//  The map itself, for its own page or beside the chat (space_page.ts).
+//  listHtml: who is around, from the server, for when the script can't run
+export function mapPane(listHtml: string): string {
     return `<style>
 .map { width: 100%; height: auto; display: block; border: 1px solid var(--line); border-radius: 4px; }
 .map text { fill: var(--fg); font: 13px ui-monospace, Consolas, monospace; }
@@ -31,11 +31,19 @@ export function mapPageBody(listHtml: string, chat: boolean, panel = ''): string
 </style>
 <p class="dim"><span id="map-status" role="status">Connecting…</span></p>
 <svg id="map" class="map" viewBox="0 0 800 520" role="img" aria-label="Map of the common space" hidden></svg>
-<div id="space-list" class="space-list" aria-live="polite">${listHtml}</div>
+<div id="space-list" class="space-list" aria-live="polite">${listHtml}</div>`;
+}
+
+export const MapHint = `<p class="hint">Only people who chose to be shown appear here. Open a board from this page and, with being
+shown on, others see you there while its window and this page stay open.</p>`;
+
+//  The map on its own page. panel: muting and reporting someone
+//  (moderation_page.ts); chat: whether there is a chat to link to
+export function mapPageBody(listHtml: string, chat: boolean, panel = ''): string {
+    return `${mapPane(listHtml)}
 ${panel}
-<p class="hint">Only people who chose to be shown appear here. Open a board from this page and, with being
-shown on, others see you there while its window and this page stay open.</p>
-<p>${chat ? '<a href="/space/chat">Chat</a> · ' : ''}<a href="/me">Your profile</a> · <a href="/">The directory</a></p>
+${MapHint}
+<p>${chat ? '<a href="/space">The whole space</a> · <a href="/space/chat">Chat</a> · ' : ''}<a href="/me">Your profile</a> · <a href="/">The directory</a></p>
 <script src="${MapScriptPath}" defer></script>`;
 }
 
@@ -45,7 +53,7 @@ export const MapScript = String.raw`(function () {
     var W = 800, H = 520, MaxNames = 3;
     var byId = function (id) { return document.getElementById(id); };
     var svg = byId('map'), list = byId('space-list'), status = byId('map-status');
-    var state = null, you = null, base = null, ws = null, retries = 0, stopped = false;
+    var state = null, you = null, base = null, ws = null, retries = 0, stopped = false, ended = false, retryTimer = null;
     //  boards opened from this page: { name, win }, the latest last
     var opened = [];
 
@@ -213,6 +221,10 @@ export const MapScript = String.raw`(function () {
             } else if ('room' === place.type) {
                 var a = html('a', 'Join');
                 a.href = '/space/chat';
+                //  beside the chat, joining is done there
+                a.addEventListener('click', function (e) {
+                    if (window.hubSpace && window.hubSpace.joinChat()) { e.preventDefault(); }
+                });
                 h.appendChild(document.createTextNode(' · '));
                 h.appendChild(a);
             }
@@ -232,6 +244,7 @@ export const MapScript = String.raw`(function () {
     }
 
     function connect() {
+        retryTimer = null;
         if (stopped) { return; }
         var started = false;
         ws = new WebSocket(location.origin.replace(/^http/, 'ws') + '/space/live');
@@ -248,6 +261,7 @@ export const MapScript = String.raw`(function () {
             ws = null;
             if (4403 === e.code) {
                 stopped = true;
+                ended = true;
                 setStatus(/^blocked by /.test(e.reason || '')
                     ? 'You were ' + e.reason + '. Reload the page to see why.'
                     : 'You are no longer in the common space. Reload the page to try again.');
@@ -256,9 +270,32 @@ export const MapScript = String.raw`(function () {
             retries = started ? 1 : retries + 1;
             var wait = Math.min(30, Math.pow(2, retries));
             setStatus('Reconnecting in ' + wait + ' s…');
-            setTimeout(connect, wait * 1000);
+            retryTimer = setTimeout(connect, wait * 1000);
         };
     }
+    //  for the page beside the chat, which can pop the map out into its own
+    //  window and back (space_page.ts)
+    function stop() {
+        stopped = true;
+        clearTimeout(retryTimer);
+        retryTimer = null;
+        if (ws) {
+            var old = ws;
+            ws = null;
+            old.onclose = null;
+            old.close();
+        }
+        setStatus('Stopped');
+    }
+    function start() {
+        if (!stopped || ended) { return; }
+        stopped = false;
+        retries = 0;
+        setStatus('Connecting…');
+        connect();
+    }
+    window.hubPanes = window.hubPanes || {};
+    window.hubPanes.map = { start: start, stop: stop };
     connect();
 })();
 `;
