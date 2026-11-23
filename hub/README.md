@@ -20,9 +20,10 @@ OAuth library, for signing sysops in and for the hub's own account.
 
 ## Status
 
-Local only so far (updated 2026-11-17): everything below runs on one machine on
-`127.0.0.1`, with Caddy's own test certificate authority. Real certificates
-and DNS wait for the public server.
+Updated 2026-11-23: a public hub runs at `hub.cyberspace.nexus`, with real
+certificates and a test board at `test.hub.cyberspace.nexus`; registration
+there is closed for now. Everything below also runs on one machine on
+`127.0.0.1`, with Caddy's own test certificate authority.
 
 ## Using it
 
@@ -59,8 +60,12 @@ to `wss://name.<domain>/ws`, which goes down the BBS's tunnel.
 Sysops can also register themselves on the hub's site
 (`site.publicUrl`, by default `http://127.0.0.1:7210` for development): they
 sign in with their AT account, and the site gives them the same token and
-agent config, once. Signing in at a public `https://` address isn't built
-yet.
+agent config, once. On `http://127.0.0.1` the site signs people in as AT's
+loopback client. On a public `https://` address it is a public client: the
+site serves its metadata at `/oauth/client-metadata.json` and its public key
+at `/oauth/jwks.json`, and keeps the signing key in `site.signingKey`
+(`./data/oauth_signing_key.json` by default), made on first start and
+readable by the hub's user only.
 
 ### The common space
 

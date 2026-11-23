@@ -57,7 +57,14 @@ import type { Listing } from './listing.ts';
 import { Profiles, type Profile } from './profiles.ts';
 import { parseReport, Presence, type DoorAccess } from './presence.ts';
 import { isDid, labelForHost } from './rules.ts';
-import { CallbackPath, SessionDays, type Identity, type WebSession } from './signin.ts';
+import {
+    CallbackPath,
+    ClientMetadataPath,
+    JwksPath,
+    SessionDays,
+    type Identity,
+    type WebSession,
+} from './signin.ts';
 import { clientConfig, fileFor, policy, WebTermPath, type WebTerm } from './webterm.ts';
 
 export interface SignInLike {
@@ -66,6 +73,8 @@ export interface SignInLike {
     createSession(identity: Identity): string;
     session(token: string | undefined): WebSession | null;
     endSession(token: string | undefined): void;
+    //  a public client's metadata and keys, served by the site
+    publicDocuments?(): Promise<{ metadata: unknown; jwks: unknown } | null>;
 }
 
 export interface SiteDeps {
@@ -1293,6 +1302,22 @@ ${others.map(otherCard).join('\n')}`
 
         if ('/' === path) {
             return send(res, 200, directoryPage(who));
+        }
+
+        //  fetched by account hosts, to learn who is asking them to sign
+        //  someone in (an https:// address only)
+        if (ClientMetadataPath === path || JwksPath === path) {
+            let docs: { metadata: unknown; jwks: unknown } | null = null;
+            try {
+                docs = (await signin.publicDocuments?.()) ?? null;
+            } catch (e) {
+                log(`public client: ${(e as Error).message}`);
+                return json(res, 503, { error: 'Signing in is not available right now.' });
+            }
+            if (!docs) {
+                return json(res, 404, { error: 'This hub signs in as a loopback client.' });
+            }
+            return json(res, 200, ClientMetadataPath === path ? docs.metadata : docs.jwks);
         }
 
         if ('/signin' === path) {

@@ -4,12 +4,17 @@
 //  AT session out as soon as it knows the DID, so it holds no AT tokens.
 //  What it keeps is its own browser session.
 
+import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { dirname } from 'node:path';
 import type { DatabaseSync } from 'node:sqlite';
 import type { HubConfig } from './config.ts';
-import { HubError } from './errors.ts';
 import { hashToken, newToken } from './tokens.ts';
 
 export const CallbackPath = '/oauth/callback';
+//  served by the site for a public client (an https:// address)
+export const ClientMetadataPath = '/oauth/client-metadata.json';
+export const JwksPath = '/oauth/jwks.json';
+const SigningAlg = 'ES256';
 const StateMaxAgeMs = 60 * 60 * 1000;
 export const SessionDays = 7;
 
@@ -60,15 +65,33 @@ export function oauthStore(
     };
 }
 
+//  On an https:// address the hub is a public client: account hosts fetch
+//  its metadata from the site, and it proves who it is with a signing key.
+//  On http://127.0.0.1 (development) it is a loopback client.
+export function isPublicClient(config: HubConfig): boolean {
+    return config.site.publicUrl.startsWith('https://');
+}
+
 export function clientMetadata(config: HubConfig) {
     const base = config.site.publicUrl;
-    if (!base.startsWith('http://127.0.0.1')) {
-        //  needs the hub's public address, a signing key, and metadata served
-        //  at /oauth/client-metadata.json: comes with the public server
-        throw new HubError('config', 'Signing in on a public https:// address is not built yet');
+    const redirectUri = `${base}${CallbackPath}`;
+    if (isPublicClient(config)) {
+        return {
+            client_id: `${base}${ClientMetadataPath}`,
+            client_name: config.domain,
+            client_uri: base,
+            redirect_uris: [redirectUri] as [string],
+            scope: 'atproto',
+            grant_types: ['authorization_code', 'refresh_token'] as ['authorization_code', 'refresh_token'],
+            response_types: ['code'] as ['code'],
+            application_type: 'web' as const,
+            token_endpoint_auth_method: 'private_key_jwt' as const,
+            token_endpoint_auth_signing_alg: SigningAlg,
+            dpop_bound_access_tokens: true,
+            jwks_uri: `${base}${JwksPath}` as `https://${string}`,
+        };
     }
     //  a loopback client is identified by its redirect URI and scope alone
-    const redirectUri = `${base}${CallbackPath}`;
     return {
         client_id: `http://localhost?redirect_uri=${encodeURIComponent(redirectUri)}&scope=atproto`,
         redirect_uris: [redirectUri] as [string],
@@ -79,6 +102,26 @@ export function clientMetadata(config: HubConfig) {
         application_type: 'native' as const,
         dpop_bound_access_tokens: true,
     };
+}
+
+//  The public client's signing key: read from its file, or made and saved
+//  there (readable by the hub's user only) on first start. Losing it only
+//  means making a new one; nobody's sign-in depends on it afterwards, since
+//  the hub keeps no AT sessions.
+async function loadSigningKey(lib: Lib, path: string) {
+    let text: string;
+    try {
+        text = await readFile(path, 'utf8');
+    } catch (e) {
+        if ('ENOENT' !== (e as NodeJS.ErrnoException).code) {
+            throw e;
+        }
+        const key = await lib.JoseKey.generate([SigningAlg], `hub-${Date.now()}`);
+        await mkdir(dirname(path), { recursive: true });
+        await writeFile(path, JSON.stringify(key.privateJwk, null, 4), { mode: 0o600, flag: 'wx' });
+        return key;
+    }
+    return lib.JoseKey.fromJWK(JSON.parse(text));
 }
 
 export class SignIn {
@@ -94,16 +137,34 @@ export class SignIn {
     }
 
     getClient(): Promise<Client> {
-        this.client ??= import('@atproto/oauth-client-node').then(
-            lib =>
-                new lib.NodeOAuthClient({
-                    clientMetadata: clientMetadata(this.config),
-                    stateStore: oauthStore(this.db, 'oauth_state', 'key'),
-                    sessionStore: oauthStore(this.db, 'oauth_session', 'did'),
-                    requestLock: lib.requestLocalLock,
-                })
-        );
+        this.client ??= import('@atproto/oauth-client-node')
+            .then(
+                async lib =>
+                    new lib.NodeOAuthClient({
+                        clientMetadata: clientMetadata(this.config),
+                        keyset: isPublicClient(this.config)
+                            ? [await loadSigningKey(lib, this.config.site.signingKey)]
+                            : undefined,
+                        stateStore: oauthStore(this.db, 'oauth_state', 'key'),
+                        sessionStore: oauthStore(this.db, 'oauth_session', 'did'),
+                        requestLock: lib.requestLocalLock,
+                    })
+            )
+            .catch(e => {
+                this.client = null; //  try again next time
+                throw e;
+            });
         return this.client;
+    }
+
+    //  What the site serves for a public client: its metadata, and the
+    //  public half of its signing key. Null for a loopback client.
+    async publicDocuments(): Promise<{ metadata: unknown; jwks: unknown } | null> {
+        if (!isPublicClient(this.config)) {
+            return null;
+        }
+        const client = await this.getClient();
+        return { metadata: client.clientMetadata, jwks: client.jwks };
     }
 
     //  Where to send the browser to approve. The handle is kept only to

@@ -48,8 +48,12 @@ export interface HubConfig {
         port: number;
         //  the address people use. http://127.0.0.1:<port> (development, on
         //  this machine or through an SSH tunnel) signs in with AT's
-        //  loopback client; an https:// address will use a public client
+        //  loopback client; an https:// address, with a public client
+        //  identified by metadata the site serves
         publicUrl: string;
+        //  the public client's signing key: made on first start and kept
+        //  private (readable by the hub's user only). Unused on 127.0.0.1
+        signingKey: string;
     };
     //  the web terminal the hub serves for every BBS: a copy of enig-term's
     //  release (its dist/ directory); empty for none. digest pins the
@@ -149,7 +153,12 @@ export const Defaults: HubConfig = {
     },
     hubAccount: { callbackPort: 7220 },
     observedStatus: { enabled: true, settleSeconds: 20, intervalSeconds: 15 },
-    site: { host: '127.0.0.1', port: 7210, publicUrl: 'http://127.0.0.1:7210' },
+    site: {
+        host: '127.0.0.1',
+        port: 7210,
+        publicUrl: 'http://127.0.0.1:7210',
+        signingKey: './data/oauth_signing_key.json',
+    },
     webTerminal: { root: '', digest: '' },
     directory: {
         enabled: true,
@@ -294,6 +303,9 @@ export function makeConfig(overrides: Partial<Record<keyof HubConfig, unknown>> 
         throw new HubError('config', 'site.publicUrl is https://, or http://127.0.0.1 for development');
     }
     config.site.publicUrl = site.origin;
+    if ('string' !== typeof config.site.signingKey || !config.site.signingKey) {
+        throw new HubError('config', 'site.signingKey is the path of a file');
+    }
     return config;
 }
 

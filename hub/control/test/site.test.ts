@@ -2,10 +2,13 @@ import { after, before, beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { request, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { makeConfig } from '../src/config.ts';
 import { Registry } from '../src/registry.ts';
-import { clientMetadata, SignIn, type Identity } from '../src/signin.ts';
+import { clientMetadata, ClientMetadataPath, JwksPath, SignIn, type Identity } from '../src/signin.ts';
 import { createSite, type SignInLike } from '../src/site.ts';
 import { Profiles } from '../src/profiles.ts';
 import { OtherSysopDid, SysopDid } from './helpers.ts';
@@ -337,11 +340,73 @@ describe('sign-in sessions', () => {
         assert.match(meta.client_id, /^http:\/\/localhost\?redirect_uri=http%3A%2F%2F127\.0\.0\.1%3A7210/);
     });
 
-    it('say plainly that public sign-in is not built yet', () => {
-        assert.throws(
-            () => clientMetadata(makeConfig({ site: { publicUrl: 'https://hub.example' } })),
-            /not built yet/
+    it('use a public AT client on an https:// address, served by the site', () => {
+        const meta = clientMetadata(
+            makeConfig({ domain: 'hub.example', site: { publicUrl: 'https://hub.example/' } })
         );
+        assert.equal(meta.client_id, 'https://hub.example/oauth/client-metadata.json');
+        assert.deepEqual(meta.redirect_uris, ['https://hub.example/oauth/callback']);
+        assert.equal(meta.scope, 'atproto');
+        assert.equal(meta.application_type, 'web');
+        assert.equal(meta.token_endpoint_auth_method, 'private_key_jwt');
+        assert.equal((meta as { jwks_uri?: string }).jwks_uri, 'https://hub.example/oauth/jwks.json');
+        assert.equal((meta as { client_name?: string }).client_name, 'hub.example');
+    });
+
+    it('make the public signing key once, keep it private, and serve only its public half', async () => {
+        const dir = mkdtempSync(join(tmpdir(), 'hub-key-'));
+        const keyPath = join(dir, 'data', 'oauth_signing_key.json');
+        const config = makeConfig({
+            domain: 'hub.example',
+            database: ':memory:',
+            site: { publicUrl: 'https://hub.example', signingKey: keyPath },
+        });
+        const reg = new Registry(':memory:', config.registration);
+        try {
+            const first = await new SignIn(reg.db, config).publicDocuments();
+            assert.ok(first);
+            if ('win32' !== process.platform) {
+                assert.equal(statSync(keyPath).mode & 0o777, 0o600);
+            }
+            const saved = JSON.parse(readFileSync(keyPath, 'utf8')) as { d?: string; kid?: string };
+            assert.ok(saved.d, 'the file holds the private key');
+            const keys = (first.jwks as { keys: { kid?: string; d?: string }[] }).keys;
+            assert.equal(keys.length, 1);
+            assert.equal(keys[0]?.d, undefined, 'never the private part');
+            assert.equal(keys[0]?.kid, saved.kid);
+            const clientId = 'https://hub.example' + ClientMetadataPath;
+            assert.equal((first.metadata as { client_id: string }).client_id, clientId);
+
+            //  the next start uses the same key
+            const again = await new SignIn(reg.db, config).publicDocuments();
+            assert.equal((again?.jwks as { keys: { kid?: string }[] }).keys[0]?.kid, saved.kid);
+
+            //  and the site serves both documents
+            const site = createSite({ config, registry: reg, signin: new SignIn(reg.db, config) });
+            await new Promise<void>(r => site.listen(0, '127.0.0.1', r));
+            const at = `http://127.0.0.1:${(site.address() as AddressInfo).port}`;
+            try {
+                const metaReply = await fetch(at + ClientMetadataPath);
+                assert.equal(metaReply.status, 200);
+                assert.equal(((await metaReply.json()) as { client_id: string }).client_id, clientId);
+                const jwksReply = await fetch(at + JwksPath);
+                assert.equal(jwksReply.status, 200);
+                const served = (await jwksReply.json()) as { keys: { kid?: string; d?: string }[] };
+                assert.equal(served.keys[0]?.kid, saved.kid);
+                assert.equal(served.keys[0]?.d, undefined);
+            } finally {
+                site.closeAllConnections();
+                await new Promise(r => site.close(r));
+            }
+        } finally {
+            reg.close();
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    it('serve no client documents for a loopback client', async () => {
+        assert.equal((await call('GET', ClientMetadataPath)).status, 404);
+        assert.equal((await call('GET', JwksPath)).status, 404);
     });
 });
 

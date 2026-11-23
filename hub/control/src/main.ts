@@ -6,7 +6,7 @@ import { HubAccount } from './hub_account.ts';
 import { checkTunnels, ObservedStatus } from './observed.ts';
 import { Registry } from './registry.ts';
 import { createControlServer } from './server.ts';
-import { SignIn } from './signin.ts';
+import { isPublicClient, SignIn } from './signin.ts';
 import { createSite } from './site.ts';
 import { loadWebTerm } from './webterm.ts';
 import { atClient } from './atproto.ts';
@@ -95,10 +95,18 @@ if (config.space.chat.enabled) {
     }
 }
 
+const signin = new SignIn(registry.db, config);
+if (isPublicClient(config)) {
+    //  load (or make) the signing key now, so a problem shows at start
+    signin.getClient().then(
+        () => log(`public sign-in client: ${config.site.publicUrl}`),
+        e => log(`public sign-in client failed: ${(e as Error).message}`)
+    );
+}
 const site = createSite({
     config,
     registry,
-    signin: new SignIn(registry.db, config),
+    signin,
     webterm,
     directory,
     at,
