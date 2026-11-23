@@ -235,7 +235,7 @@ server: DNS, and real certificates.
 
 ### Progress: HM1 working locally (2026-11-09)
 
-The first code is in [`hub/`](../hub/README.md): the control plane
+The first code is in [`hub/`](../../hub/README.md): the control plane
 (`hub/control/`, TypeScript run directly by Node 24, with Node's own
 SQLite: no runtime dependencies) and an end-to-end test (`hub/test/e2e.sh`).
 On the dev VM, on `127.0.0.1` with Caddy's test CA, the whole chain works in
@@ -420,6 +420,7 @@ specs described three different ways):
 | Implements | `/.well-known/atproto-did` answered by the hub for each subdomain from the registry ([hub.md](hub.md) §4.1); registering the BBS's own AT account DID |
 | Depends on | H3 |
 | Done when | A BBS account can set its handle to `name.hub.cyberspace.nexus` and Bluesky verifies it; deleting the registration stops verification immediately |
+| Status | **Working on the public hub** (2026-11-23): the test board's own account (`did:plc:athcomsj45k5rxjm7zjavta6`, made for it) took the handle `test.hub.cyberspace.nexus` through Bluesky's "No DNS panel" check, answered by the hub; Bluesky, the public AppView and the PLC directory all show it. Clearing the board's DID (`hubctl set-did test clear`) made the hub answer 404 at once; restored straight after |
 
 ### H5. Hub-served pages
 

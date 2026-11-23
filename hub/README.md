@@ -1,8 +1,8 @@
 # The Nexus Lounge hub
 
 The hub lets BBSes run behind home firewalls and makes them reachable at
-`name.hub.example` ([hub spec](../docs/hub.md),
-[hub plan](../docs/hub_development_plan.md)). Three programs run on the hub's
+`name.hub.example` ([hub spec](../docs/development/hub.md),
+[hub plan](../docs/development/hub_development_plan.md)). Three programs run on the hub's
 machine:
 
 | Program | Role |
@@ -109,7 +109,7 @@ The chat itself is at `/space/chat`, for anyone signed in who may join.
 who is where, for views of the space such as a map or a BBS door: a
 WebSocket at `/space/live` on the hub's address, for people allowed in. It
 sends the whole state, then changes. The format is in
-[docs/live_model.md](../docs/live_model.md). With it on, `/space` is a map
+[docs/live_model.md](../docs/development/live_model.md). With it on, `/space` is a map
 drawn from that stream, and opening a board from the map shows the person
 there while they keep it open. A BBS's door (F19 in the BBS plan) uses the
 same stream, and the chat room, for its members, with its tunnel token:

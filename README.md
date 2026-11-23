@@ -11,7 +11,7 @@ This repo holds its specs and plans, and later the hub's code:
 
 - [docs/README.md](docs/README.md): overview, architecture, and an index of
   the design docs
-- [docs/development_plan.md](docs/development_plan.md): features, milestones,
+- [docs/development_plan.md](docs/development/development_plan.md): features, milestones,
   and progress
 
 The BBS work itself is on the

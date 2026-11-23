@@ -1,7 +1,7 @@
 //  The live model of the common space (hub plan H16, vision §8.3): who is
 //  there, where, and who is talking together, streamed to each viewer over a
 //  WebSocket. A small core that any view can draw, versioned, under the
-//  development names (nsidPrefix + '.space.*'); see docs/live_model.md.
+//  development names (nsidPrefix + '.space.*'); see docs/development/live_model.md.
 //
 //  A viewer gets the whole state when they connect, then only what changed.
 //  Who appears follows presence (presence.ts): nobody whose own setting is

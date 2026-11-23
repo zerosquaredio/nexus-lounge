@@ -21,7 +21,7 @@ can be handed to a community later.
 ## Architecture in brief
 
 - **BBS:** [ENiGMA½](https://github.com/NuSkooler/enigma-bbs) with AT
-  Protocol modules ([enigma_integration.md](enigma_integration.md)), run by a
+  Protocol modules ([enigma_integration.md](development/enigma_integration.md)), run by a
   sysop, often behind a home firewall. Serves a terminal over WebSocket
   (enig-term in the browser) and optionally SSH. Uses AT for user login and
   for publishing its own public records, both via direct outbound HTTPS.
@@ -31,19 +31,33 @@ can be handed to a community later.
 - **AT / Bluesky:** existing infrastructure. Nothing is added to it; the BBS
   and hub interoperate with it over the network as clients.
 
+The docs are in two folders: [development/](development/) for how it's
+built and where it's going (plans, specs, research), and [admin/](admin/) for
+running a board or a hub. Guides for people using boards and the hub will go
+in `user/`.
+
+### Development
+
 | Doc | Covers |
 |---|---|
-| [development_plan.md](development_plan.md) | Features, delivery tracks (upstream / fork / mods / this repo), configuration model, milestones, PR sequence |
-| [hub_development_plan.md](hub_development_plan.md) | Hub features H0–H19, architecture (Caddy, frp, TypeScript control plane), milestones, testing, deployment |
-| [enigma_integration.md](enigma_integration.md) | How the specs map onto ENiGMA½: login type, routes, groups as attestations, transport, upstream strategy |
-| [attestation.md](attestation.md) | User authentication (AT OAuth), credential binding, attestations, access policies, verifier plugins |
-| [transport.md](transport.md) | HTTPS/WebSocket transport, tunnels and reachability, optional SSH, P2P backlog |
-| [related_tools.md](related_tools.md) | Software around boards and the hub: ANSI art tools, and what the hub is built from |
-| [hub.md](hub.md) | Optional central hub: tunnel relay, sysop registration, routing, directory |
-| [publishing.md](publishing.md) | The BBS's own AT account and public records: listing, events, status, announcements |
-| [networking.md](networking.md) | BBS-to-BBS peering: shared boards, files, and games; clusters of BBSes acting as one |
-| [overte_evaluation.md](overte_evaluation.md) | The 3D and VR choice: Overte worlds, a browser client from Vircadia's web SDK, and how identity and networking would fit |
-| [at_communities.md](at_communities.md) | Where AT development happens: code hosting, shared schemas, community, developer references |
+| [development_plan.md](development/development_plan.md) | Features, delivery tracks (upstream / fork / mods / this repo), configuration model, milestones, PR sequence |
+| [hub_development_plan.md](development/hub_development_plan.md) | Hub features H0–H19, architecture (Caddy, frp, TypeScript control plane), milestones, testing, deployment |
+| [hub.md](development/hub.md) | Optional central hub: tunnel relay, sysop registration, routing, directory |
+| [live_model.md](development/live_model.md) | The hub's common space as a live stream: who is there, where, and who is together, for its map and the BBS door |
+| [enigma_integration.md](development/enigma_integration.md) | How the specs map onto ENiGMA½: login type, routes, groups as attestations, transport, upstream strategy |
+| [attestation.md](development/attestation.md) | User authentication (AT OAuth), credential binding, attestations, access policies, verifier plugins |
+| [publishing.md](development/publishing.md) | The BBS's own AT account and public records: listing, events, status, announcements |
+| [transport.md](development/transport.md) | HTTPS/WebSocket transport, tunnels and reachability, optional SSH, P2P backlog |
+| [networking.md](development/networking.md) | BBS-to-BBS peering: shared boards, files, and games; clusters of BBSes acting as one |
+| [overte_evaluation.md](development/overte_evaluation.md) | The 3D and VR choice: Overte worlds, a browser client from Vircadia's web SDK, and how identity and networking would fit |
+| [at_communities.md](development/at_communities.md) | Where AT development happens: code hosting, shared schemas, community, developer references |
+
+### Running a board or hub
+
+| Doc | Covers |
+|---|---|
+| [bbs_account.md](admin/bbs_account.md) | Setting up a BBS's AT account and its handle under a hub: the steps, and how the check works |
+| [related_tools.md](admin/related_tools.md) | Software around boards and the hub: ANSI art tools, and what the hub is built from |
 
 ## Glossary
 
@@ -52,17 +66,17 @@ can be handed to a community later.
 | Term | Meaning |
 |---|---|
 | **BBS** | **Bulletin Board Server**: this project's server, run by a sysop. (Traditionally "Bulletin Board System"; the server reading parallels AT's PDS.) |
-| **Hub** | The optional public server that relays inbound traffic to BBSes over tunnels and provides the directory and BBS handles ([hub.md](hub.md)) |
+| **Hub** | The optional public server that relays inbound traffic to BBSes over tunnels and provides the directory and BBS handles ([hub.md](development/hub.md)) |
 | **Leaf** | Any endpoint people reach through a hub: a BBS today; later chats, games, VR worlds ([Cyberspace Framework vision](https://github.com/zerosquaredio/cyberspace-framework/blob/main/docs/vision.md)) |
 | **Cyberspace Framework** | The long-range vision this project is the first piece of: a shared, cyberpunk-styled space across leaves and hubs ([Cyberspace Framework vision](https://github.com/zerosquaredio/cyberspace-framework/blob/main/docs/vision.md)) |
 | **Sysop** | A person who runs a BBS. In ENiGMA½: root plus members of the `sysops` group |
 | **Root** | User #1, permanently a sysop, with a few root-only powers (e.g. reading all private mail) |
-| **Provisional user** | An authenticated user admitted with limited access until approved ([attestation.md](attestation.md) §5) |
+| **Provisional user** | An authenticated user admitted with limited access until approved ([attestation.md](development/attestation.md) §5) |
 | **ENiGMA½** | The open-source Node.js BBS software this project builds on |
 | **enig-term** | ENiGMA½'s browser terminal (CP437 fonts, ANSI), connecting over WebSocket |
-| **Attestation** | A record that a verifier vouched for a DID ([attestation.md](attestation.md) §4) |
-| **Verifier** | A plugin that checks something about a user and issues attestations ([attestation.md](attestation.md) §6) |
-| **Tunnel** | An outbound connection from a BBS that lets inbound traffic reach it without opening firewall ports ([transport.md](transport.md) §3) |
+| **Attestation** | A record that a verifier vouched for a DID ([attestation.md](development/attestation.md) §4) |
+| **Verifier** | A plugin that checks something about a user and issues attestations ([attestation.md](development/attestation.md) §6) |
+| **Tunnel** | An outbound connection from a BBS that lets inbound traffic reach it without opening firewall ports ([transport.md](development/transport.md) §3) |
 
 ### AT Protocol terms
 
