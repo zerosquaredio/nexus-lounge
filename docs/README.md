@@ -34,10 +34,11 @@ can be handed to a community later.
 | Doc | Covers |
 |---|---|
 | [development_plan.md](development_plan.md) | Features, delivery tracks (upstream / fork / mods / this repo), configuration model, milestones, PR sequence |
-| [hub_development_plan.md](hub_development_plan.md) | Hub features H0–H18, architecture (Caddy, frp, TypeScript control plane), milestones, testing, deployment |
+| [hub_development_plan.md](hub_development_plan.md) | Hub features H0–H19, architecture (Caddy, frp, TypeScript control plane), milestones, testing, deployment |
 | [enigma_integration.md](enigma_integration.md) | How the specs map onto ENiGMA½: login type, routes, groups as attestations, transport, upstream strategy |
 | [attestation.md](attestation.md) | User authentication (AT OAuth), credential binding, attestations, access policies, verifier plugins |
 | [transport.md](transport.md) | HTTPS/WebSocket transport, tunnels and reachability, optional SSH, P2P backlog |
+| [related_tools.md](related_tools.md) | Software around boards and the hub: ANSI art tools, and what the hub is built from |
 | [hub.md](hub.md) | Optional central hub: tunnel relay, sysop registration, routing, directory |
 | [publishing.md](publishing.md) | The BBS's own AT account and public records: listing, events, status, announcements |
 | [networking.md](networking.md) | BBS-to-BBS peering: shared boards, files, and games; clusters of BBSes acting as one |
