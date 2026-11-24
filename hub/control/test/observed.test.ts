@@ -44,6 +44,17 @@ describe('the hub account', () => {
         assert.equal(id.searchParams.get('scope'), meta.scope);
     });
 
+    it("is a public client of its own on an https:// address, signed with sign-in's key", () => {
+        const config = makeConfig({ domain: 'hub.example', site: { publicUrl: 'https://hub.example' } });
+        const meta = hubAccountMetadata(config) as Record<string, unknown>;
+        assert.equal(meta.client_id, 'https://hub.example/oauth/hub-account/client-metadata.json');
+        assert.deepEqual(meta.redirect_uris, ['https://hub.example/oauth/hub-account/callback']);
+        assert.equal(meta.scope, `atproto repo:${Collection}`);
+        assert.equal(meta.application_type, 'web');
+        assert.equal(meta.token_endpoint_auth_method, 'private_key_jwt');
+        assert.equal(meta.jwks_uri, 'https://hub.example/oauth/jwks.json');
+    });
+
     it('refuses a config with a port out of range', () => {
         assert.throws(() => makeConfig({ tunnel: { adminPort: 0 } }), /tunnel\.adminPort/);
         assert.throws(() => makeConfig({ hubAccount: { callbackPort: 70000 } }), /callbackPort/);

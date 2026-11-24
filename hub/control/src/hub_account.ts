@@ -6,16 +6,25 @@
 //  other records). The admin connects it once, from the command line
 //  ("hub-account connect HANDLE"); the control plane then uses it.
 //
-//  Development: a loopback client, the browser coming back to
-//  127.0.0.1:<hubAccount.callbackPort>. A public hub will need a public
-//  client, as sign-in does.
+//  On an https:// address it is a public client of its own, apart from
+//  sign-in's so that sign-in never offers to write anything: the site
+//  serves its metadata, it signs with the same key as sign-in, and the
+//  browser comes back to the site, which finishes connecting. Public
+//  clients keep their sessions far longer than loopback ones.
+//
+//  Development (http://127.0.0.1): a loopback client, the browser coming
+//  back to 127.0.0.1:<hubAccount.callbackPort>, where the command waits.
 
 import type { DatabaseSync } from 'node:sqlite';
 import type { HubConfig } from './config.ts';
 import { HubError } from './errors.ts';
-import { oauthStore } from './signin.ts';
+import { isPublicClient, JwksPath, loadSigningKey, oauthStore, SigningAlg } from './signin.ts';
 
+//  the loopback client's, on the command's own port
 export const HubAccountCallbackPath = '/callback';
+//  the public client's, served by the site
+export const HubAccountMetadataPath = '/oauth/hub-account/client-metadata.json';
+export const HubAccountWebCallbackPath = '/oauth/hub-account/callback';
 
 type Lib = typeof import('@atproto/oauth-client-node');
 type Client = InstanceType<Lib['NodeOAuthClient']>;
@@ -35,14 +44,33 @@ export function hubAccountScope(config: HubConfig): string {
 }
 
 export function hubAccountRedirectUri(config: HubConfig): string {
-    return `http://127.0.0.1:${config.hubAccount.callbackPort}${HubAccountCallbackPath}`;
+    return isPublicClient(config)
+        ? `${config.site.publicUrl}${HubAccountWebCallbackPath}`
+        : `http://127.0.0.1:${config.hubAccount.callbackPort}${HubAccountCallbackPath}`;
 }
 
 export function hubAccountMetadata(config: HubConfig) {
-    //  a loopback client is identified by its redirect URI and scope alone,
-    //  so the control plane, restoring the session, must build the same
     const redirectUri = hubAccountRedirectUri(config);
     const scope = hubAccountScope(config);
+    if (isPublicClient(config)) {
+        const base = config.site.publicUrl;
+        return {
+            client_id: `${base}${HubAccountMetadataPath}`,
+            client_name: `${config.domain}: the hub's own account`,
+            client_uri: base,
+            redirect_uris: [redirectUri] as [string],
+            scope,
+            grant_types: ['authorization_code', 'refresh_token'] as ['authorization_code', 'refresh_token'],
+            response_types: ['code'] as ['code'],
+            application_type: 'web' as const,
+            token_endpoint_auth_method: 'private_key_jwt' as const,
+            token_endpoint_auth_signing_alg: SigningAlg,
+            dpop_bound_access_tokens: true,
+            jwks_uri: `${base}${JwksPath}` as `https://${string}`,
+        };
+    }
+    //  a loopback client is identified by its redirect URI and scope alone,
+    //  so the control plane, restoring the session, must build the same
     return {
         client_id: `http://localhost?redirect_uri=${encodeURIComponent(redirectUri)}&scope=${encodeURIComponent(scope)}`,
         redirect_uris: [redirectUri] as [string],
@@ -87,16 +115,33 @@ export class HubAccount implements RecordWriter {
     }
 
     getClient(): Promise<Client> {
-        this.client ??= import('@atproto/oauth-client-node').then(
-            lib =>
-                new lib.NodeOAuthClient({
-                    clientMetadata: hubAccountMetadata(this.config),
-                    stateStore: oauthStore(this.db, 'oauth_state', 'key'),
-                    sessionStore: oauthStore(this.db, 'hub_oauth_session', 'did'),
-                    requestLock: lib.requestLocalLock,
-                })
-        );
+        this.client ??= import('@atproto/oauth-client-node')
+            .then(
+                async lib =>
+                    new lib.NodeOAuthClient({
+                        clientMetadata: hubAccountMetadata(this.config),
+                        keyset: isPublicClient(this.config)
+                            ? [await loadSigningKey(lib, this.config.site.signingKey)]
+                            : undefined,
+                        stateStore: oauthStore(this.db, 'oauth_state', 'key'),
+                        sessionStore: oauthStore(this.db, 'hub_oauth_session', 'did'),
+                        requestLock: lib.requestLocalLock,
+                    })
+            )
+            .catch(e => {
+                this.client = null; //  try again next time
+                throw e;
+            });
         return this.client;
+    }
+
+    //  A public client's metadata, served by the site; null for a loopback
+    //  client (its keys are sign-in's, served there)
+    async publicMetadata(): Promise<unknown | null> {
+        if (!isPublicClient(this.config)) {
+            return null;
+        }
+        return (await this.getClient()).clientMetadata;
     }
 
     info(): HubAccountInfo | null {

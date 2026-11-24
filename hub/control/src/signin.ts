@@ -14,7 +14,7 @@ export const CallbackPath = '/oauth/callback';
 //  served by the site for a public client (an https:// address)
 export const ClientMetadataPath = '/oauth/client-metadata.json';
 export const JwksPath = '/oauth/jwks.json';
-const SigningAlg = 'ES256';
+export const SigningAlg = 'ES256';
 const StateMaxAgeMs = 60 * 60 * 1000;
 export const SessionDays = 7;
 
@@ -105,10 +105,11 @@ export function clientMetadata(config: HubConfig) {
 }
 
 //  The public client's signing key: read from its file, or made and saved
-//  there (readable by the hub's user only) on first start. Losing it only
-//  means making a new one; nobody's sign-in depends on it afterwards, since
-//  the hub keeps no AT sessions.
-async function loadSigningKey(lib: Lib, path: string) {
+//  there (readable by the hub's user only) on first start. Sign-in and the
+//  hub's own account (hub_account.ts) share it. Losing it means making a new
+//  one: sign-in keeps no AT sessions, but the hub's account would need
+//  connecting again.
+export async function loadSigningKey(lib: Lib, path: string) {
     let text: string;
     try {
         text = await readFile(path, 'utf8');
@@ -118,8 +119,16 @@ async function loadSigningKey(lib: Lib, path: string) {
         }
         const key = await lib.JoseKey.generate([SigningAlg], `hub-${Date.now()}`);
         await mkdir(dirname(path), { recursive: true });
-        await writeFile(path, JSON.stringify(key.privateJwk, null, 4), { mode: 0o600, flag: 'wx' });
-        return key;
+        try {
+            await writeFile(path, JSON.stringify(key.privateJwk, null, 4), { mode: 0o600, flag: 'wx' });
+            return key;
+        } catch (e2) {
+            //  made by the other client in the meantime: use that one
+            if ('EEXIST' !== (e2 as NodeJS.ErrnoException).code) {
+                throw e2;
+            }
+            text = await readFile(path, 'utf8');
+        }
     }
     return lib.JoseKey.fromJWK(JSON.parse(text));
 }

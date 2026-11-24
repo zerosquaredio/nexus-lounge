@@ -57,6 +57,7 @@ import type { Listing } from './listing.ts';
 import { Profiles, type Profile } from './profiles.ts';
 import { parseReport, Presence, type DoorAccess, type ReportedMember } from './presence.ts';
 import { isDid, labelForHost } from './rules.ts';
+import { HubAccountMetadataPath, HubAccountWebCallbackPath, type HubAccountInfo } from './hub_account.ts';
 import {
     CallbackPath,
     ClientMetadataPath,
@@ -77,10 +78,18 @@ export interface SignInLike {
     publicDocuments?(): Promise<{ metadata: unknown; jwks: unknown } | null>;
 }
 
+//  The hub's own AT account (H6), for a public client: the site serves its
+//  metadata and takes the browser back after the admin approves
+export interface HubAccountLike {
+    publicMetadata(): Promise<unknown | null>;
+    finish(params: URLSearchParams): Promise<HubAccountInfo>;
+}
+
 export interface SiteDeps {
     config: HubConfig;
     registry: Registry;
     signin: SignInLike;
+    hubAccount?: HubAccountLike | null;
     //  the hub's copy of enig-term, if it serves one
     webterm?: WebTerm | null;
     //  BBS listings from the AT network, and looking up accounts
@@ -1338,6 +1347,46 @@ ${others.map(otherCard).join('\n')}`
                 return json(res, 404, { error: 'This hub signs in as a loopback client.' });
             }
             return json(res, 200, ClientMetadataPath === path ? docs.metadata : docs.jwks);
+        }
+
+        //  the hub's own account (H6), a public client of its own
+        if (HubAccountMetadataPath === path) {
+            let metadata: unknown = null;
+            try {
+                metadata = (await deps.hubAccount?.publicMetadata()) ?? null;
+            } catch (e) {
+                log(`hub account client: ${(e as Error).message}`);
+                return json(res, 503, { error: 'Not available right now.' });
+            }
+            return metadata ? json(res, 200, metadata) : json(res, 404, { error: 'Not found' });
+        }
+
+        //  the admin approved connecting it ("hub-account connect"). Only a
+        //  request the command started (its state, kept in the database) can
+        //  finish here.
+        if (HubAccountWebCallbackPath === path && deps.hubAccount) {
+            try {
+                const info = await deps.hubAccount.finish(url.searchParams);
+                log(`site: the hub's account is now ${info.did}`);
+                return send(
+                    res,
+                    200,
+                    page(
+                        'Hub account connected',
+                        `<p>The hub's own account is now <strong>${esc(info.handle ? '@' + info.handle : info.did)}</strong> (<code>${esc(info.did)}</code>). You can close this page.</p>`
+                    )
+                );
+            } catch (e) {
+                log(`hub account callback failed: ${(e as Error).message}`);
+                return send(
+                    res,
+                    400,
+                    page(
+                        'Hub account not connected',
+                        "<p>Connecting the hub's account didn't complete. Run <code>hub-account connect</code> again for a new link.</p>"
+                    )
+                );
+            }
         }
 
         if ('/signin' === path) {

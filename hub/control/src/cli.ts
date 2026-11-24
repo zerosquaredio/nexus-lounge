@@ -6,6 +6,7 @@
 import { writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
 import { HubAccount, HubAccountCallbackPath } from './hub_account.ts';
+import { isPublicClient } from './signin.ts';
 import { ObservedStatus } from './observed.ts';
 import { loadConfig, type HubConfig } from './config.ts';
 import { HubError } from './errors.ts';
@@ -55,7 +56,8 @@ The directory
 The hub's own AT account (it publishes observed status)
   hub-account connect HANDLE
                          prints a link to approve in a browser, then waits
-                         for the browser to come back to 127.0.0.1
+                         for the browser to come back (to the hub's site on
+                         an https:// address, else to 127.0.0.1)
   hub-account show
   hub-account disconnect gives the session back and forgets the account
   observed               each BBS: what the hub sees, and what it published
@@ -348,6 +350,30 @@ export async function run(argv: string[]): Promise<void> {
                 }
                 if ('connect' === what) {
                     const handle = need(positional, 2, 'HANDLE');
+                    if (isPublicClient(config)) {
+                        //  the browser comes back to the site, which finishes;
+                        //  watch for the account to change
+                        const before = account.info()?.connectedAt ?? null;
+                        console.log(
+                            `Open this link in a browser, signed in as ${handle}, and approve:\n\n` +
+                                `${await account.start(handle)}\n\n` +
+                                `The browser comes back to ${config.site.publicUrl}, which connects the account.\n` +
+                                `The hub's control plane must be running. Waiting...`
+                        );
+                        const until = Date.now() + 10 * 60 * 1000;
+                        while (Date.now() < until) {
+                            await new Promise(r => setTimeout(r, 2000));
+                            const info = account.info();
+                            if (info && info.connectedAt !== before) {
+                                console.log(`Connected: ${info.handle ?? '(no handle)'} ${info.did}`);
+                                return;
+                            }
+                        }
+                        throw new HubError(
+                            'hub-account',
+                            'Gave up after 10 minutes; run it again for a new link'
+                        );
+                    }
                     const port = config.hubAccount.callbackPort;
                     const back = awaitCallback(port, HubAccountCallbackPath, 10 * 60 * 1000);
                     console.log(

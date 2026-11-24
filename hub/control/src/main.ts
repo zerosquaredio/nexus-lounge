@@ -107,6 +107,8 @@ const site = createSite({
     config,
     registry,
     signin,
+    //  a public client finishes connecting the hub's account on the site
+    hubAccount: isPublicClient(config) ? account : null,
     webterm,
     directory,
     at,

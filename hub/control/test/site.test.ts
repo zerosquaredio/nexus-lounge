@@ -10,6 +10,7 @@ import { makeConfig } from '../src/config.ts';
 import { Registry } from '../src/registry.ts';
 import { clientMetadata, ClientMetadataPath, JwksPath, SignIn, type Identity } from '../src/signin.ts';
 import { createSite, type SignInLike } from '../src/site.ts';
+import { HubAccount, HubAccountMetadataPath, HubAccountWebCallbackPath } from '../src/hub_account.ts';
 import { Profiles } from '../src/profiles.ts';
 import { OtherSysopDid, SysopDid } from './helpers.ts';
 
@@ -407,6 +408,61 @@ describe('sign-in sessions', () => {
     it('serve no client documents for a loopback client', async () => {
         assert.equal((await call('GET', ClientMetadataPath)).status, 404);
         assert.equal((await call('GET', JwksPath)).status, 404);
+        assert.equal((await call('GET', HubAccountMetadataPath)).status, 404);
+        assert.equal((await call('GET', HubAccountWebCallbackPath + '?code=good')).status, 404);
+    });
+
+    it("serve the hub account's own public client, with sign-in's key, and finish connecting it there", async () => {
+        const dir = mkdtempSync(join(tmpdir(), 'hub-key-'));
+        const keyPath = join(dir, 'data', 'oauth_signing_key.json');
+        const config = makeConfig({
+            domain: 'hub.example',
+            database: ':memory:',
+            site: { publicUrl: 'https://hub.example', signingKey: keyPath },
+        });
+        const reg = new Registry(':memory:', config.registration);
+        const HubDid = 'did:plc:hubhubhubhubhubhubhubhubh';
+        //  the real client for its documents; the AT step stood in for
+        const account = new HubAccount(reg.db, config);
+        const hubAccount = {
+            publicMetadata: () => account.publicMetadata(),
+            async finish(params: URLSearchParams) {
+                if ('good' !== params.get('code')) {
+                    throw new Error('bad code');
+                }
+                return { did: HubDid, handle: 'hubaccount.example', connectedAt: '2026-11-24T00:00:00.000Z' };
+            },
+        };
+        const site = createSite({ config, registry: reg, signin: new SignIn(reg.db, config), hubAccount });
+        await new Promise<void>(r => site.listen(0, '127.0.0.1', r));
+        const at = `http://127.0.0.1:${(site.address() as AddressInfo).port}`;
+        try {
+            const reply = await fetch(at + HubAccountMetadataPath);
+            assert.equal(reply.status, 200);
+            const meta = (await reply.json()) as Record<string, unknown>;
+            assert.equal(meta.client_id, 'https://hub.example' + HubAccountMetadataPath);
+            assert.deepEqual(meta.redirect_uris, ['https://hub.example' + HubAccountWebCallbackPath]);
+            assert.equal(meta.scope, 'atproto repo:nexus.cyberspace.dev.hub.observedStatus');
+            assert.equal(meta.token_endpoint_auth_method, 'private_key_jwt');
+            assert.equal(meta.jwks_uri, 'https://hub.example' + JwksPath);
+
+            //  one key for both clients: the one sign-in serves
+            const saved = JSON.parse(readFileSync(keyPath, 'utf8')) as { kid?: string };
+            const jwks = (await (await fetch(at + JwksPath)).json()) as { keys: { kid?: string }[] };
+            assert.equal(jwks.keys.length, 1);
+            assert.equal(jwks.keys[0]?.kid, saved.kid);
+
+            const bad = await fetch(at + HubAccountWebCallbackPath + '?code=bad');
+            assert.equal(bad.status, 400);
+            const good = await fetch(at + HubAccountWebCallbackPath + '?code=good');
+            assert.equal(good.status, 200);
+            assert.match(await good.text(), new RegExp(HubDid));
+        } finally {
+            site.closeAllConnections();
+            await new Promise(r => site.close(r));
+            reg.close();
+            rmSync(dir, { recursive: true, force: true });
+        }
     });
 });
 
