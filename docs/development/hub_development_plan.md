@@ -519,6 +519,13 @@ without going to Bluesky
 §6.3). Sysops of hosted BBS accounts still hold their DID's rotation key
 (vision §6.1).
 
+Open question (2026-11-23): today every name under the hub's domain is a
+BBS, and the hub answers handle checks for registered BBSes only. People's
+handles there would share those names (a person `test` against the BBS
+`test`). Either one registry of names for both, or people under their own
+label (such as `alice.people.hub.example`, which needs its own wildcard DNS
+and certificates).
+
 ### H12. User profiles and vouched identities (split, 2026-11-08)
 
 Now part of the first slice of the common space: profiles are H13, and
@@ -617,11 +624,11 @@ control plane, behind the same edge. The BBS side is F18 and F19
 | Milestone | Features | Outcome |
 |---|---|---|
 | **HM0** Groundwork | H0 | Domain, VPS, and spikes done; tunnel choice confirmed |
-| **HM1** Reachable | H1, H2, minimal H3 (admin CLI) | A throwaway test ENiGMA½ (§6; never the personal dev VM) is reachable at `test.hub.cyberspace.nexus`, with AT login working through the hub. **Working locally** (2026-11-09); the public server remains |
-| **HM2** Self-service | H3, H4, H5 | Sysops register themselves, get handles, and users connect in the browser. H3 and H5 **working locally** (2026-11-09) |
+| **HM1** Reachable | H1, H2, minimal H3 (admin CLI) | A throwaway test ENiGMA½ (§6; never the personal dev VM) is reachable at `test.hub.cyberspace.nexus`, with AT login working through the hub. **Working on the public hub** (2026-11-22; locally 2026-11-09) |
+| **HM2** Self-service | H3, H4, H5 | Sysops register themselves, get handles, and users connect in the browser. **Working on the public hub**: H3 and H5 (2026-11-22, registration by the admin for now), H4 (2026-11-23) |
 | **HM3** Discovery | H6, H7 | Observed status and a public directory. **Working locally**: H7 (2026-11-09), H6 (2026-11-17) |
 | **HM4** Public launch | H8 | Operations and moderation in place; open to outside sysops |
-| **HM5** Common space, first slice | H13 to H19 | Sign-in, presence, one chat room, the live model, a 2D map and an ANSI view, with basic blocking. Built on the test hub; needs HM3, not HM4, but must be in place (with H18) before a public hub turns it on. **Working locally** (2026-11-19): H13 to H18 all done on the test hub |
+| **HM5** Common space, first slice | H13 to H19 | Sign-in, presence, one chat room, the live model, a 2D map and an ANSI view, with basic blocking. Built on the test hub; needs HM3, not HM4, but must be in place (with H18) before a public hub turns it on. **Working locally** (2026-11-19): H13 to H18 all done on the test hub. **Working on the public hub** (2026-11-24), H13 to H19, with two people and two boards with different sysops: each sysop sees only their own board; both people see each other in the room and at the board one is logged in to (shown in two places at once, from the hub's page and the board's report); boards open from the map; chat works both ways |
 | Later | H9, H10, H11 | Sysop verification, end-to-end privacy, hosted accounts |
 
 ### 5.1 Dependencies on the BBS plan
