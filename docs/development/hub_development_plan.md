@@ -503,7 +503,7 @@ it back after 28 s. 2 new tests for the public client.
 | Implements | Abuse reporting form and contact; suspend BBS and ban sysop DID; quotas and bandwidth limits; logging without content; metrics and alerting; database backups; terms of service and privacy notice (including the TLS-termination disclosure) |
 | Depends on | H3 |
 | Done when | Required before public launch: an abusive BBS can be suspended within minutes, logs contain no message content, and backups restore cleanly |
-| Status | **In progress.** Done: suspension cuts an open tunnel, and DIDs can be banned (2026-11-25); logs audited for content (2026-11-25); nightly backups to the dev VM and the NAS (2026-11-23, not yet restored into a running hub); a deploy script with rollback. Logs kept 3 months on the public hub (2026-11-25). To do: a restore test, usage trends, quotas and bandwidth limits, alerting, the reporting form and contact, terms of service and privacy notice |
+| Status | **In progress.** Done: suspension cuts an open tunnel, and DIDs can be banned (2026-11-25); logs audited for content (2026-11-25); nightly backups to the dev VM and the NAS (2026-11-23), restored and checked (2026-11-25); a deploy script with rollback. Logs kept 3 months on the public hub (2026-11-25). To do: usage trends, quotas and bandwidth limits, alerting, the reporting form and contact, terms of service and privacy notice |
 
 **Suspension and bans** (2026-11-25). frp only checks heartbeats when its
 connections aren't multiplexed, so a suspended BBS's open tunnel stayed up
@@ -529,6 +529,17 @@ the control plane's own polling, and the control plane logs every login and
 route). Tests check that tokens, the chat secret, what was said and what a
 report says never reach the logs. The public hub keeps its logs 3 months
 (`MaxRetentionSec=3month` for the journal), for looking into reports.
+
+**Restore test** (2026-11-25). The newest nightly backup, taken from the
+NAS, restored into a scratch hub on the dev VM (on 127.0.0.1 only, with
+observed status, the directory and chat off, so it reached nothing and
+never touched the hub's AT account): the database passed its integrity
+check and upgraded from schema 6 to 7 at start; both BBSes kept their
+sysops and DIDs, and the hub answered their handles; each board's agent
+token, from its own config in the same backup, still logged in, and a wrong
+one was refused; the hub account, profiles, sessions and published records
+were all there; the signing key, chat keys and secrets were present; both
+boards' databases passed their checks; and the hub's site answered.
 
 **Usage trends** (to do, with metrics). Logs go after 3 months, so for the
 long view the hub keeps a separate summary, one row a day: BBSes registered,

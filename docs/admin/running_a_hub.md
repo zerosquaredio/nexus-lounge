@@ -269,7 +269,15 @@ To restore: stop the control plane, frps and the chat server; put the files
 back, removing any `hub.sqlite-wal` and `hub.sqlite-shm` left beside the
 database; give them back to the hub's user (the signing key readable by it
 only); start everything again. BBSes' agents reconnect by themselves, and
-people stay signed in.
+people stay signed in. A hub older than the backup's code upgrades the
+database when it starts. Right after a restore, `list` may show BBSes as
+connected from when the backup was made; the control plane corrects that
+from frps within seconds.
+
+To test a backup, restore it somewhere private (on `127.0.0.1` only) with
+`observedStatus`, `directory` and the chat turned off in its config. Above
+all, a copy must never use the hub's own AT account while the real hub
+runs: renewing the account's session there would end the real hub's.
 
 To move the hub to another server, restore there, then point the DNS names
 (the hub's name and the wildcard under it) at the new address.
