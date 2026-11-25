@@ -12,6 +12,9 @@ export const ChatScriptPath = '/space/chat.js';
 export const MaxLabelLookups = 50;
 //  an IRC line has room for about this much text
 export const MaxChatMessage = 400;
+//  The IBM VGA font, for art drawn as characters: VileR's, CC BY-SA 4.0,
+//  served unchanged (fonts/LICENSE-int10h.txt)
+export const VgaFontPath = '/fonts/vga-8x16.woff';
 
 //  The VGA colours, as classes for art drawn as characters (the ANSI view)
 const AnsiColours = Palette.map(([r, g, b], i) => {
@@ -45,8 +48,9 @@ export function chatPane(room: string, wait = false): string {
 .chat-view label { display: inline; margin: 0; }
 .chat-view select { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; }
 .chat-log pre { margin: 0; overflow-x: auto; max-width: 100%; }
+@font-face { font-family: "Hub VGA"; src: url("${VgaFontPath}") format("woff"); font-display: swap; }
 .chat-log pre.ansi { display: inline-block; padding: 2px; background: #000; color: #aaa; border: 1px solid var(--line);
-  font: 8px/1 "Px437 IBM VGA 8x16", "PxPlus IBM VGA 8x16", ui-monospace, Consolas, monospace; }
+  font: 8px/1 "Hub VGA", ui-monospace, Consolas, monospace; }
 .chat-log pre.text { font: 8px/1.15 ui-monospace, Consolas, monospace; }
 .chat-log details summary { cursor: pointer; color: var(--accent); font-size: .85rem; }
 ${AnsiColours}
@@ -72,6 +76,9 @@ ${
 <button type="button" id="chat-art" aria-expanded="false" aria-controls="chat-art-pick" hidden>Art</button>
 </form>
 <div id="chat-art-pick" class="art-pick" role="group" aria-label="Share a piece of art" hidden></div>
+<p id="chat-art-credit" class="hint" hidden>Art as ANSI is drawn in the IBM VGA font from VileR's
+<a href="https://int10h.org/oldschool-pc-fonts/" rel="noopener">Ultimate Oldschool PC Font Pack</a> (CC BY-SA 4.0).
+<a href="/art">All the art</a></p>
 </div>
 <aside aria-label="In the room"><h2>Here now</h2><ul id="chat-people" class="chat-people"></ul></aside>
 </div>`;
@@ -321,6 +328,7 @@ export const ChatScript = String.raw`(function () {
             });
             artButton.hidden = false;
             viewWrap.hidden = false;
+            byId('chat-art-credit').hidden = false;
         })
         .catch(function () {});
     artButton.addEventListener('click', function () {

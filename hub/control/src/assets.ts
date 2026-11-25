@@ -3,7 +3,8 @@
 //
 //  Every file is named by the SHA-256 of its bytes and checked against it,
 //  and against what its form allows (assets spec §6.2, §6.3): ANSI must be
-//  clean already (ansi.ts writes it out the same again), images must be
+//  clean ANSI (ansi.ts: only characters, colours and line ends, whoever
+//  cleaned it), images must be
 //  PNGs within the size limits, text must be UTF-8. An item with any file
 //  that fails is left out, and said so in the log. Later the same records
 //  come from AT repos, and the files from wherever they say.
@@ -114,7 +115,11 @@ export class AssetLibrary {
         const record = item.record;
         const checked = new Map<string, ServedFile>();
         const url = (v: Version) => `/assets/${v.file.sha256}`;
-        for (const v of record.versions) {
+        //  versions of kinds this hub doesn't serve (a newer baker's, or
+        //  another tool's) are passed over, not refused: the item keeps the
+        //  versions it can show (assets spec §3.5)
+        const known = record.versions.filter(v => Object.hasOwn(Types, v.form));
+        for (const v of known) {
             const hash = String(v.file?.sha256 ?? '');
             if (!/^[0-9a-f]{64}$/.test(hash)) {
                 throw new HubError('asset', 'a file named by something other than its hash');

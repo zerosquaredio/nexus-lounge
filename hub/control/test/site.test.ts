@@ -858,8 +858,17 @@ describe('the art the hub offers (assets, a first slice)', () => {
         assert.equal((await call('GET', '/assets/../library.json')).status, 404);
     });
 
+    it('serves the VGA font for art drawn as characters', async () => {
+        await start(false, {}, null, library());
+        const font = await call('GET', '/fonts/vga-8x16.woff');
+        assert.equal(font.status, 200);
+        assert.equal(font.headers['content-type'], 'font/woff');
+        assert.ok(font.body.startsWith('wOFF'));
+    });
+
     it('has none of it when the hub offers no art', async () => {
         await start(false);
+        assert.equal((await call('GET', '/fonts/vga-8x16.woff')).status, 404);
         assert.equal((await call('GET', '/art')).status, 404);
         assert.equal((await call('GET', '/art.json')).status, 404);
     });

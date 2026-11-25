@@ -128,6 +128,36 @@ One record (record key `self`) in a person's repo:
 Which look a person uses on a given leaf or hub is **not** published: it is
 kept by that leaf or hub (vision §7.2).
 
+### 3.5 Versions of the format
+
+**The format is this spec's, not any tool's.** The baker is one tool that
+writes it; another tool, or an older or newer baker, may write it too, and
+a hub takes them all alike. A derived version's `tool` names what made it,
+for credit and for tracing faults, never to decide whether it is accepted.
+
+- **Files are standard formats** (PNG, ANSI, glTF, VRM). A hub checks them
+  against this spec's rules (clean ANSI, §6.2, is a rule about the file,
+  not "what our writer would write"), never against one tool's exact
+  output.
+- **Records follow AT's schema rules** ([publishing spec](publishing.md)
+  §3.8): fields are only ever added, so a field a hub doesn't know is
+  ignored. A change that can't be made that way takes a new record type
+  name, and hubs accept both the old and the new for a changeover period.
+- **Lists are open:** forms, kinds, roles, states and events. A version of a
+  form a hub doesn't serve yet is passed over, and the item is shown with
+  the versions it has. An event a model has animations for but a hub
+  doesn't send never plays; an event a hub sends that a model doesn't cover
+  shows its idle state, or its role's default (world.md §6.3, §6.4).
+  Mismatches cost detail, not breakage.
+- **The floor:** every asset has an `image` and a description (and ANSI art
+  its `ansi`), which every hub can show. Raising the floor is the one change
+  that would ask publishers to add something, and is done rarely, with
+  notice.
+- **Derived versions are a cache.** The hand-made version is the asset; a
+  hub with newer tools may make the derived ones again from it (an icon,
+  a sprite sheet, a lighter model), which is showing it, not remixing it
+  (§7.1). A leaf never has to re-bake for a hub.
+
 ## 4. Publishing
 
 ### 4.1 Where files go
@@ -248,10 +278,15 @@ Once per hash, before anything is served:
 2. **Validate** the format by actually parsing it, never trusting the
    media type or file name.
 3. **Sanitize:**
-   - **ANSI:** parsed and written out again with only characters, colours
-     (SGR), cursor movement and line endings. Everything else (window
-     titles, terminal queries, device modes, other escape strings) is
-     dropped. SAUCE is read for width, font, iCE colours and credit.
+   - **ANSI:** must be **clean ANSI**: before its end-of-file mark,
+     nothing but characters, colour codes (SGR: reset, bright, blink, the
+     eight foregrounds and backgrounds) and line ends, in lines of at most
+     160 characters; after it, at most SAUCE's comments and record. Window
+     titles, terminal queries, cursor movement, device modes and every other
+     escape are refused. Art that isn't clean yet is cleaned by playing it
+     into a grid of characters and writing it out again, which a hub may do
+     itself or leave to the publisher's baker. SAUCE is read for width,
+     font, iCE colours and credit.
    - **Images:** decoded and re-encoded, which strips metadata (including
      location data in photos) and anything hidden after the image.
    - **SVG** is never served as SVG: the hub rasterizes it to PNG.
@@ -463,3 +498,5 @@ the chat.*
 - How long the hub keeps first-seen records, given the 3-month log rule
   (they hold hashes and DIDs, not activity).
 - How at3d.app's avatar records, if they settle, map onto §3.
+- When a hub makes derived versions itself (§3.5): always, or only for
+  forms it serves that the publisher didn't make; and how it keeps them.

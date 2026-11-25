@@ -147,7 +147,8 @@ blanks ENiGMA½'s menu codes in its theme screens.
 Then set `assets.library` to that directory. The hub checks every file
 again as it starts (leaving out, and logging, anything that fails), serves
 them at `/assets/<sha256>`, shows them at `/art`, and adds an **Art** button
-and `/art NAME` to the chat. Each person picks how they see art in the chat
+and `/art NAME` to the chat, and serves the IBM VGA web font for it
+(`fonts/`, VileR's, CC BY-SA 4.0). Each person picks how they see art in the chat
 (**Art as**: pictures, ANSI drawn as characters, or text), remembered in
 their browser.
 

@@ -112,6 +112,29 @@ describe('ANSI art', () => {
         );
     });
 
+    it('calls clean what uses only characters, colours and line ends, whoever wrote it', () => {
+        //  as another tool might write it: other colour codes from the set,
+        //  bare line feeds, no SAUCE at all
+        assert.equal(isCleanAnsi(bytes('\x1b[1;32;40mHi\x1b[22;39;49m there\n\xdb\xdb\x1b[m\r\n')), true);
+        assert.equal(
+            isCleanAnsi(Buffer.concat([bytes('Hi'), Buffer.from([0x1a])])),
+            true,
+            'an end mark alone'
+        );
+        for (const bad of [
+            '\x1b[2J',
+            '\x1b[5C',
+            '\x1b]0;title\x07',
+            '\x1b[38;5;196m',
+            '\x1b[6n',
+            'a bell\x07',
+            'x'.repeat(161),
+        ]) {
+            assert.equal(isCleanAnsi(bytes(bad)), false, JSON.stringify(bad));
+        }
+        assert.equal(isCleanAnsi(Buffer.concat([bytes('Hi'), Buffer.from([0x1a]), bytes('junk')])), false);
+    });
+
     it('has a size limit', () => {
         assert.throws(() => parseAnsi(Buffer.alloc(MaxAnsiBytes + 1, 0x41)), { code: 'too-large' });
     });
@@ -181,6 +204,24 @@ describe('baking, and the hub loading what was baked', () => {
         assert.equal(hub.file(served.thumb.url.slice(8))?.type, 'image/png');
         assert.equal(hub.file(served.ansi.slice(8))?.type, 'text/x-ansi');
         assert.equal(hub.file('0'.repeat(64)), null);
+    });
+
+    it("passes over versions of kinds it doesn't serve, keeping the rest of the item", () => {
+        const out = join(dir, 'lib3');
+        writeFileSync(join(dir, 'c.ans'), bytes('third'));
+        const library = bake([join(dir, 'c.ans')], out, options(testFont()), { name: 'x', description: '' });
+        //  a newer baker's version, of a kind this hub doesn't know
+        (library.items[0]!.record.versions as unknown[]).push({
+            form: 'voxel',
+            file: { sha256: 'f'.repeat(64), size: 1, mediaType: 'application/x-vox' },
+            made: 'derived',
+        });
+        (library.items[0]!.record as unknown as Record<string, unknown>).sparkles = 'a field from the future';
+        writeFileSync(join(out, 'library.json'), JSON.stringify(library));
+        const logs: string[] = [];
+        const hub = AssetLibrary.load(out, line => logs.push(line));
+        assert.equal(hub.items.length, 1, logs.join('\n'));
+        assert.equal(hub.file('f'.repeat(64)), null, 'and serves nothing for it');
     });
 
     it("leaves out an item whose files don't match their hashes, or whose ANSI isn't clean", () => {

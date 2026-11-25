@@ -405,10 +405,66 @@ export function gridText(grid: Grid): string {
     return lines.join('\n') + '\n';
 }
 
-//  Whether a file is already clean: written out again, it is the same.
-//  (The hub's check of baked art, assets spec §6.2.)
+//  The colour codes clean ANSI may use: reset, bright, blink (a bright
+//  background with iCE colours), the eight foregrounds and backgrounds
+const CleanSgr = new Set([
+    0, 1, 5, 22, 25, 30, 31, 32, 33, 34, 35, 36, 37, 39, 40, 41, 42, 43, 44, 45, 46, 47, 49,
+]);
+
+//  Whether a file is clean ANSI (assets spec §2): before its end-of-file
+//  mark, nothing but characters, colour codes from the set above, and line
+//  ends, in lines of at most MaxAnsiColumns characters and MaxAnsiRows lines;
+//  after it, at most SAUCE's comments and record. This is the rule itself,
+//  not "what our writer would write", so art cleaned by any tool, or by any
+//  version of the baker, passes. (The hub's check, assets spec §6.2.)
 export function isCleanAnsi(file: Uint8Array): boolean {
-    const { body, sauce } = readSauce(file);
-    const grid = parseAnsi(body, { width: sauce?.width, ice: sauce?.ice });
-    return Buffer.from(file).equals(writeAnsi(grid, sauce ?? {}));
+    if (file.length > MaxAnsiBytes + 128 + 5 + 64 * 255) {
+        return false;
+    }
+    const eof = file.indexOf(0x1a);
+    const art = eof >= 0 ? file.subarray(0, eof) : file;
+    if (art.length > MaxAnsiBytes) {
+        return false;
+    }
+    let column = 0;
+    let rows = 1;
+    for (let i = 0; i < art.length; i++) {
+        const c = art[i]!;
+        if (0x1b === c) {
+            const code = /^\x1b\[([0-9;]*)m/.exec(Buffer.from(art.subarray(i, i + 64)).toString('latin1'));
+            if (!code || !code[1]!.split(';').every(p => CleanSgr.has(Number(p || 0)))) {
+                return false;
+            }
+            i += code[0].length - 1;
+        } else if (0x0a === c) {
+            column = 0;
+            if (++rows > MaxAnsiRows) {
+                return false;
+            }
+        } else if (0x0d === c) {
+            column = 0;
+        } else if (c < 0x20 || 0x7f === c || ++column > MaxAnsiColumns) {
+            return false;
+        }
+    }
+    if (eof < 0) {
+        return true;
+    }
+    //  after the end-of-file mark: SAUCE, and its comments, or nothing
+    const rest = file.subarray(eof + 1);
+    if (!rest.length) {
+        return true;
+    }
+    if (
+        rest.length < 128 ||
+        'SAUCE00' !== Buffer.from(rest.subarray(rest.length - 128, rest.length - 121)).toString('latin1')
+    ) {
+        return false;
+    }
+    const comments = rest[rest.length - 128 + 104] ?? 0;
+    const before = rest.length - 128;
+    return (
+        0 === before ||
+        (before === 5 + 64 * comments && 'COMNT' === Buffer.from(rest.subarray(0, 5)).toString('latin1'))
+    );
 }

@@ -33,6 +33,7 @@
 //    (the door's calls: bearer, ?bbs=name and ?did= or ?user= for the member)
 //  GET  /art              the art the hub offers (assets.ts), and /art.json for the chat
 //  GET  /assets/<sha256>  one of its files, named by its hash
+//  GET  /fonts/vga-8x16.woff  the IBM VGA font, for art drawn as characters
 //  GET  /bbs              your BBSes, and registering a new one
 //  POST /bbs              register a BBS: shows its token and agent config, once
 //  POST /bbs/rotate       a new token and agent config
@@ -43,7 +44,14 @@ import { readFileSync } from 'node:fs';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { BbsChatPath, ChatPath, type Chat } from './chat.ts';
-import { chatPageBody, chatPane, ChatScript, ChatScriptPath, MaxLabelLookups } from './chat_page.ts';
+import {
+    chatPageBody,
+    chatPane,
+    ChatScript,
+    ChatScriptPath,
+    MaxLabelLookups,
+    VgaFontPath,
+} from './chat_page.ts';
 import { Live, LivePath, personId } from './live.ts';
 import { mapPageBody, mapPane, MapScript, MapScriptPath } from './map_page.ts';
 import { blockText, isPersonId, MaxNote, Moderation } from './moderation.ts';
@@ -126,6 +134,14 @@ interface DoorFound {
 }
 
 const Cookie = 'hub_session';
+//  the IBM VGA font (VileR's, CC BY-SA 4.0), served beside the art
+const VgaFont = (() => {
+    try {
+        return readFileSync(new URL('../fonts/WebPlus_IBM_VGA_8x16.woff', import.meta.url));
+    } catch {
+        return null;
+    }
+})();
 const MaxForm = 8 * 1024;
 //  a presence report of the most members allowed fits easily
 const MaxReport = 512 * 1024;
@@ -640,7 +656,7 @@ the name the BBS gives, never as your own account.</p>
         }
         const socket = config.site.publicUrl.replace(/^http/, 'ws');
         return {
-            'Content-Security-Policy': `default-src 'none'; script-src 'self'; connect-src 'self' ${socket}; style-src 'unsafe-inline'; img-src 'self'; form-action 'self' https:; frame-ancestors 'none'; base-uri 'none'`,
+            'Content-Security-Policy': `default-src 'none'; script-src 'self'; connect-src 'self' ${socket}; style-src 'unsafe-inline'; img-src 'self'; font-src 'self'; form-action 'self' https:; frame-ancestors 'none'; base-uri 'none'`,
         };
     }
 
@@ -989,7 +1005,7 @@ the name the BBS gives, never as your own account.</p>
         const socket = config.site.publicUrl.replace(/^http/, 'ws');
         const panel = whoPanel(config.space.chat.reportMinutes);
         return send(res, 200, page('Chat', chatPageBody(config.space.chat.room, panel), who), {
-            'Content-Security-Policy': `default-src 'none'; script-src 'self'; connect-src 'self' ${socket}; style-src 'unsafe-inline'; img-src 'self'; form-action 'self' https:; frame-ancestors 'none'; base-uri 'none'`,
+            'Content-Security-Policy': `default-src 'none'; script-src 'self'; connect-src 'self' ${socket}; style-src 'unsafe-inline'; img-src 'self'; font-src 'self'; form-action 'self' https:; frame-ancestors 'none'; base-uri 'none'`,
         });
     }
 
@@ -1639,6 +1655,16 @@ ${footer()}`,
 
         if (art && ArtJsonPath === path) {
             return json(res, 200, artJson(art));
+        }
+
+        if (art && VgaFontPath === path && VgaFont) {
+            res.writeHead(200, {
+                'Content-Type': 'font/woff',
+                'Content-Length': String(VgaFont.length),
+                'Cache-Control': 'public, max-age=86400',
+                'X-Content-Type-Options': 'nosniff',
+            });
+            return void res.end('HEAD' === req.method ? undefined : VgaFont);
         }
 
         //  a file is named by its hash, so it never changes: kept for a year,
