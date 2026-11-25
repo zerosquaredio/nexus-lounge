@@ -444,14 +444,17 @@ allowlist. After signing in, the BBS sends the browser to
 | Implements | Track agent connect and disconnect (frp server plugin events or frps admin API); publish `observedStatus` records from the hub's AT account ([publishing.md](publishing.md) §3.3); feed the offline page |
 | Depends on | H2; hub AT account; record type names (`nexus.cyberspace.*`) |
 | Done when | Stopping a BBS's agent updates its observed status within a minute, publicly readable on AT |
-| Status | **Working locally** (2026-11-17), with the hub's account `cyberspacehub.bsky.social` |
+| Status | **Working on the public hub** (2026-11-25; locally 2026-11-17), with the hub's account `cyberspacehub.bsky.social` |
 
 **How it works.** frp's hooks already report agents coming and going (a
 killed agent's close arrives within a millisecond), so H6 adds three things:
 
 - **The hub's own AT account.** The admin connects it once with `hub-account
-  connect HANDLE` (a loopback OAuth client for now; a public client comes
-  with the public server). It asks only for the base scope and
+  connect HANDLE`. On a public `https://` address it is a public OAuth client
+  of its own (metadata at `/oauth/hub-account/client-metadata.json`, the
+  browser coming back to `/oauth/hub-account/callback`, signed with sign-in's
+  key), so its session lasts; on `127.0.0.1` it is a loopback client, whose
+  sessions are short. It asks only for the base scope and
   `repo:nexus.cyberspace.dev.hub.observedStatus`. Its session is stored apart
   from sign-in's, which gives its sessions straight back.
 - **Checking frps's own view** every 15 seconds, through frps's admin API
@@ -478,6 +481,12 @@ killed agent's close arrives within a millisecond), so H6 adds three things:
 Starting the control plane also cleared a stale "connected" left from
 before the VM restarted. 14 new tests (99 in all); the end-to-end test
 passes (44 checks).
+
+**Tested on the public hub** (2026-11-25), `hub.cyberspace.nexus` with its
+two test boards, the account connected as a public client: both boards were
+published as connected when it was turned on; stopping board 2's agent
+changed its record to disconnected after 34 s, and starting it again changed
+it back after 28 s. 2 new tests for the public client.
 
 ### H7. Directory
 
@@ -626,7 +635,7 @@ control plane, behind the same edge. The BBS side is F18 and F19
 | **HM0** Groundwork | H0 | Domain, VPS, and spikes done; tunnel choice confirmed |
 | **HM1** Reachable | H1, H2, minimal H3 (admin CLI) | A throwaway test ENiGMA½ (§6; never the personal dev VM) is reachable at `test.hub.cyberspace.nexus`, with AT login working through the hub. **Working on the public hub** (2026-11-22; locally 2026-11-09) |
 | **HM2** Self-service | H3, H4, H5 | Sysops register themselves, get handles, and users connect in the browser. **Working on the public hub**: H3 and H5 (2026-11-22, registration by the admin for now), H4 (2026-11-23) |
-| **HM3** Discovery | H6, H7 | Observed status and a public directory. **Working locally**: H7 (2026-11-09), H6 (2026-11-17) |
+| **HM3** Discovery | H6, H7 | Observed status and a public directory. **Working locally**: H7 (2026-11-09), H6 (2026-11-17). **Working on the public hub**: H6 (2026-11-25) |
 | **HM4** Public launch | H8 | Operations and moderation in place; open to outside sysops |
 | **HM5** Common space, first slice | H13 to H19 | Sign-in, presence, one chat room, the live model, a 2D map and an ANSI view, with basic blocking. Built on the test hub; needs HM3, not HM4, but must be in place (with H18) before a public hub turns it on. **Working locally** (2026-11-19): H13 to H18 all done on the test hub. **Working on the public hub** (2026-11-24), H13 to H19, with two people and two boards with different sysops: each sysop sees only their own board; both people see each other in the room and at the board one is logged in to (shown in two places at once, from the hub's page and the board's report); boards open from the map; chat works both ways |
 | Later | H9, H10, H11 | Sysop verification, end-to-end privacy, hosted accounts |

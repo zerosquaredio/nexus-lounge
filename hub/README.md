@@ -134,10 +134,16 @@ node src/cli.ts --config hub.json hub-account connect cyberspacehub.bsky.social
 node src/cli.ts --config hub.json observed     # what the hub sees, and what it published
 ```
 
-`connect` prints a link to approve in a browser, then waits for the browser
-to come back to `127.0.0.1:7220` (`hubAccount.callbackPort`); from another
-machine, forward that port first. The account is asked only to write its
-observed status records.
+`connect` prints a link to approve in a browser, then waits (up to 10
+minutes) for the account to connect. On a public `https://` address the hub
+account is a public client of its own: the site serves its metadata at
+`/oauth/hub-account/client-metadata.json`, signed with sign-in's key, and
+the browser comes back to `/oauth/hub-account/callback` on the hub's site,
+so the control plane must be running. On `http://127.0.0.1` it is a loopback
+client and the browser comes back to `127.0.0.1:7220`
+(`hubAccount.callbackPort`); from another machine, forward that port first.
+Loopback sessions are short, so a public hub should use the public client.
+The account is asked only to write its observed status records.
 
 The control plane also asks frps which tunnels are really up, so a tunnel
 server that restarted or crashed doesn't leave BBSes shown as connected.
