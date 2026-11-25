@@ -86,7 +86,8 @@ export function createControlServer(deps: ServerDeps): Server {
                     },
                 });
             } catch (e) {
-                log(`frp request refused: ${(e as Error).message}`);
+                //  a parse error quotes the body, which carries tokens: say only what kind
+                log(`frp request refused: ${e instanceof SyntaxError ? 'not JSON' : (e as Error).message}`);
                 decision = { reject: true, reject_reason: 'Bad request' };
             }
             return send(res, 200, JSON.stringify(decision), 'application/json');

@@ -80,7 +80,9 @@ allowPorts = []
 transport.heartbeatTimeout = ${heartbeatTimeout(config)}
 
 log.to = "console"
-log.level = "info"
+#  warnings and errors only: the control plane logs each login and route,
+#  and at "info" frps also logs every request to its admin API
+log.level = "warn"
 
 #  the admin API, on this machine only: the control plane asks it which
 #  tunnels are really up. Start frps with ${FrpsAdminPasswordEnv} set (the

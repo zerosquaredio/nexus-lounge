@@ -503,7 +503,7 @@ it back after 28 s. 2 new tests for the public client.
 | Implements | Abuse reporting form and contact; suspend BBS and ban sysop DID; quotas and bandwidth limits; logging without content; metrics and alerting; database backups; terms of service and privacy notice (including the TLS-termination disclosure) |
 | Depends on | H3 |
 | Done when | Required before public launch: an abusive BBS can be suspended within minutes, logs contain no message content, and backups restore cleanly |
-| Status | **In progress.** Done: suspension cuts an open tunnel, and DIDs can be banned (2026-11-25); nightly backups to the dev VM and the NAS (2026-11-23, not yet restored into a running hub); a deploy script with rollback. To do: logging audit, a restore test, quotas and bandwidth limits, alerting, the reporting form and contact, terms of service and privacy notice |
+| Status | **In progress.** Done: suspension cuts an open tunnel, and DIDs can be banned (2026-11-25); logs audited for content (2026-11-25); nightly backups to the dev VM and the NAS (2026-11-23, not yet restored into a running hub); a deploy script with rollback. To do: a log retention period (for the privacy notice), a restore test, quotas and bandwidth limits, alerting, the reporting form and contact, terms of service and privacy notice |
 
 **Suspension and bans** (2026-11-25). frp only checks heartbeats when its
 connections aren't multiplexed, so a suspended BBS's open tunnel stayed up
@@ -517,6 +517,17 @@ connected past the timeout; suspending test2 cut its tunnel after 19 s (the
 agent drops the connection itself when its heartbeat is refused, and can't
 log in again), and resuming it brought it back after 12 s. 2 new tests (204
 in all).
+
+**Logging audit** (2026-11-25), of the code and of the public hub's logs
+since it started: no message text, report text or secret in any of them.
+The control plane logs names, DIDs and fixed reasons; freeq logs connections
+and sign-ins; Caddy has no access log; frps logs agents and routes. One path
+could have leaked: a hook request frps sent that wasn't JSON would have been
+logged with the parse error, which quotes the body and its token; it's now
+logged as "not JSON". frps now logs warnings only (two thirds of its log was
+the control plane's own polling, and the control plane logs every login and
+route). Tests check that tokens, the chat secret, what was said and what a
+report says never reach the logs. Retention is still the journal's default.
 
 ### H9. Sysop admission requirements
 

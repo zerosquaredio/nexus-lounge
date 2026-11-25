@@ -217,7 +217,36 @@ show. Records are kept in the account's AT repository, where anyone can read
 them; the hub takes down the record of a BBS that's removed. Publishing is
 `observedStatus.enabled` in the config.
 
-## 6. Backups
+## 6. Logs
+
+The hub's programs log what happened, never what anyone said:
+
+| Program | Logs |
+|---|---|
+| Control plane | Starts and stops; each BBS's agent logging in and opening routes, and refusals; certificates asked for; sign-ins, registrations and changes on the site, by DID; people's chat connections closed and why; reports filed (by number, not what they say) |
+| frps (tunnel server) | Warnings only: refused agents, and requests for paths a BBS doesn't serve (the path, never the request's content) |
+| Caddy (edge) | Its own certificates and errors; no access log |
+| freeq (chat) | Connections and sign-ins, by DID; never messages |
+
+Tokens and secrets are never logged, nor is the text of messages or
+reports; tests check this. What was said in the room is kept only in a
+report, in the database, until the report is closed.
+
+The logs do hold DIDs, BBS names, and the addresses of agents that are
+refused. How long they're kept is set by the server's journal (systemd's
+default keeps them until they reach a size limit, which can be many months).
+Set a limit that matches the hub's privacy notice, for example in
+`/etc/systemd/journald.conf.d/retention.conf`:
+
+```ini
+[Journal]
+MaxRetentionSec=30day
+```
+
+then `systemctl restart systemd-journald`. BBSes run in Docker on the hub's
+server keep their own logs, under their own rules.
+
+## 7. Backups
 
 What a hub can't make again is small:
 

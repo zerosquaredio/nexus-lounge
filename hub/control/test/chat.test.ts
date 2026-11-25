@@ -321,6 +321,7 @@ describe('chat through the hub', () => {
     let presence: Presence;
     let bbsToken: string;
     const sockets = new Set<Socket>();
+    const logs: string[] = [];
 
     function report(members: { did: string }[]): void {
         presence.report(
@@ -343,8 +344,9 @@ describe('chat through the hub', () => {
         presence = new Presence(registry, config, new Profiles(registry.db));
         report([{ did: Member }]);
         sessions = new Sessions();
-        chat = new Chat(config, Secret);
-        site = createSite({ config, registry, signin: sessions, chat });
+        logs.length = 0;
+        chat = new Chat(config, Secret, line => logs.push(line));
+        site = createSite({ config, registry, signin: sessions, chat, log: line => logs.push(line) });
         port = await listening(site);
         chat.start();
         await until(() => chat.ready, 'the hub to hold the room');
@@ -765,6 +767,14 @@ describe('chat through the hub', () => {
         const theirs = JSON.parse((await get('/space/chat/people', 'second-session')).text);
         assert.deepEqual(theirs.muted, []);
         assert.match((await get('/me', 'member-session')).text, /People you muted[\s\S]*@mallory\.example/);
+
+        //  what was said, and what the report said, stay out of the logs
+        assert.ok(logs.some(l => /moderation: report/.test(l)));
+        for (const line of logs) {
+            for (const secret of ['something nasty', 'Rude.', Secret, bbsToken]) {
+                assert.ok(!line.includes(secret), line);
+            }
+        }
     });
 
     it('closes the connection on signing out', async () => {

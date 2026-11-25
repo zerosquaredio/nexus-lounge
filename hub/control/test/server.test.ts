@@ -10,6 +10,7 @@ let server: Server;
 let base: string;
 let registry: Registry;
 let token: string;
+const logs: string[] = [];
 
 before(async () => {
     registry = testRegistry();
@@ -18,7 +19,7 @@ before(async () => {
     registry.add('banned', OtherSysopDid);
     registry.setBbsDid('banned', 'did:plc:dddddddddddddddddddddddd');
     registry.setState('banned', 'suspended');
-    server = createControlServer({ config: testConfig(), registry });
+    server = createControlServer({ config: testConfig(), registry, log: line => logs.push(line) });
     await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
     base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 });
@@ -67,6 +68,20 @@ describe('the control server', () => {
         const big = JSON.stringify({ op: 'Login', content: { user: 'coolbbs', pad: 'x'.repeat(70 * 1024) } });
         const result = await hook(big).catch(() => ({ reject: true }));
         assert.equal(result.reject, true);
+    });
+
+    it('never logs a token, even from a request it could not read', async () => {
+        await hook({ op: 'Login', content: { user: 'coolbbs', metas: { token } } });
+        await hook({
+            op: 'Ping',
+            content: { user: { user: 'coolbbs', metas: { token: 'hub_wrongwrong' } } },
+        });
+        await hook(`{"op":"Login","content":{"user":"coolbbs","metas":{"token":"${token}"}`);
+        assert.ok(logs.some(l => /refused: not JSON/.test(l)));
+        assert.ok(logs.some(l => /Ping bbs=coolbbs REFUSED/.test(l)));
+        for (const line of logs) {
+            assert.ok(!line.includes(token) && !line.includes('hub_wrongwrong'), line);
+        }
     });
 
     it('lets Caddy make certificates only for the hub and registered, active BBSes', async () => {
