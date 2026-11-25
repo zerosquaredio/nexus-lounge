@@ -48,6 +48,7 @@ import { whoPanel, WhoScript, WhoScriptPath } from './moderation_page.ts';
 import { MapPagePath, spacePageBody, SpaceScript, SpaceScriptPath } from './space_page.ts';
 import type { HubConfig } from './config.ts';
 import { HubError } from './errors.ts';
+import { AbuseKinds, AbuseReports, MaxContact, MaxDetails } from './abuse.ts';
 import { agentConfig } from './generate.ts';
 import { esc, page } from './html.ts';
 import type { Bbs, Registry } from './registry.ts';
@@ -224,6 +225,11 @@ export function createSite(deps: SiteDeps): Site {
     const moderation = presence?.moderation ?? null;
     //  reports, and mutes, one person may make in an hour
     const complaintLimit = new Limiter(5, 60 * 60 * 1000, now);
+    //  abuse reports: anyone may send them, so a few an hour from one
+    //  address, and a ceiling for the whole hub in a day
+    const abuse = new AbuseReports(registry.db, now);
+    const abuseLimit = new Limiter(5, 60 * 60 * 1000, now);
+    const abuseDayLimit = new Limiter(200, 24 * 60 * 60 * 1000, now);
     const muteLimit = new Limiter(60, 60 * 60 * 1000, now);
     //  where signing in leads
     const home = profiles ? '/me' : '/bbs';
@@ -999,7 +1005,8 @@ it is your BBS's password on this hub. If you lose it, come back for a new token
 ${lastSeen(bbs)}
 ${connect}
 ${entry ? listingDetails(entry, false) : ''}
-<p class="dim">A BBS on the <a href="${esc(hubUrl(config.domain))}/">${esc(config.domain)}</a> hub.</p>`
+<p class="dim">A BBS on the <a href="${esc(hubUrl(config.domain))}/">${esc(config.domain)}</a> hub.
+<a href="${esc(hubUrl(config.domain))}/report?bbs=${encodeURIComponent(bbs.name)}">Report a problem with it</a>.</p>`
         );
     }
 
@@ -1055,6 +1062,56 @@ ${entry ? listingDetails(entry, false) : ''}
     }
 
     //  The directory: this hub's BBSes first, then others on the network
+    //  The abuse report form, for anyone
+    function reportPage(
+        who: WebSession | null,
+        form: { bbs?: string; kind?: string; details?: string; contact?: string } = {},
+        error?: string
+    ): string {
+        const boards = registry
+            .list()
+            .filter(b => 'active' === b.state)
+            .map(
+                b =>
+                    `<option value="${esc(b.name)}"${b.name === form.bbs ? ' selected' : ''}>${esc(b.name)}.${esc(
+                        config.domain
+                    )}</option>`
+            )
+            .join('');
+        const kinds = Object.entries(AbuseKinds)
+            .map(
+                ([k, label]) =>
+                    `<option value="${k}"${k === form.kind ? ' selected' : ''}>${esc(label)}</option>`
+            )
+            .join('');
+        const email = config.contact.abuse;
+        return page(
+            'Report a problem',
+            `${error ? `<p class="warn">${esc(error)}</p>` : ''}
+<p>Tell this hub's admin about a BBS on it, or about the hub itself: illegal content, harassment, spam or
+scams, someone's private information, a copyright claim, or a security problem.${
+                email ? ` You can also write to <a href="mailto:${esc(email)}">${esc(email)}</a>.` : ''
+            }</p>
+<form method="post" action="/report">
+<p><label for="r-bbs">About</label><br><select id="r-bbs" name="bbs">
+<option value="">This hub itself</option>${boards}</select></p>
+<p><label for="r-kind">What kind of problem</label><br><select id="r-kind" name="kind" required>
+<option value="">Choose one</option>${kinds}</select></p>
+<p><label for="r-details">What's wrong, and where (what to look for)</label><br>
+<textarea id="r-details" name="details" rows="8" cols="60" maxlength="${MaxDetails}" required>${esc(
+                form.details ?? ''
+            )}</textarea></p>
+<p><label for="r-contact">How to reach you, if you'd like an answer (optional)</label><br>
+<input id="r-contact" name="contact" maxlength="${MaxContact}" size="40" value="${esc(form.contact ?? '')}"></p>
+<p><button>Send to the admin</button></p>
+</form>
+<p class="dim">Only this hub's admin reads it.${
+                who ? ' You are signed in, so it says it came from your account.' : ''
+            } What it says and how to reach you are kept until the report is dealt with, then deleted.</p>`,
+            who ?? undefined
+        );
+    }
+
     function directoryPage(who: WebSession | null): string {
         const directory = deps.directory;
         const ratings = config.directory.ratings;
@@ -1111,7 +1168,8 @@ ${
 <p class="hint">Listed by their own accounts, and not checked by this hub.</p>
 ${others.map(otherCard).join('\n')}`
         : ''
-}`,
+}
+<p class="dim"><a href="/report">Report a problem</a> with a BBS or this hub.</p>`,
             who ?? undefined
         );
     }
@@ -1211,6 +1269,52 @@ ${others.map(otherCard).join('\n')}`
                         400,
                         landing(`Couldn't start signing in as ${handle}. Check the handle and try again.`)
                     );
+                }
+            }
+
+            if ('/report' === path) {
+                const values = {
+                    bbs: (form.get('bbs') ?? '').trim().toLowerCase(),
+                    kind: form.get('kind') ?? '',
+                    details: form.get('details') ?? '',
+                    contact: form.get('contact') ?? '',
+                };
+                const board = values.bbs ? registry.get(values.bbs) : null;
+                if (values.bbs && (!board || 'active' !== board.state)) {
+                    return send(res, 400, reportPage(who, values, 'Choose a BBS from the list.'));
+                }
+                if (!abuseLimit.allow(clientAddress(req)) || !abuseDayLimit.allow('hub')) {
+                    return send(
+                        res,
+                        429,
+                        reportPage(
+                            who,
+                            values,
+                            'Too many reports have come in; try again later, or write instead.'
+                        )
+                    );
+                }
+                try {
+                    const report = abuse.file({
+                        ...values,
+                        bbs: board?.name ?? null,
+                        reporter: who?.did ?? null,
+                    });
+                    log(`abuse: report ${report.id} about ${report.bbs ?? 'the hub'}`);
+                    return send(
+                        res,
+                        200,
+                        page(
+                            'Report sent',
+                            `<p>Thank you. Report ${report.id} has gone to this hub's admin.</p><p><a href="/">Back to the hub</a></p>`,
+                            who ?? undefined
+                        )
+                    );
+                } catch (e) {
+                    if (e instanceof HubError) {
+                        return send(res, 400, reportPage(who, values, e.message));
+                    }
+                    throw e;
                 }
             }
 
@@ -1361,6 +1465,10 @@ ${others.map(otherCard).join('\n')}`
         //  tunnels or chat, or with ?bbs=NAME, when that BBS is offline
         if ('/status.json' === path) {
             return status(res, url.searchParams.get('bbs'));
+        }
+
+        if ('/report' === path) {
+            return send(res, 200, reportPage(who, { bbs: url.searchParams.get('bbs') ?? '' }));
         }
 
         //  fetched by account hosts, to learn who is asking them to sign

@@ -12,6 +12,7 @@ import { clientMetadata, ClientMetadataPath, JwksPath, SignIn, type Identity } f
 import { createSite, type SignInLike } from '../src/site.ts';
 import { HubAccount, HubAccountMetadataPath, HubAccountWebCallbackPath } from '../src/hub_account.ts';
 import { Profiles } from '../src/profiles.ts';
+import { AbuseReports } from '../src/abuse.ts';
 import { OtherSysopDid, SysopDid, testConfig, testRegistry } from './helpers.ts';
 
 //  the AT step stood in for: "start" goes to a fake account host, and
@@ -36,6 +37,7 @@ let port: number;
 let origin: string;
 let registry: Registry;
 let signin: FakeSignIn;
+const logs: string[] = [];
 
 interface Reply {
     status: number;
@@ -123,7 +125,8 @@ async function start(space: boolean): Promise<void> {
     });
     registry = new Registry(':memory:', config.registration);
     signin = new FakeSignIn(registry.db, config);
-    server = createSite({ config, registry, signin: signin as SignInLike });
+    logs.length = 0;
+    server = createSite({ config, registry, signin: signin as SignInLike, log: line => logs.push(line) });
     await new Promise<void>(r => server.listen(port, '127.0.0.1', r));
 }
 
@@ -653,6 +656,85 @@ describe('presence on the site', () => {
         const { token } = registry.add('coolbbs', SysopDid, null, {});
         assert.equal((await postReport(aliceOn(), token)).status, 404);
         assert.equal((await call('GET', '/space')).status, 404);
+    });
+});
+
+describe('abuse reports', () => {
+    const report = (form: Record<string, string>, options: { cookie?: string; forwardedFor?: string } = {}) =>
+        call('POST', '/report', { form, ...options });
+
+    it('takes a report from anyone, about a BBS or the hub, and keeps what it says out of the logs', async () => {
+        registry.add('coolbbs', SysopDid);
+        const page = await call('GET', '/report?bbs=coolbbs');
+        assert.equal(page.status, 200);
+        assert.match(page.body, /<option value="coolbbs" selected>/);
+        assert.match(page.body, /<option value="copyright">/);
+
+        const sent = await report({
+            bbs: 'coolbbs',
+            kind: 'harassment',
+            details: 'Threats in the\nmessage base',
+            contact: 'me@example.com',
+        });
+        assert.equal(sent.status, 200);
+        assert.match(sent.body, /Report 1 has gone/);
+        assert.equal((await report({ bbs: '', kind: 'security', details: 'A hole' })).status, 200);
+
+        const reports = new AbuseReports(registry.db).list();
+        assert.deepEqual(
+            reports.map(r => [r.bbs, r.kind, r.details, r.contact, r.reporter]),
+            [
+                ['coolbbs', 'harassment', 'Threats in the\nmessage base', 'me@example.com', null],
+                [null, 'security', 'A hole', null, null],
+            ]
+        );
+        assert.ok(logs.some(l => /abuse: report 1 about coolbbs/.test(l)));
+        for (const line of logs) {
+            assert.ok(!/Threats|me@example|A hole/.test(line), line);
+        }
+    });
+
+    it('says who sent it when they are signed in', async () => {
+        registry.add('coolbbs', SysopDid);
+        const cookie = await signedIn({ did: OtherSysopDid, handle: 'other.example' });
+        assert.equal(
+            (await report({ bbs: 'coolbbs', kind: 'spam', details: 'Ads' }, { cookie })).status,
+            200
+        );
+        assert.equal(new AbuseReports(registry.db).list()[0]?.reporter, OtherSysopDid);
+    });
+
+    it('refuses forms from elsewhere, unknown or suspended BBSes, and empty or bad reports', async () => {
+        registry.add('coolbbs', SysopDid);
+        registry.add('gone', SysopDid);
+        registry.setState('gone', 'suspended');
+        const elsewhere = await call('POST', '/report', {
+            form: { kind: 'spam', details: 'x' },
+            origin: 'https://evil.example',
+        });
+        assert.equal(elsewhere.status, 403);
+        assert.equal((await report({ bbs: 'nope', kind: 'spam', details: 'x' })).status, 400);
+        assert.equal((await report({ bbs: 'gone', kind: 'spam', details: 'x' })).status, 400);
+        assert.equal((await report({ bbs: 'coolbbs', kind: 'nonsense', details: 'x' })).status, 400);
+        const empty = await report({ bbs: 'coolbbs', kind: 'spam', details: '   ' });
+        assert.equal(empty.status, 400);
+        assert.match(empty.body, /Say what/);
+        assert.equal((await report({ kind: 'spam', details: 'x'.repeat(4001) })).status, 400);
+        assert.equal(new AbuseReports(registry.db).list().length, 0);
+    });
+
+    it('takes a few an hour from one address', async () => {
+        const from = (address: string, details: string) =>
+            report({ kind: 'spam', details }, { forwardedFor: address }).then(r => r.status);
+        for (let i = 0; i < 5; i++) {
+            assert.equal(await from('203.0.113.9', `${i}`), 200);
+        }
+        assert.equal(await from('203.0.113.9', 'more'), 429);
+        assert.equal(await from('203.0.113.10', 'other'), 200);
+    });
+
+    it('links to the form from the directory and from each BBS page', async () => {
+        assert.match((await call('GET', '/')).body, /href="\/report"/);
     });
 });
 

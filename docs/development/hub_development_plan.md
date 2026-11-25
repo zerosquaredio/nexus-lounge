@@ -503,7 +503,7 @@ it back after 28 s. 2 new tests for the public client.
 | Implements | Abuse reporting form and contact; suspend BBS and ban sysop DID; quotas and bandwidth limits; logging without content; metrics and alerting; database backups; terms of service and privacy notice (including the TLS-termination disclosure) |
 | Depends on | H3 |
 | Done when | Required before public launch: an abusive BBS can be suspended within minutes, logs contain no message content, and backups restore cleanly |
-| Status | **In progress.** Done: suspension cuts an open tunnel, and DIDs can be banned (2026-11-25); logs audited for content (2026-11-25); nightly backups to the dev VM and the NAS (2026-11-23), restored and checked (2026-11-25); a deploy script with rollback. Logs kept 3 months on the public hub (2026-11-25). Bandwidth limited per BBS (2026-11-25). Usage trends and a status for monitors (2026-11-25). To do: alerts (a monitoring service on the status), the reporting form and contact, terms of service and privacy notice |
+| Status | **In progress.** Done: suspension cuts an open tunnel, and DIDs can be banned (2026-11-25); logs audited for content (2026-11-25); nightly backups to the dev VM and the NAS (2026-11-23), restored and checked (2026-11-25); a deploy script with rollback. Logs kept 3 months on the public hub (2026-11-25). Bandwidth limited per BBS (2026-11-25). Usage trends and a status for monitors (2026-11-25). Abuse report form (2026-11-25). To do: alerts (a monitoring service on the status), the abuse address's mail, terms of service and privacy notice |
 
 **Suspension and bans** (2026-11-25). frp only checks heartbeats when its
 connections aren't multiplexed, so a suspended BBS's open tunnel stayed up

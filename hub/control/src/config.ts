@@ -9,6 +9,9 @@ export interface HubConfig {
     domain: string;
     //  the registry (SQLite)
     database: string;
+    //  where people write about abuse (shown on the report page); "" for
+    //  the form only
+    contact: { abuse: string };
     //  the control plane's own HTTP listener: frp's hooks, Caddy's
     //  certificate check, and handle verification (through the edge).
     //  Never public.
@@ -199,6 +202,7 @@ export const Defaults: HubConfig = {
         live: { enabled: false, maxConnections: 5 },
     },
     edge: { tls: 'internal', bindAddr: '127.0.0.1', httpPort: 7081, httpsPort: 7443 },
+    contact: { abuse: '' },
     registration: { open: true, reservedNames: DefaultReservedNames, maxBbsPerSysop: 3 },
 };
 
@@ -228,6 +232,7 @@ export function makeConfig(overrides: Partial<Record<keyof HubConfig, unknown>> 
             },
         },
         edge: { ...Defaults.edge, ...(overrides.edge as object) },
+        contact: { ...Defaults.contact, ...(overrides.contact as object) },
         registration: { ...Defaults.registration, ...(overrides.registration as object) },
     };
     if (!DomainRe.test(config.domain)) {
@@ -295,6 +300,10 @@ export function makeConfig(overrides: Partial<Record<keyof HubConfig, unknown>> 
         if (!Number.isInteger(port) || port < 1 || port > 65535) {
             throw new HubError('config', `${what} is a port, 1 to 65535`);
         }
+    }
+    const abuse = config.contact.abuse;
+    if ('string' !== typeof abuse || ('' !== abuse && !/^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/.test(abuse))) {
+        throw new HubError('config', 'contact.abuse is an email address, or "" for none');
     }
     const heartbeat = config.tunnel.heartbeatSeconds;
     if (!Number.isInteger(heartbeat) || heartbeat < 1 || heartbeat > 600) {

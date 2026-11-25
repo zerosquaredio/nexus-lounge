@@ -166,7 +166,7 @@ export class Usage {
             live: num(counts.live),
             chat: num(counts.chat),
             reports: count(
-                "SELECT COUNT(*) AS n FROM moderation_log WHERE action = 'report' AND at >= ?",
+                "SELECT COUNT(*) AS n FROM moderation_log WHERE action IN ('report', 'abuse-report') AND at >= ?",
                 day
             ),
             blocks: count("SELECT COUNT(*) AS n FROM moderation_log WHERE action = 'block' AND at >= ?", day),

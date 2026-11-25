@@ -39,7 +39,7 @@ interface BbsRow {
     open_proxies: number;
 }
 
-const SchemaVersion = 8;
+const SchemaVersion = 9;
 
 const Schema = `
 CREATE TABLE IF NOT EXISTS bbs (
@@ -225,6 +225,19 @@ CREATE TABLE IF NOT EXISTS usage_bbs_day (
     bytes_out         INTEGER NOT NULL DEFAULT 0,
     conns_peak        INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (day, bbs)
+);
+--  abuse reports about BBSes or the hub (schema 9, abuse.ts); closing one
+--  clears what it said, how to reply and who sent it
+CREATE TABLE IF NOT EXISTS abuse_report (
+    id         INTEGER PRIMARY KEY,
+    bbs        TEXT,
+    kind       TEXT NOT NULL,
+    details    TEXT,
+    contact    TEXT,
+    reporter   TEXT,
+    created_at TEXT NOT NULL,
+    closed_at  TEXT,
+    outcome    TEXT
 );
 CREATE TABLE IF NOT EXISTS web_session (
     token_hash TEXT PRIMARY KEY,

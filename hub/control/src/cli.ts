@@ -19,6 +19,7 @@ import { fetchPublicJson } from './net.ts';
 import { isDid } from './rules.ts';
 import { describeSubject, Moderation, parseDuration, parseSubject, type Block } from './moderation.ts';
 import { Profiles } from './profiles.ts';
+import { AbuseKinds, AbuseReports, type AbuseReport } from './abuse.ts';
 import { sizeText, Usage as UsageTrends } from './usage.ts';
 
 const Usage = `Usage: node src/cli.ts [--config FILE] COMMAND
@@ -68,6 +69,13 @@ The hub's own AT account (it publishes observed status)
   hub-account show
   hub-account disconnect gives the session back and forgets the account
   observed               each BBS: what the hub sees, and what it published
+
+Abuse reports (from the report form on the hub's site, by anyone)
+  abuse reports [--all]  open reports (--all: closed ones too)
+  abuse report ID        one report in full
+  abuse close ID [--outcome TEXT]
+                         done with it: what it said, and how to reply, are
+                         deleted; what it was about and the outcome stay
 
 Usage (counted while the control plane runs; totals only, no DIDs)
   usage [--days N] [--json]
@@ -450,6 +458,47 @@ export async function run(argv: string[]): Promise<void> {
                     return;
                 }
                 throw new HubError('usage', `Unknown hub-account command "${what}"\n\n${Usage}`);
+            }
+            case 'abuse': {
+                const reports = new AbuseReports(registry.db);
+                const what = need(positional, 1, 'reports, report or close');
+                const about = (r: AbuseReport) => (r.bbs ? `${r.bbs}.${config.domain}` : 'the hub');
+                const line = (r: AbuseReport) =>
+                    `${String(r.id).padEnd(5)} ${r.createdAt.slice(0, 16).replace('T', ' ')}  ${about(r).padEnd(30)} ` +
+                    `${AbuseKinds[r.kind]}${r.closedAt ? `  (closed: ${plain(r.outcome ?? '')})` : ''}`;
+                const id = () => {
+                    const n = Number(need(positional, 2, 'ID'));
+                    if (!Number.isInteger(n) || n < 1) {
+                        throw new HubError('usage', 'ID is a report number');
+                    }
+                    return n;
+                };
+                if ('reports' === what) {
+                    const all = reports.list(!!options.all);
+                    if (!all.length) {
+                        console.log(options.all ? 'No abuse reports.' : 'No open abuse reports.');
+                    }
+                    all.forEach(r => console.log(line(r)));
+                    return;
+                }
+                if ('report' === what) {
+                    const r = reports.mustGet(id());
+                    console.log(
+                        [
+                            line(r),
+                            `  from     ${r.reporter ?? (r.closedAt ? '(deleted)' : '(not signed in)')}`,
+                            `  reply to ${r.contact ? plain(r.contact) : r.closedAt ? '(deleted)' : '(none given)'}`,
+                            '',
+                            r.details ? plain(r.details) : '(deleted when it was closed)',
+                        ].join('\n')
+                    );
+                    return;
+                }
+                if ('close' === what) {
+                    console.log(line(reports.close(id(), options.outcome ?? '')));
+                    return;
+                }
+                throw new HubError('usage', `Unknown abuse command "${what}"\n\n${Usage}`);
             }
             case 'usage': {
                 const days = Number(options.days ?? 14);

@@ -154,6 +154,26 @@ DID registering another BBS, as sysop or as a BBS's account. A ban doesn't
 end on its own. Unbanning leaves the BBSes suspended: resume each one that
 should come back.
 
+### Abuse reports
+
+Anyone can report a BBS, or the hub itself, at `/report` on the hub's site,
+signed in or not; the directory and every BBS's page link to it. A report
+says what it's about, what kind of problem (illegal content, harassment,
+spam or scams, someone's private information, copyright, a security
+problem, or something else), what's wrong, and, if they like, how to reach
+them. One address can send 5 an hour, and the hub takes 200 a day at most.
+
+```sh
+sudo hubctl abuse reports        # the open ones
+sudo hubctl abuse report ID      # one in full
+sudo hubctl abuse close ID --outcome "suspended coolbbs"
+```
+
+Closing a report deletes what it said, how to reply, and who sent it; what
+it was about, its kind and the outcome stay. Set the address people can
+write to instead in the config, `contact.abuse` (shown on the report page);
+make sure mail to it reaches you.
+
 ### The common space: blocks and reports
 
 The common space (its map, presence and chat room) has its own blocks, which
@@ -187,7 +207,8 @@ Closing a report lets go of what was said in it.
 ### The record
 
 Bans and unbans, suspensions and resumptions, blocks and unblocks, and
-reports as they come in and are closed all go in the moderation log:
+reports of both kinds as they come in and are closed all go in the
+moderation log (by number, never what they say):
 
 ```sh
 sudo hubctl space log --limit 50
