@@ -12,7 +12,7 @@ import { clientMetadata, ClientMetadataPath, JwksPath, SignIn, type Identity } f
 import { createSite, type SignInLike } from '../src/site.ts';
 import { HubAccount, HubAccountMetadataPath, HubAccountWebCallbackPath } from '../src/hub_account.ts';
 import { Profiles } from '../src/profiles.ts';
-import { OtherSysopDid, SysopDid } from './helpers.ts';
+import { OtherSysopDid, SysopDid, testConfig, testRegistry } from './helpers.ts';
 
 //  the AT step stood in for: "start" goes to a fake account host, and
 //  "finish" reports whoever the test says signed in
@@ -653,5 +653,56 @@ describe('presence on the site', () => {
         const { token } = registry.add('coolbbs', SysopDid, null, {});
         assert.equal((await postReport(aliceOn(), token)).status, 404);
         assert.equal((await call('GET', '/space')).status, 404);
+    });
+});
+
+describe('the status for monitors', () => {
+    it('says whether the hub can carry tunnels and chat, and whether a BBS is up', async () => {
+        const config = testConfig();
+        const reg = testRegistry();
+        reg.add('coolbbs', SysopDid);
+        reg.add('quiet', OtherSysopDid);
+        reg.add('gone', OtherSysopDid);
+        reg.setState('gone', 'suspended');
+        reg.proxyOpened('coolbbs', 'coolbbs.web', null);
+        let tunnels = 'ok';
+        const site = createSite({
+            config,
+            registry: reg,
+            signin: new SignIn(reg.db, config),
+            tunnels: () => tunnels,
+        });
+        await new Promise<void>(r => site.listen(0, '127.0.0.1', r));
+        const at = `http://127.0.0.1:${(site.address() as AddressInfo).port}/status.json`;
+        const get = async (query = '') => {
+            const r = await fetch(at + query);
+            return { status: r.status, body: (await r.json()) as Record<string, unknown> };
+        };
+        try {
+            const all = await get();
+            assert.equal(all.status, 200);
+            assert.equal(all.body.ok, true);
+            assert.equal(all.body.chat, 'off');
+            assert.deepEqual(
+                all.body.bbses,
+                { coolbbs: 'connected', quiet: 'disconnected' },
+                'not suspended ones'
+            );
+            assert.equal((await get('?bbs=coolbbs')).status, 200);
+            assert.equal((await get('?bbs=quiet')).status, 503);
+            assert.equal((await get('?bbs=gone')).status, 404);
+            assert.equal((await get('?bbs=nope')).status, 404);
+
+            tunnels = 'down';
+            const down = await get();
+            assert.equal(down.status, 503);
+            assert.equal(down.body.tunnels, 'down');
+            assert.equal((await get('?bbs=coolbbs')).status, 503);
+            assert.equal(site.liveViewers(), 0);
+        } finally {
+            site.closeAllConnections();
+            await new Promise(r => site.close(r));
+            reg.close();
+        }
     });
 });

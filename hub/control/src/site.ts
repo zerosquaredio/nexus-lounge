@@ -97,9 +97,15 @@ export interface SiteDeps {
     at?: AtClient | null;
     //  the common space's chat, if it's on
     chat?: Chat | null;
+    //  what the control plane last heard from the tunnel server, for
+    //  /status.json: "ok", "down", "error", or "unchecked"
+    tunnels?: () => string;
     log?: (line: string) => void;
     now?: () => number;
 }
+
+//  The site, with how many are watching the live model (usage trends)
+export type Site = Server & { liveViewers(): number };
 
 //  A BBS's member, found for its door
 interface DoorFound {
@@ -187,7 +193,7 @@ async function readForm(req: IncomingMessage): Promise<URLSearchParams> {
     return new URLSearchParams(await readBody(req, MaxForm));
 }
 
-export function createSite(deps: SiteDeps): Server {
+export function createSite(deps: SiteDeps): Site {
     const { config, registry, signin } = deps;
     const log = deps.log ?? (() => {});
     const now = deps.now ?? Date.now;
@@ -508,6 +514,24 @@ the name the BBS gives, never as your own account.</p>
         return {
             'Content-Security-Policy': `default-src 'none'; script-src 'self'; connect-src 'self' ${socket}; style-src 'unsafe-inline'; img-src 'self'; form-action 'self' https:; frame-ancestors 'none'; base-uri 'none'`,
         };
+    }
+
+    function status(res: ServerResponse, only: string | null): void {
+        const tunnels = deps.tunnels?.() ?? 'unchecked';
+        const chatState = !config.space.chat.enabled || !chat ? 'off' : chat.ready ? 'ok' : 'down';
+        const bbses: Record<string, string> = {};
+        for (const b of registry.list().filter(b => 'active' === b.state)) {
+            bbses[b.name] = b.connected ? 'connected' : 'disconnected';
+        }
+        const ok = 'down' !== tunnels && 'error' !== tunnels && 'down' !== chatState;
+        const body = { ok, at: new Date(now()).toISOString(), tunnels, chat: chatState, bbses };
+        if (null !== only) {
+            if (!(only in bbses)) {
+                return json(res, 404, { error: `No active BBS is registered as "${only}".` });
+            }
+            return json(res, ok && 'connected' === bbses[only] ? 200 : 503, { ...body, bbs: only });
+        }
+        return json(res, ok ? 200 : 503, body);
     }
 
     function json(res: ServerResponse, status: number, body: unknown): void {
@@ -1333,6 +1357,12 @@ ${others.map(otherCard).join('\n')}`
             return send(res, 200, directoryPage(who));
         }
 
+        //  for monitors outside the hub: 503 when the hub can't carry
+        //  tunnels or chat, or with ?bbs=NAME, when that BBS is offline
+        if ('/status.json' === path) {
+            return status(res, url.searchParams.get('bbs'));
+        }
+
         //  fetched by account hosts, to learn who is asking them to sign
         //  someone in (an https:// address only)
         if (ClientMetadataPath === path || JwksPath === path) {
@@ -1583,5 +1613,5 @@ ${others.map(otherCard).join('\n')}`
     }
     server.keepAliveTimeout = 120_000;
     server.headersTimeout = 125_000;
-    return server;
+    return Object.assign(server, { liveViewers: () => live?.viewers.size ?? 0 });
 }

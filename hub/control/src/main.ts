@@ -3,7 +3,8 @@
 import { Chat, ChatSecretEnv, MinChatSecret } from './chat.ts';
 import { FrpsAdminPasswordEnv, loadConfig } from './config.ts';
 import { HubAccount } from './hub_account.ts';
-import { checkTunnels, ObservedStatus } from './observed.ts';
+import { checkTunnels, ObservedStatus, type TunnelCheck } from './observed.ts';
+import { Usage } from './usage.ts';
 import { Registry } from './registry.ts';
 import { createControlServer } from './server.ts';
 import { isPublicClient, SignIn } from './signin.ts';
@@ -65,6 +66,9 @@ const adminPassword = process.env[FrpsAdminPasswordEnv] ?? '';
 if (!adminPassword) {
     log(`tunnels: ${FrpsAdminPasswordEnv} isn't set, so the tunnel server's own view isn't checked`);
 }
+//  usage trends (H8), counted from the same check
+const usage = new Usage(registry);
+let tunnels: TunnelCheck | 'unchecked' = 'unchecked';
 let checking = false;
 const check = async () => {
     if (checking) {
@@ -73,7 +77,20 @@ const check = async () => {
     checking = true;
     try {
         if (adminPassword) {
-            await checkTunnels(registry, { port: config.tunnel.adminPort, password: adminPassword }, log);
+            tunnels = await checkTunnels(
+                registry,
+                {
+                    port: config.tunnel.adminPort,
+                    password: adminPassword,
+                    onProxies: proxies => usage.traffic(proxies),
+                },
+                log
+            );
+        }
+        try {
+            usage.sample({ live: site.liveViewers(), chat: chat?.links.size ?? 0 });
+        } catch (e) {
+            log(`usage: ${(e as Error).message}`);
         }
         await observed?.publish();
     } catch (e) {
@@ -113,6 +130,7 @@ const site = createSite({
     directory,
     at,
     chat,
+    tunnels: () => tunnels,
     log,
 });
 site.listen(config.site.port, config.site.host, () => {

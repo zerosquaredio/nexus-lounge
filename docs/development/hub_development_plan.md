@@ -503,7 +503,7 @@ it back after 28 s. 2 new tests for the public client.
 | Implements | Abuse reporting form and contact; suspend BBS and ban sysop DID; quotas and bandwidth limits; logging without content; metrics and alerting; database backups; terms of service and privacy notice (including the TLS-termination disclosure) |
 | Depends on | H3 |
 | Done when | Required before public launch: an abusive BBS can be suspended within minutes, logs contain no message content, and backups restore cleanly |
-| Status | **In progress.** Done: suspension cuts an open tunnel, and DIDs can be banned (2026-11-25); logs audited for content (2026-11-25); nightly backups to the dev VM and the NAS (2026-11-23), restored and checked (2026-11-25); a deploy script with rollback. Logs kept 3 months on the public hub (2026-11-25). Bandwidth limited per BBS (2026-11-25). To do: usage trends, alerting, the reporting form and contact, terms of service and privacy notice |
+| Status | **In progress.** Done: suspension cuts an open tunnel, and DIDs can be banned (2026-11-25); logs audited for content (2026-11-25); nightly backups to the dev VM and the NAS (2026-11-23), restored and checked (2026-11-25); a deploy script with rollback. Logs kept 3 months on the public hub (2026-11-25). Bandwidth limited per BBS (2026-11-25). Usage trends and a status for monitors (2026-11-25). To do: alerts (a monitoring service on the status), the reporting form and contact, terms of service and privacy notice |
 
 **Suspension and bans** (2026-11-25). frp only checks heartbeats when its
 connections aren't multiplexed, so a suspended BBS's open tunnel stayed up
@@ -541,15 +541,20 @@ one was refused; the hub account, profiles, sessions and published records
 were all there; the signing key, chat keys and secrets were present; both
 boards' databases passed their checks; and the hub's site answered.
 
-**Usage trends** (to do, with metrics). Logs go after 3 months, so for the
-long view the hub keeps a separate summary, one row a day: BBSes registered,
-active and connected, hours each was connected, people signed in and in the
-common space, chat connections, reports and blocks, and bandwidth through
-each BBS's tunnel (frps counts traffic per proxy, `/api/traffic/NAME`).
-Totals only, never who: no DIDs, and BBSes by name only where the sysop
-agreed to it in the terms of service, so the summary can be kept for years
-and published if the hub wants. Alerts (a BBS gone, the hub down) come
-from the same checks.
+**Usage trends and monitoring** (2026-11-25). Logs go after 3 months, so
+for the long view the hub keeps a summary in its database, one row a day
+for the hub (BBSes registered, active and most connected; people with a
+profile, shown and signed in; the most on the map and in the chat at once;
+reports and blocks) and one a day for each BBS by name (hours connected,
+traffic in and out, most connections at once). It's counted from the
+tunnel check every 15 seconds: frps's own counters for each proxy, adding
+how much each grew, so frps restarting or its day turning loses nothing.
+Totals only: no DIDs, nothing said, no addresses. `hubctl usage` shows it.
+Publishing any of it, and naming BBSes in public, waits for the terms of
+service. For alerts, `/status.json` on the hub's site answers 503 when the
+tunnel server or chat is down, or with `?bbs=NAME`, when that BBS is
+offline, for an outside monitoring service to watch. 6 new tests (214 in
+all).
 
 ### H9. Sysop admission requirements
 

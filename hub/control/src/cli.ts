@@ -19,6 +19,7 @@ import { fetchPublicJson } from './net.ts';
 import { isDid } from './rules.ts';
 import { describeSubject, Moderation, parseDuration, parseSubject, type Block } from './moderation.ts';
 import { Profiles } from './profiles.ts';
+import { sizeText, Usage as UsageTrends } from './usage.ts';
 
 const Usage = `Usage: node src/cli.ts [--config FILE] COMMAND
 
@@ -68,6 +69,11 @@ The hub's own AT account (it publishes observed status)
   hub-account disconnect gives the session back and forgets the account
   observed               each BBS: what the hub sees, and what it published
 
+Usage (counted while the control plane runs; totals only, no DIDs)
+  usage [--days N] [--json]
+                         each day: BBSes, people, the space's peaks, reports
+                         and blocks; and each BBS's time connected and traffic
+
 The common space: moderation (takes effect within seconds)
   space block WHO [--room] [--for 30m|12h|7d] [--reason TEXT]
                          WHO is a DID, user@bbs (a BBS member without an AT
@@ -84,7 +90,7 @@ The common space: moderation (takes effect within seconds)
 `;
 
 //  options that take no value
-const Flags = new Set(['room', 'all']);
+const Flags = new Set(['room', 'all', 'json']);
 
 //  What others wrote, safe to print to a terminal
 function plain(text: string): string {
@@ -444,6 +450,42 @@ export async function run(argv: string[]): Promise<void> {
                     return;
                 }
                 throw new HubError('usage', `Unknown hub-account command "${what}"\n\n${Usage}`);
+            }
+            case 'usage': {
+                const days = Number(options.days ?? 14);
+                const { hub, bbses } = new UsageTrends(registry).days(
+                    Number.isInteger(days) && days > 0 ? days : 14
+                );
+                if (options.json) {
+                    console.log(JSON.stringify({ hub, bbses }, null, 2));
+                    return;
+                }
+                if (!hub.length && !bbses.length) {
+                    console.log('Nothing counted yet: usage is counted while the control plane runs.');
+                    return;
+                }
+                console.log(
+                    'day         BBSes (active, most connected)  people (shown, signed in)  map  chat  reports  blocks'
+                );
+                for (const d of hub) {
+                    console.log(
+                        `${d.day}  ${`${d.bbsRegistered} (${d.bbsActive}, ${d.bbsConnectedPeak})`.padEnd(31)} ` +
+                            `${`${d.people} (${d.presenceOn}, ${d.signedIn})`.padEnd(26)} ` +
+                            `${String(d.livePeak).padEnd(4)} ${String(d.chatPeak).padEnd(5)} ` +
+                            `${String(d.reports).padEnd(8)} ${d.blocks}`
+                    );
+                }
+                console.log(
+                    '\nday         BBS                      connected  in          out         most connections'
+                );
+                for (const b of bbses) {
+                    const hours = (b.connectedSeconds / 3600).toFixed(1);
+                    console.log(
+                        `${b.day}  ${b.bbs.padEnd(24)} ${`${hours} h`.padEnd(10)} ${sizeText(b.bytesIn).padEnd(11)} ` +
+                            `${sizeText(b.bytesOut).padEnd(11)} ${b.connsPeak}`
+                    );
+                }
+                return;
             }
             case 'observed': {
                 const observed = new ObservedStatus(

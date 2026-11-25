@@ -230,7 +230,49 @@ show. Records are kept in the account's AT repository, where anyone can read
 them; the hub takes down the record of a BBS that's removed. Publishing is
 `observedStatus.enabled` in the config.
 
-## 6. Logs
+## 6. Watching the hub
+
+### Status, for monitors
+
+`https://hub.example/status.json` says whether the hub is working, for a
+monitoring service outside the hub to check every few minutes and tell you
+when it isn't:
+
+```json
+{ "ok": true, "tunnels": "ok", "chat": "ok", "bbses": { "coolbbs": "connected", "other": "disconnected" } }
+```
+
+It answers 200 when the hub can carry tunnels and chat, and 503 when the
+tunnel server or the chat server is down (or the hub itself doesn't answer
+at all). A BBS being offline doesn't count against the hub, since boards
+come and go; to watch one BBS, check `status.json?bbs=coolbbs`, which
+answers 503 while that BBS is offline. A sysop can watch their own board
+the same way. Suspended BBSes aren't listed.
+
+Any uptime monitor that checks a URL's status code will do, such as a free
+plan of a hosted one; use two checks, the hub's and, if you like, each
+board you care about.
+
+### Usage
+
+The hub keeps a summary for the long view, one row a day, kept after the
+logs are gone:
+
+```sh
+sudo hubctl usage --days 30
+sudo hubctl usage --days 365 --json
+```
+
+For the hub: BBSes registered, active and the most connected at once;
+people with a profile, shown in the space, and signed in that day; the
+most watching the map and in the chat at once; reports and blocks. For each
+BBS, by name: hours connected, traffic in and out through its tunnel, and
+the most connections at once. Totals only: no DIDs, nothing anyone said, no
+addresses. It's counted while the control plane runs (traffic needs the
+tunnel check, so `HUB_FRPS_ADMIN_PASSWORD` set), and it's in the database,
+so it's in every backup.
+
+## 7. Logs
 
 The hub's programs log what happened, never what anyone said:
 
@@ -259,7 +301,7 @@ MaxRetentionSec=3month
 then `systemctl restart systemd-journald`. BBSes run in Docker on the hub's
 server keep their own logs, under their own rules.
 
-## 7. Backups
+## 8. Backups
 
 What a hub can't make again is small:
 

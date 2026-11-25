@@ -39,7 +39,7 @@ interface BbsRow {
     open_proxies: number;
 }
 
-const SchemaVersion = 7;
+const SchemaVersion = 8;
 
 const Schema = `
 CREATE TABLE IF NOT EXISTS bbs (
@@ -201,6 +201,30 @@ CREATE TABLE IF NOT EXISTS hub_ban (
     did       TEXT PRIMARY KEY,
     reason    TEXT NOT NULL DEFAULT '',
     banned_at TEXT NOT NULL
+);
+--  usage trends (schema 8, usage.ts): one row a day for the hub, and one a
+--  day for each BBS by name; counts and totals only, kept for the long view
+CREATE TABLE IF NOT EXISTS usage_day (
+    day                TEXT PRIMARY KEY,
+    bbs_registered     INTEGER NOT NULL DEFAULT 0,
+    bbs_active         INTEGER NOT NULL DEFAULT 0,
+    bbs_connected_peak INTEGER NOT NULL DEFAULT 0,
+    people             INTEGER NOT NULL DEFAULT 0,
+    presence_on        INTEGER NOT NULL DEFAULT 0,
+    signed_in          INTEGER NOT NULL DEFAULT 0,
+    live_peak          INTEGER NOT NULL DEFAULT 0,
+    chat_peak          INTEGER NOT NULL DEFAULT 0,
+    reports            INTEGER NOT NULL DEFAULT 0,
+    blocks             INTEGER NOT NULL DEFAULT 0
+);
+CREATE TABLE IF NOT EXISTS usage_bbs_day (
+    day               TEXT NOT NULL,
+    bbs               TEXT NOT NULL,
+    connected_seconds REAL NOT NULL DEFAULT 0,
+    bytes_in          INTEGER NOT NULL DEFAULT 0,
+    bytes_out         INTEGER NOT NULL DEFAULT 0,
+    conns_peak        INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (day, bbs)
 );
 CREATE TABLE IF NOT EXISTS web_session (
     token_hash TEXT PRIMARY KEY,

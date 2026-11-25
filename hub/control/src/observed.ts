@@ -33,6 +33,8 @@ export interface TunnelCheckOptions {
     fetch?: typeof fetch;
     now?: () => Date;
     timeoutMs?: number;
+    //  given the tunnel server's proxies, with their traffic (usage trends)
+    onProxies?: (proxies: readonly Record<string, unknown>[]) => void;
 }
 
 export async function checkTunnels(
@@ -81,6 +83,7 @@ export async function checkTunnels(
         log("tunnels: the tunnel server's admin API sent no proxy list");
         return 'error';
     }
+    options.onProxies?.(proxies.filter(p => p && 'object' === typeof p));
     const online = new Set<string>();
     for (const p of proxies) {
         const { name, status } = (p ?? {}) as { name?: unknown; status?: unknown };
