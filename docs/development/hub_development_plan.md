@@ -503,6 +503,20 @@ it back after 28 s. 2 new tests for the public client.
 | Implements | Abuse reporting form and contact; suspend BBS and ban sysop DID; quotas and bandwidth limits; logging without content; metrics and alerting; database backups; terms of service and privacy notice (including the TLS-termination disclosure) |
 | Depends on | H3 |
 | Done when | Required before public launch: an abusive BBS can be suspended within minutes, logs contain no message content, and backups restore cleanly |
+| Status | **In progress.** Done: suspension cuts an open tunnel, and DIDs can be banned (2026-11-25); nightly backups to the dev VM and the NAS (2026-11-23, not yet restored into a running hub); a deploy script with rollback. To do: logging audit, a restore test, quotas and bandwidth limits, alerting, the reporting form and contact, terms of service and privacy notice |
+
+**Suspension and bans** (2026-11-25). frp only checks heartbeats when its
+connections aren't multiplexed, so a suspended BBS's open tunnel stayed up
+until frps restarted. Agents now send one every `tunnel.heartbeatSeconds`
+(20) and frps closes a tunnel with none accepted for three times that; the
+control plane refuses a suspended BBS's, as it already did. `ban DID`
+suspends every BBS the DID runs or is, and refuses it another; bans,
+suspensions and resumptions go in the moderation log. **Tested on the public
+hub**: with both boards' agent configs given the heartbeat lines, both stayed
+connected past the timeout; suspending test2 cut its tunnel after 19 s (the
+agent drops the connection itself when its heartbeat is refused, and can't
+log in again), and resuming it brought it back after 12 s. 2 new tests (204
+in all).
 
 ### H9. Sysop admission requirements
 
