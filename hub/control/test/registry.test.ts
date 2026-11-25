@@ -62,6 +62,44 @@ describe('the registry', () => {
         assert.equal(registry.authenticate('coolbbs', token)?.name, 'coolbbs');
     });
 
+    it('a ban suspends every BBS a DID runs or is, and refuses it another', () => {
+        const registry = testRegistry();
+        const { token } = registry.add('coolbbs', SysopDid);
+        registry.add('second', SysopDid);
+        registry.add('theirs', OtherSysopDid, BbsDid);
+        registry.add('other', OtherSysopDid);
+        registry.setState('second', 'suspended');
+
+        const { ban, suspended } = registry.banDid(SysopDid, 'spam');
+        assert.deepEqual(suspended, ['coolbbs'], 'only those still active');
+        assert.equal(ban.reason, 'spam');
+        assert.equal(registry.authenticate('coolbbs', token), null);
+        assert.throws(() => registry.add('again', SysopDid), { code: 'banned' });
+        assert.throws(
+            () => registry.add('again', OtherSysopDid, SysopDid),
+            { code: 'banned' },
+            'nor as a BBS DID'
+        );
+        assert.throws(() => registry.setBbsDid('other', SysopDid), { code: 'banned' });
+        assert.throws(() => registry.setState('coolbbs', 'active'), { code: 'banned' });
+
+        //  a banned BBS account takes its BBS with it, not its sysop's others
+        assert.deepEqual(registry.banDid(BbsDid).suspended, ['theirs']);
+        assert.equal(registry.get('other')?.state, 'active');
+        assert.deepEqual(
+            registry.bans().map(b => b.did),
+            [SysopDid, BbsDid]
+        );
+
+        //  lifted: may register again, but suspended BBSes wait to be resumed
+        registry.unbanDid(SysopDid);
+        assert.equal(registry.get('coolbbs')?.state, 'suspended');
+        assert.equal(registry.setState('coolbbs', 'active').state, 'active');
+        assert.equal(registry.add('again', SysopDid).bbs.name, 'again');
+        assert.throws(() => registry.unbanDid(SysopDid), { code: 'not-found' });
+        assert.throws(() => registry.banDid('nope'), { code: 'bad-did' });
+    });
+
     it('a BBS DID belongs to one BBS', () => {
         const registry = testRegistry();
         registry.add('coolbbs', SysopDid);

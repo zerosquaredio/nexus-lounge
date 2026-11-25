@@ -153,10 +153,20 @@ reads it from there, and without it frps's admin API (on `127.0.0.1` only)
 has no password.
 
 **Suspending a BBS** refuses its agent's logins, new routes and new
-certificates at once. An open tunnel stays up until it drops: frp's agents
-send no heartbeats by default, and a dishonest one could stop them anyway.
-Restart the tunnel server to cut it; every other BBS reconnects within
-seconds.
+certificates at once, and cuts an open tunnel, with every session in it,
+within a minute. Agents send a heartbeat every `tunnel.heartbeatSeconds`
+(20); the control plane refuses those of a suspended BBS or an old token,
+and frps closes a tunnel with none accepted for three times that. An agent
+that sends none (a config made before heartbeats, or a dishonest agent) is
+cut too, so older agent configs need the two `transport.heartbeat` lines
+from `agent-config`.
+
+**Banning a DID** (`ban DID --reason TEXT`) suspends every BBS it runs, or
+whose own account it is, and refuses it registering another, as sysop or as
+a BBS's account. `unban` lifts it; its BBSes stay suspended until each is
+resumed. Bans, suspensions and resumptions go in the moderation log
+(`space log`). A ban covers BBSes only: to keep the person out of the common
+space too, use `space block`.
 
 ## Connecting a BBS
 

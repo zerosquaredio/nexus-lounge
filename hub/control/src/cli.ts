@@ -10,7 +10,7 @@ import { isPublicClient } from './signin.ts';
 import { ObservedStatus } from './observed.ts';
 import { loadConfig, type HubConfig } from './config.ts';
 import { HubError } from './errors.ts';
-import { agentConfig, caddyfile, chatCommand, frpsConfig } from './generate.ts';
+import { agentConfig, caddyfile, chatCommand, frpsConfig, heartbeatTimeout } from './generate.ts';
 import { Registry, type Bbs } from './registry.ts';
 import { loadWebTerm } from './webterm.ts';
 import { atClient } from './atproto.ts';
@@ -28,13 +28,19 @@ BBSes
                          its agent config to FILE (or prints it)
   list                   all BBSes, with state and whether connected
   show NAME
-  suspend NAME           refuse its tunnel and new certificates
+  suspend NAME           refuse its tunnel and new certificates; an open
+                         tunnel is cut within a minute
   resume NAME
   rotate-token NAME [--out FILE]
                          a new token (the old one stops working), and a new
                          agent config
   set-did NAME DID|clear the BBS's own AT account, for its handle
   remove NAME
+  ban DID [--reason TEXT]
+                         suspend every BBS the DID runs (or is), and refuse
+                         it registering another, as sysop or BBS account
+  unban DID              lift it; its BBSes stay suspended until resumed
+  bans                   the DIDs banned
 
 Generated configs
   agent-config NAME --token TOKEN [--web-port N] [--ws-port N]
@@ -262,16 +268,21 @@ export async function run(argv: string[]): Promise<void> {
                 return;
             case 'suspend': {
                 const bbs = registry.setState(need(positional, 1, 'NAME'), 'suspended');
+                new Moderation(registry.db).log('suspend', bbs.name);
                 console.log(describe(bbs, config));
                 console.log(
                     '\nIts agent can no longer log in or open proxies, and no new certificate is made.' +
-                        '\nA tunnel already open stays up until it drops; restart the tunnel server to cut it now.'
+                        `\nAn open tunnel is cut, sessions and all, within ${heartbeatTimeout(config)} seconds, ` +
+                        'when its heartbeats are refused.'
                 );
                 return;
             }
-            case 'resume':
-                console.log(describe(registry.setState(need(positional, 1, 'NAME'), 'active'), config));
+            case 'resume': {
+                const bbs = registry.setState(need(positional, 1, 'NAME'), 'active');
+                new Moderation(registry.db).log('resume', bbs.name);
+                console.log(describe(bbs, config));
                 return;
+            }
             case 'rotate-token': {
                 const name = need(positional, 1, 'NAME');
                 const token = registry.rotateToken(name);
@@ -289,6 +300,47 @@ export async function run(argv: string[]): Promise<void> {
                 const name = need(positional, 1, 'NAME');
                 registry.remove(name);
                 console.log(`Removed ${name}.`);
+                return;
+            }
+            case 'ban': {
+                const did = need(positional, 1, 'DID');
+                const { ban, suspended } = registry.banDid(did, options.reason ?? '');
+                new Moderation(registry.db).log(
+                    'ban',
+                    did,
+                    [ban.reason, suspended.length ? `suspended ${suspended.join(', ')}` : '']
+                        .filter(Boolean)
+                        .join('; ')
+                );
+                console.log(`Banned ${did}${ban.reason ? ` (${ban.reason})` : ''}.`);
+                console.log(
+                    suspended.length
+                        ? `Suspended ${suspended.join(', ')}; open tunnels are cut within ${heartbeatTimeout(config)} seconds.`
+                        : 'It runs no active BBS here.'
+                );
+                return;
+            }
+            case 'unban': {
+                const did = need(positional, 1, 'DID');
+                registry.unbanDid(did);
+                new Moderation(registry.db).log('unban', did);
+                const still = registry.bbsesOf(did).filter(b => 'suspended' === b.state);
+                console.log(
+                    `Unbanned ${did}.` +
+                        (still.length
+                            ? ` Still suspended: ${still.map(b => b.name).join(', ')} (resume each).`
+                            : '')
+                );
+                return;
+            }
+            case 'bans': {
+                const bans = registry.bans();
+                if (!bans.length) {
+                    console.log('No bans.');
+                }
+                for (const b of bans) {
+                    console.log(`${b.did}  since ${b.bannedAt}${b.reason ? `  ${b.reason}` : ''}`);
+                }
                 return;
             }
             case 'directory': {

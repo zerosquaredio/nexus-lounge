@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { agentConfig, caddyfile, frpsConfig } from '../src/generate.ts';
+import { makeConfig } from '../src/config.ts';
 import { AllowedLocations } from '../src/rules.ts';
 import { testConfig } from './helpers.ts';
 
@@ -36,6 +37,17 @@ describe('generated configs', () => {
         assert.match(text, /^path = "\/frp\/handler"$/m);
         assert.match(text, /^transport\.tls\.force = true$/m);
         assert.match(text, /^proxyBindAddr = "127\.0\.0\.1"$/m);
+    });
+
+    it('has agents send heartbeats, and the tunnel server close a tunnel with none accepted', () => {
+        const agent = agentConfig(config, { name: 'coolbbs', token: 't' });
+        assert.match(agent, /^transport\.heartbeatInterval = 20$/m);
+        assert.match(agent, /^transport\.heartbeatTimeout = 60$/m);
+        assert.match(frpsConfig(config), /^transport\.heartbeatTimeout = 60$/m);
+        const quick = makeConfig({ tunnel: { heartbeatSeconds: 5 } });
+        assert.match(agentConfig(quick, { name: 'coolbbs', token: 't' }), /heartbeatInterval = 5$/m);
+        assert.match(frpsConfig(quick), /^transport\.heartbeatTimeout = 15$/m);
+        assert.throws(() => makeConfig({ tunnel: { heartbeatSeconds: 0 } }), /heartbeatSeconds/);
     });
 
     it('opens the admin API on this machine only, its password from the environment', () => {

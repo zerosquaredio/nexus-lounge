@@ -39,7 +39,7 @@ interface BbsRow {
     open_proxies: number;
 }
 
-const SchemaVersion = 6;
+const SchemaVersion = 7;
 
 const Schema = `
 CREATE TABLE IF NOT EXISTS bbs (
@@ -195,6 +195,13 @@ CREATE TABLE IF NOT EXISTS moderation_log (
     subject TEXT NOT NULL,
     detail  TEXT NOT NULL DEFAULT ''
 );
+--  DIDs banned from the hub (schema 7, hub plan H8): their BBSes are
+--  suspended, and they can't register one, as sysop or as its own account
+CREATE TABLE IF NOT EXISTS hub_ban (
+    did       TEXT PRIMARY KEY,
+    reason    TEXT NOT NULL DEFAULT '',
+    banned_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS web_session (
     token_hash TEXT PRIMARY KEY,
     did        TEXT NOT NULL,
@@ -221,6 +228,12 @@ function toBbs(row: BbsRow): Bbs {
         lastConnectedAt: row.last_connected_at,
         lastDisconnectedAt: row.last_disconnected_at,
     };
+}
+
+export interface Ban {
+    did: string;
+    reason: string;
+    bannedAt: string;
 }
 
 export interface RegistryOptions {
@@ -324,6 +337,11 @@ export class Registry {
         if (null !== bbsDid && !isDid(bbsDid)) {
             throw new HubError('bad-did', `"${bbsDid}" is not a did:plc or did:web`);
         }
+        for (const did of [sysopDid, bbsDid]) {
+            if (did && this.ban(did)) {
+                throw new HubError('banned', `${did} is banned from this hub`);
+            }
+        }
         if (this.get(name)) {
             throw new HubError('taken', `"${name}" is already registered`);
         }
@@ -369,7 +387,11 @@ export class Registry {
     }
 
     setState(name: string, state: BbsState): Bbs {
-        this.mustGet(name);
+        const bbs = this.mustGet(name);
+        const banned = 'active' === state ? this.banOf(bbs) : null;
+        if (banned) {
+            throw new HubError('banned', `${banned.did} is banned from this hub; unban it first`);
+        }
         this.db.prepare('UPDATE bbs SET state = ? WHERE name = ?').run(state, name);
         return this.mustGet(name);
     }
@@ -380,6 +402,9 @@ export class Registry {
             if (!isDid(did)) {
                 throw new HubError('bad-did', `"${did}" is not a did:plc or did:web`);
             }
+            if (this.ban(did)) {
+                throw new HubError('banned', `${did} is banned from this hub`);
+            }
             const other = this.getByDid(did);
             if (other && other.name !== name) {
                 throw new HubError('taken', `${did} is already registered for "${other.name}"`);
@@ -387,6 +412,68 @@ export class Registry {
         }
         this.db.prepare('UPDATE bbs SET bbs_did = ? WHERE name = ?').run(did, name);
         return this.mustGet(name);
+    }
+
+    //  Ban a DID from the hub: every BBS it runs, or that is its own
+    //  account, is suspended (so their tunnels are cut), and it can't
+    //  register another. Returns the BBSes suspended now.
+    banDid(did: string, reason = ''): { ban: Ban; suspended: string[] } {
+        if (!isDid(did)) {
+            throw new HubError('bad-did', `"${did}" is not a did:plc or did:web`);
+        }
+        const suspended = this.bbsesOf(did)
+            .filter(b => 'active' === b.state)
+            .map(b => b.name);
+        this.db
+            .prepare(
+                'INSERT INTO hub_ban (did, reason, banned_at) VALUES (?, ?, ?) ' +
+                    'ON CONFLICT (did) DO UPDATE SET reason = excluded.reason'
+            )
+            .run(did, reason.slice(0, 300), this.stamp());
+        for (const name of suspended) {
+            this.db.prepare("UPDATE bbs SET state = 'suspended' WHERE name = ?").run(name);
+        }
+        return { ban: this.ban(did) as Ban, suspended };
+    }
+
+    //  Lift a ban. Its BBSes stay suspended until each is resumed.
+    unbanDid(did: string): Ban {
+        const ban = this.ban(did);
+        if (!ban) {
+            throw new HubError('not-found', `${did} is not banned`);
+        }
+        this.db.prepare('DELETE FROM hub_ban WHERE did = ?').run(did);
+        return ban;
+    }
+
+    ban(did: string): Ban | null {
+        const row = this.db.prepare('SELECT * FROM hub_ban WHERE did = ?').get(did) as
+            { did: string; reason: string; banned_at: string } | undefined;
+        return row ? { did: row.did, reason: row.reason, bannedAt: row.banned_at } : null;
+    }
+
+    bans(): Ban[] {
+        return (
+            this.db.prepare('SELECT * FROM hub_ban ORDER BY banned_at, rowid').all() as unknown as {
+                did: string;
+                reason: string;
+                banned_at: string;
+            }[]
+        ).map(r => ({ did: r.did, reason: r.reason, bannedAt: r.banned_at }));
+    }
+
+    //  The ban, if any, on a BBS's sysop or its own account
+    banOf(bbs: Bbs): Ban | null {
+        return this.ban(bbs.sysopDid) ?? (bbs.bbsDid ? this.ban(bbs.bbsDid) : null);
+    }
+
+    //  BBSes a DID runs, or that are its own account
+    bbsesOf(did: string): Bbs[] {
+        return (
+            this.db
+                .prepare(`${SelectBbs} WHERE b.sysop_did = ? OR b.bbs_did = ? ORDER BY b.name`)
+                .all(did, did) as unknown as BbsRow[]
+        ).map(toBbs);
     }
 
     remove(name: string): void {

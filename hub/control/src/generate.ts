@@ -48,7 +48,15 @@ metadatas.token = ${tomlString(options.token)}
 #  keep trying if the hub is down or restarting
 loginFailExit = false
 transport.tls.enable = true
+#  the hub needs a heartbeat: without one, it closes the tunnel
+transport.heartbeatInterval = ${config.tunnel.heartbeatSeconds}
+transport.heartbeatTimeout = ${heartbeatTimeout(config)}
 ${proxy('ws', options.wsPort ?? 8810, ['/ws'])}${proxy('web', options.webPort ?? 8080, EnigmaWebLocations)}`;
+}
+
+//  How long a tunnel lasts with no heartbeat accepted: three missed
+export function heartbeatTimeout(config: HubConfig): number {
+    return config.tunnel.heartbeatSeconds * 3;
 }
 
 //  The tunnel server's config (frps)
@@ -65,6 +73,11 @@ subDomainHost = ${tomlString(config.domain)}
 transport.tls.force = true
 #  no raw TCP or UDP ports for anyone
 allowPorts = []
+#  close an agent's tunnel, and every session in it, when no heartbeat has
+#  been accepted for this long. The control plane refuses those of a
+#  suspended BBS or an old token, so this is how they are cut; an agent
+#  that sends none is cut too
+transport.heartbeatTimeout = ${heartbeatTimeout(config)}
 
 log.to = "console"
 log.level = "info"

@@ -25,6 +25,10 @@ export interface HubConfig {
         //  which tunnels are really up. Its password comes from the
         //  HUB_FRPS_ADMIN_PASSWORD environment variable, for both programs
         adminPort: number;
+        //  agents send a heartbeat this often, which the control plane
+        //  refuses for a suspended BBS or an old token; frps closes a tunnel
+        //  with none accepted for three times this, open sessions and all
+        heartbeatSeconds: number;
     };
     //  the hub's own AT account, which publishes observed status
     hubAccount: {
@@ -150,6 +154,7 @@ export const Defaults: HubConfig = {
         bindPort: 7000,
         vhostHttpPort: 7080,
         adminPort: 7400,
+        heartbeatSeconds: 20,
     },
     hubAccount: { callbackPort: 7220 },
     observedStatus: { enabled: true, settleSeconds: 20, intervalSeconds: 15 },
@@ -285,6 +290,10 @@ export function makeConfig(overrides: Partial<Record<keyof HubConfig, unknown>> 
         if (!Number.isInteger(port) || port < 1 || port > 65535) {
             throw new HubError('config', `${what} is a port, 1 to 65535`);
         }
+    }
+    const heartbeat = config.tunnel.heartbeatSeconds;
+    if (!Number.isInteger(heartbeat) || heartbeat < 1 || heartbeat > 600) {
+        throw new HubError('config', 'tunnel.heartbeatSeconds is a whole number of seconds, 1 to 600');
     }
     const { settleSeconds, intervalSeconds } = config.observedStatus;
     if (!(settleSeconds >= 0) || !(intervalSeconds >= 1)) {
