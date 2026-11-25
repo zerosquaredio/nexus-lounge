@@ -182,6 +182,10 @@ names the hub address by itself.
 
 ## Deploying
 
+For the admin's day-to-day work (deploying, suspending and banning,
+moderation, the hub's account, backups), see
+[Running a Hub](../docs/admin/running_a_hub.md).
+
 `scripts/deploy.sh` (at the repo's root) updates a hub server from a
 checkout, over SSH, as a user with sudo:
 

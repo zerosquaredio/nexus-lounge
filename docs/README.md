@@ -56,6 +56,7 @@ in `user/`.
 
 | Doc | Covers |
 |---|---|
+| [running_a_hub.md](admin/running_a_hub.md) | A hub admin's day to day: deploying and rolling back, registering, suspending and banning, moderating the common space, the hub's own AT account, and backups |
 | [bbs_account.md](admin/bbs_account.md) | Setting up a BBS's AT account and its handle under a hub: the steps, and how the check works |
 | [related_tools.md](admin/related_tools.md) | Software around boards and the hub: ANSI art tools, and what the hub is built from |
 
