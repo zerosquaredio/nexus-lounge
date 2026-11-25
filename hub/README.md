@@ -60,7 +60,10 @@ to `wss://name.<domain>/ws`, which goes down the BBS's tunnel.
 Sysops can also register themselves on the hub's site
 (`site.publicUrl`, by default `http://127.0.0.1:7210` for development): they
 sign in with their AT account, and the site gives them the same token and
-agent config, once. On `http://127.0.0.1` the site signs people in as AT's
+agent config, once. With `registration.approval` on (the default), they
+apply instead, and the admin approves (`applications`, `approve`, `reject`);
+`registration.minAccountAgeDays` (30) turns away accounts newer than that,
+by when the PLC directory first recorded them. On `http://127.0.0.1` the site signs people in as AT's
 loopback client. On a public `https://` address it is a public client: the
 site serves its metadata at `/oauth/client-metadata.json` and its public key
 at `/oauth/jwks.json`, and keeps the signing key in `site.signingKey`

@@ -44,7 +44,7 @@ import { BbsChatPath, ChatPath, type Chat } from './chat.ts';
 import { chatPageBody, chatPane, ChatScript, ChatScriptPath, MaxLabelLookups } from './chat_page.ts';
 import { Live, LivePath, personId } from './live.ts';
 import { mapPageBody, mapPane, MapScript, MapScriptPath } from './map_page.ts';
-import { blockText, isPersonId, MaxNote } from './moderation.ts';
+import { blockText, isPersonId, MaxNote, Moderation } from './moderation.ts';
 import { whoPanel, WhoScript, WhoScriptPath } from './moderation_page.ts';
 import { MapPagePath, spacePageBody, SpaceScript, SpaceScriptPath } from './space_page.ts';
 import type { HubConfig } from './config.ts';
@@ -52,7 +52,7 @@ import { HubError } from './errors.ts';
 import { AbuseKinds, AbuseReports, MaxContact, MaxDetails } from './abuse.ts';
 import { agentConfig } from './generate.ts';
 import { esc, page } from './html.ts';
-import type { Bbs, Registry } from './registry.ts';
+import { MaxApplicationNote, type Application, type Bbs, type Registry } from './registry.ts';
 import type { AtClient } from './atproto.ts';
 import type { Directory, DirectoryEntry } from './directory.ts';
 import type { Listing } from './listing.ts';
@@ -336,6 +336,59 @@ and it keeps no access to it afterwards.</p>
         return `<tr><td><strong>${esc(bbs.name)}</strong>.${esc(config.domain)}${listed}</td><td>${status}</td><td>${actions}</td></tr>`;
     }
 
+    //  Why a sysop's account is too new to register here, if it is (H9)
+    async function accountTooNew(did: string): Promise<string | null> {
+        const days = config.registration.minAccountAgeDays;
+        if (!days) {
+            return null;
+        }
+        let made: string | null;
+        try {
+            if (!deps.at) {
+                throw new Error('no AT client');
+            }
+            made = await deps.at.accountCreated(did);
+        } catch (e) {
+            log(`site: couldn't check how old ${did} is: ${(e as Error).message}`);
+            return "This hub couldn't check how old your account is just now. Try again in a while.";
+        }
+        if (null === made) {
+            //  a did:web says nothing of its age: the admin judges, if there is one
+            return config.registration.approval
+                ? null
+                : "This hub can't tell how old a did:web account is, so it can't register a BBS for it.";
+        }
+        const ready = Date.parse(made) + days * 24 * 60 * 60 * 1000;
+        if (ready > now()) {
+            return `This hub registers BBSes for accounts at least ${days} days old. Yours will be on ${new Date(
+                ready
+            )
+                .toISOString()
+                .slice(0, 10)}.`;
+        }
+        return null;
+    }
+
+    //  A sysop's applications, waiting or turned down (H9)
+    function applicationList(who: WebSession): string {
+        const apps = registry.applicationsFor(who.did);
+        if (!apps.length) {
+            return '';
+        }
+        const row = (a: Application) =>
+            'pending' === a.status
+                ? `<tr><td><strong>${esc(a.name)}</strong>.${esc(config.domain)}</td><td>waiting for the hub's admin, since ${esc(
+                      a.createdAt.slice(0, 10)
+                  )}</td><td><form class="inline" method="post" action="/bbs/withdraw"><input type="hidden" name="name" value="${esc(
+                      a.name
+                  )}"><button>Withdraw</button></form></td></tr>`
+                : `<tr><td><strong>${esc(a.name)}</strong>.${esc(config.domain)}</td><td>not approved${
+                      a.reason ? `: ${esc(a.reason)}` : ''
+                  }</td><td></td></tr>`;
+        return `<h2>Your applications</h2>
+<table><tr><th>BBS</th><th>Status</th><th></th></tr>${apps.map(row).join('')}</table>`;
+    }
+
     //  What a sysop confirms of their BBS's content, from the ratings this
     //  hub lists
     function ratingText(): string {
@@ -354,8 +407,11 @@ and it keeps no access to it afterwards.</p>
         const mine = registry.listForSysop(who.did);
         const max = config.registration.maxBbsPerSysop;
         const canAdd = config.registration.open && mine.length < max;
+        const firstToken = mine.some(b => 'active' === b.state && !b.lastConnectedAt && !b.connected)
+            ? '<p class="hint">To connect a BBS for the first time, press <strong>New token</strong> to get its agent config.</p>'
+            : '';
         const list = mine.length
-            ? `<table><tr><th>BBS</th><th>Status</th><th></th></tr>${mine.map(bbsRow).join('')}</table>`
+            ? `<table><tr><th>BBS</th><th>Status</th><th></th></tr>${mine.map(bbsRow).join('')}</table>${firstToken}`
             : '<p class="dim">You have no BBSes registered here yet.</p>';
         const remove = mine.length
             ? `<h2>Remove a BBS</h2>
@@ -367,9 +423,19 @@ and it keeps no access to it afterwards.</p>
 <p class="hint">Its tunnel stops working and everything the hub holds about it is deleted. Its name is held
 for 90 days, so nobody else takes it straight away.</p>`
             : '';
+        const approval = config.registration.approval;
+        const age = config.registration.minAccountAgeDays;
         const add = canAdd
-            ? `<h2>Register a BBS</h2>
+            ? `<h2>${approval ? 'Apply to register a BBS' : 'Register a BBS'}</h2>
 ${error ? `<p class="error">${esc(error)}</p>` : ''}
+${
+    approval
+        ? `<p class="hint">This hub's admin approves each new BBS. Once yours is approved, it appears above and you can
+get its agent config.${age ? ` Your account must be at least ${age} days old.` : ''}</p>`
+        : age
+          ? `<p class="hint">Your account must be at least ${age} days old.</p>`
+          : ''
+}
 <form method="post" action="/bbs">
 <label for="name">Name</label>
 <input type="text" id="name" name="name" value="${esc(values.name)}" placeholder="coolbbs" autocomplete="off" required>
@@ -382,8 +448,14 @@ ${error ? `<p class="error">${esc(error)}</p>` : ''}
 <input type="text" id="bbsAccount" name="bbsAccount" value="${esc(values.bbsAccount)}" placeholder="coolbbs.bsky.social" autocomplete="off">
 <p class="hint">The account your BBS publishes its listing from. The directory shows that listing here once it
 names your BBS's address on this hub (<code>https://name.${esc(config.domain)}</code>).</p>
+${
+    approval
+        ? `<label for="note">Tell the admin about your BBS: what it is, and who it's for</label>
+<textarea id="note" name="note" rows="4" maxlength="${MaxApplicationNote}">${esc(values.note)}</textarea>`
+        : ''
+}
 <p><label><input type="checkbox" name="rating" value="yes" required> ${esc(ratingText())}</label></p>
-<button>Register</button>
+<button>${approval ? 'Apply' : 'Register'}</button>
 </form>`
             : config.registration.open
               ? `<p class="dim">You have ${mine.length} BBSes, the most this hub allows per sysop.</p>`
@@ -400,7 +472,7 @@ names your BBS's address on this hub (<code>https://name.${esc(config.domain)}</
             : '';
         return page(
             'Your BBSes',
-            `${list}${add}${account}${remove}<p>${profiles ? '<a href="/me">Your profile</a> · ' : ''}<a href="/">The directory</a></p>`,
+            `${list}${applicationList(who)}${add}${account}${remove}<p>${profiles ? '<a href="/me">Your profile</a> · ' : ''}<a href="/">The directory</a></p>`,
             who
         );
     }
@@ -1450,6 +1522,7 @@ ${footer()}`,
                     webPort: form.get('webPort') ?? '',
                     wsPort: form.get('wsPort') ?? '',
                     bbsAccount: (form.get('bbsAccount') ?? '').trim(),
+                    note: form.get('note') ?? '',
                 };
                 if (!config.registration.open) {
                     return send(res, 403, dashboard(who));
@@ -1464,9 +1537,19 @@ ${footer()}`,
                 if (!changeLimit.allow(who.did)) {
                     return send(res, 429, dashboard(who, 'Too many changes. Try again later.', values));
                 }
+                const tooNew = await accountTooNew(who.did);
+                if (tooNew) {
+                    return send(res, 403, dashboard(who, tooNew, values));
+                }
                 try {
                     const ports = { web: port(values.webPort, 8080), ws: port(values.wsPort, 8810) };
                     const bbsDid = await accountDid(values.bbsAccount);
+                    if (config.registration.approval) {
+                        const app = registry.apply(values.name, who.did, bbsDid, ports, form.get('note') ?? '');
+                        new Moderation(registry.db).log('apply', app.name, `from ${who.did}`);
+                        log(`site: ${who.did} applied for ${app.name}`);
+                        return redirect(res, '/bbs');
+                    }
                     const { bbs, token: bbsToken } = registry.add(values.name, who.did, bbsDid, ports);
                     log(`site: ${who.did} registered ${bbs.name}`);
                     return send(res, 200, credentials(who, bbs, bbsToken, true));
@@ -1476,6 +1559,14 @@ ${footer()}`,
                     }
                     throw e;
                 }
+            }
+
+            if ('/bbs/withdraw' === path) {
+                const name = (form.get('name') ?? '').trim().toLowerCase();
+                if (registry.withdraw(name, who.did)) {
+                    log(`site: ${who.did} withdrew the application for ${name}`);
+                }
+                return redirect(res, '/bbs');
             }
 
             if ('/bbs/rotate' === path || '/bbs/remove' === path || '/bbs/account' === path) {

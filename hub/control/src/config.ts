@@ -146,6 +146,12 @@ export interface HubConfig {
         //  anyone with an AT account may register a BBS on the hub's site;
         //  false: only the admin, from the command line
         open: boolean;
+        //  registering on the site sends an application, which the admin
+        //  approves or rejects (hub plan H9)
+        approval: boolean;
+        //  how old a sysop's AT account must be to register on the site
+        //  (from when the PLC directory first recorded it); 0 for any age
+        minAccountAgeDays: number;
         reservedNames: string[];
         maxBbsPerSysop: number;
     };
@@ -208,7 +214,13 @@ export const Defaults: HubConfig = {
     edge: { tls: 'internal', bindAddr: '127.0.0.1', httpPort: 7081, httpsPort: 7443 },
     contact: { abuse: '' },
     policy: { operator: '', minimumAge: 16, termsFile: '', privacyFile: '' },
-    registration: { open: true, reservedNames: DefaultReservedNames, maxBbsPerSysop: 3 },
+    registration: {
+        open: true,
+        approval: true,
+        minAccountAgeDays: 30,
+        reservedNames: DefaultReservedNames,
+        maxBbsPerSysop: 3,
+    },
 };
 
 const DomainRe = /^(?=.{1,200}$)([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z][a-z0-9-]*[a-z0-9]$/;
@@ -326,6 +338,10 @@ export function makeConfig(overrides: Partial<Record<keyof HubConfig, unknown>> 
                 `directory.ratings allows "${rating}", so policy.minimumAge must be ${least} or more`
             );
         }
+    }
+    const minAge = config.registration.minAccountAgeDays;
+    if (!Number.isInteger(minAge) || minAge < 0 || minAge > 3650) {
+        throw new HubError('config', 'registration.minAccountAgeDays is a whole number of days, 0 to 3650');
     }
     const heartbeat = config.tunnel.heartbeatSeconds;
     if (!Number.isInteger(heartbeat) || heartbeat < 1 || heartbeat > 600) {

@@ -42,7 +42,7 @@ interface BbsRow {
     open_proxies: number;
 }
 
-const SchemaVersion = 11;
+const SchemaVersion = 12;
 
 const Schema = `
 CREATE TABLE IF NOT EXISTS bbs (
@@ -249,6 +249,21 @@ CREATE TABLE IF NOT EXISTS released_name (
     name       TEXT PRIMARY KEY,
     removed_at TEXT NOT NULL
 );
+--  applications to register a BBS, while the hub's admin approves them
+--  (schema 12, hub plan H9); a rejected one is kept a while, so its sysop
+--  can see why
+CREATE TABLE IF NOT EXISTS bbs_application (
+    name       TEXT PRIMARY KEY,
+    sysop_did  TEXT NOT NULL,
+    bbs_did    TEXT,
+    web_port   INTEGER NOT NULL,
+    ws_port    INTEGER NOT NULL,
+    note       TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL,
+    status     TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'rejected')),
+    reason     TEXT,
+    decided_at TEXT
+);
 CREATE TABLE IF NOT EXISTS web_session (
     token_hash TEXT PRIMARY KEY,
     did        TEXT NOT NULL,
@@ -286,6 +301,48 @@ export interface Ban {
 
 //  How long a removed BBS's name is held
 export const NameHoldDays = 90;
+//  How long a rejected application is kept, for its sysop to see why
+export const RejectedKeepDays = 30;
+export const MaxApplicationNote = 1000;
+
+export interface Application {
+    name: string;
+    sysopDid: string;
+    bbsDid: string | null;
+    webPort: number;
+    wsPort: number;
+    note: string;
+    createdAt: string;
+    status: 'pending' | 'rejected';
+    reason: string | null;
+    decidedAt: string | null;
+}
+
+interface ApplicationRow {
+    name: string;
+    sysop_did: string;
+    bbs_did: string | null;
+    web_port: number;
+    ws_port: number;
+    note: string;
+    created_at: string;
+    status: 'pending' | 'rejected';
+    reason: string | null;
+    decided_at: string | null;
+}
+
+const toApplication = (r: ApplicationRow): Application => ({
+    name: r.name,
+    sysopDid: r.sysop_did,
+    bbsDid: r.bbs_did,
+    webPort: r.web_port,
+    wsPort: r.ws_port,
+    note: r.note,
+    createdAt: r.created_at,
+    status: r.status,
+    reason: r.reason,
+    decidedAt: r.decided_at,
+});
 
 export interface RegistryOptions {
     reservedNames: readonly string[];
@@ -378,6 +435,26 @@ export class Registry {
         bbsDid: string | null = null,
         ports: { web?: number; ws?: number } = {}
     ): { bbs: Bbs; token: string } {
+        this.checkNew(name, sysopDid, bbsDid, ports);
+        const token = newToken();
+        this.db
+            .prepare(
+                'INSERT INTO bbs (name, sysop_did, bbs_did, token_hash, created_at, web_port, ws_port) VALUES (?, ?, ?, ?, ?, ?, ?)'
+            )
+            .run(name, sysopDid, bbsDid, hashToken(token), this.stamp(), ports.web ?? 8080, ports.ws ?? 8810);
+        return { bbs: this.mustGet(name), token };
+    }
+
+    //  Everything a new BBS (or an application for one) must pass. `approving`
+    //  names the application being approved, which doesn't count against
+    //  itself.
+    checkNew(
+        name: string,
+        sysopDid: string,
+        bbsDid: string | null,
+        ports: { web?: number; ws?: number },
+        approving: string | null = null
+    ): void {
         for (const p of [ports.web, ports.ws]) {
             if (undefined !== p && (!Number.isInteger(p) || p < 1 || p > 65535)) {
                 throw new HubError('bad-port', 'Ports are whole numbers from 1 to 65535');
@@ -408,25 +485,130 @@ export class Registry {
                 `"${name}" belonged to a BBS removed lately; it's free again on ${held.slice(0, 10)}`
             );
         }
+        const pending = this.application(name);
+        if (pending && 'pending' === pending.status && name !== approving) {
+            throw new HubError('taken', `Someone has already applied for "${name}"`);
+        }
         if (bbsDid && this.getByDid(bbsDid)) {
             throw new HubError('taken', `${bbsDid} is already registered for another BBS`);
         }
         const { count } = this.db
-            .prepare('SELECT COUNT(*) AS count FROM bbs WHERE sysop_did = ?')
-            .get(sysopDid) as { count: number };
+            .prepare(
+                `SELECT (SELECT COUNT(*) FROM bbs WHERE sysop_did = ?) +
+                        (SELECT COUNT(*) FROM bbs_application WHERE sysop_did = ? AND status = 'pending' AND name <> ?)
+                 AS count`
+            )
+            .get(sysopDid, sysopDid, approving ?? '') as { count: number };
         if (count >= this.options.maxBbsPerSysop) {
             throw new HubError(
                 'limit',
-                `${sysopDid} already has ${count} BBS(es); this hub allows ${this.options.maxBbsPerSysop}`
+                `${sysopDid} already has ${count} BBS(es) or applications; this hub allows ${this.options.maxBbsPerSysop}`
             );
         }
-        const token = newToken();
+    }
+
+    // ── Applications (H9): when the hub's admin approves new BBSes ──
+
+    //  Apply to register a BBS; the admin approves or rejects it
+    apply(
+        name: string,
+        sysopDid: string,
+        bbsDid: string | null = null,
+        ports: { web?: number; ws?: number } = {},
+        note = ''
+    ): Application {
+        const earlier = this.application(name);
+        //  a sysop may apply again after a rejection
+        if (earlier && 'rejected' === earlier.status && earlier.sysopDid === sysopDid) {
+            this.db.prepare('DELETE FROM bbs_application WHERE name = ?').run(name);
+        }
+        this.checkNew(name, sysopDid, bbsDid, ports);
+        if (this.application(name)) {
+            throw new HubError('taken', `Someone has already applied for "${name}"`);
+        }
+        const text = note.replace(/[\u0000-\u0009\u000b-\u001f\u007f]/g, ' ').trim();
+        if (text.length > MaxApplicationNote) {
+            throw new HubError('bad-note', `A note can be up to ${MaxApplicationNote} characters`);
+        }
         this.db
             .prepare(
-                'INSERT INTO bbs (name, sysop_did, bbs_did, token_hash, created_at, web_port, ws_port) VALUES (?, ?, ?, ?, ?, ?, ?)'
+                'INSERT INTO bbs_application (name, sysop_did, bbs_did, web_port, ws_port, note, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
             )
-            .run(name, sysopDid, bbsDid, hashToken(token), this.stamp(), ports.web ?? 8080, ports.ws ?? 8810);
-        return { bbs: this.mustGet(name), token };
+            .run(name, sysopDid, bbsDid, ports.web ?? 8080, ports.ws ?? 8810, text, this.stamp());
+        return this.application(name) as Application;
+    }
+
+    application(name: string): Application | null {
+        this.forgetOldRejections();
+        const row = this.db.prepare('SELECT * FROM bbs_application WHERE name = ?').get(name) as
+            ApplicationRow | undefined;
+        return row ? toApplication(row) : null;
+    }
+
+    //  The pending ones, oldest first, or all of them
+    applications(all = false): Application[] {
+        this.forgetOldRejections();
+        return (
+            this.db
+                .prepare(
+                    `SELECT * FROM bbs_application${all ? '' : " WHERE status = 'pending'"} ORDER BY created_at, name`
+                )
+                .all() as unknown as ApplicationRow[]
+        ).map(toApplication);
+    }
+
+    applicationsFor(sysopDid: string): Application[] {
+        this.forgetOldRejections();
+        return (
+            this.db
+                .prepare('SELECT * FROM bbs_application WHERE sysop_did = ? ORDER BY created_at, name')
+                .all(sysopDid) as unknown as ApplicationRow[]
+        ).map(toApplication);
+    }
+
+    //  Approve: the BBS is registered, with a token nobody has yet; its sysop
+    //  makes one on the hub's site
+    approve(name: string): Bbs {
+        const app = this.application(name);
+        if (!app || 'pending' !== app.status) {
+            throw new HubError('not-found', `No application is waiting for "${name}"`);
+        }
+        this.checkNew(name, app.sysopDid, app.bbsDid, { web: app.webPort, ws: app.wsPort }, name);
+        this.db.prepare('DELETE FROM bbs_application WHERE name = ?').run(name);
+        return this.add(name, app.sysopDid, app.bbsDid, { web: app.webPort, ws: app.wsPort }).bbs;
+    }
+
+    reject(name: string, reason = ''): Application {
+        const app = this.application(name);
+        if (!app || 'pending' !== app.status) {
+            throw new HubError('not-found', `No application is waiting for "${name}"`);
+        }
+        const why = reason
+            .replace(/[\u0000-\u001f\u007f]/g, ' ')
+            .trim()
+            .slice(0, 300);
+        this.db
+            .prepare(
+                "UPDATE bbs_application SET status = 'rejected', reason = ?, decided_at = ? WHERE name = ?"
+            )
+            .run(why || null, this.stamp(), name);
+        return this.application(name) as Application;
+    }
+
+    //  A sysop takes back their own application
+    withdraw(name: string, sysopDid: string): boolean {
+        return (
+            this.db
+                .prepare('DELETE FROM bbs_application WHERE name = ? AND sysop_did = ?')
+                .run(name, sysopDid).changes > 0
+        );
+    }
+
+    forgetOldRejections(): void {
+        const before = new Date(this.now().getTime() - RejectedKeepDays * 24 * 60 * 60 * 1000).toISOString();
+        this.db
+            .prepare("DELETE FROM bbs_application WHERE status = 'rejected' AND decided_at < ?")
+            .run(before);
     }
 
     //  The BBS a token belongs to, if it is registered and active

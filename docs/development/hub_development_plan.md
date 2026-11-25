@@ -568,6 +568,21 @@ all).
 | Implements | Optional verification before a sysop may register (approval queue, payment), reusing the attestation model ([attestation.md](attestation.md)) |
 | Depends on | H3 |
 | Done when | The hub operator can require approval or verification for new registrations |
+| Status | **Done** (2026-11-25): an approval queue and a minimum account age; payment and attestation-based verification left for later |
+
+**How it works.** With `registration.approval` on (the default), registering
+on the site files an application (the name, ports, the BBS's account, and a
+note from the sysop) that holds the name and counts toward the sysop's
+limit. The admin approves (`hubctl approve`), which registers the BBS with a
+token nobody has, so its sysop makes one on the site ("New token"); or
+rejects, with a reason the sysop sees for 30 days. With
+`registration.minAccountAgeDays` (30 by default), the site checks when the
+sysop's DID first appeared in the PLC directory (`/log/audit`) and turns
+away newer accounts; a `did:web` has no such date, so it may only apply
+where the admin approves. Together these answer a banned sysop making a new
+account. The public hub keeps registration closed for now, so neither is
+seen there yet. 7 new tests (235 in all); the age lookup was checked against
+the real PLC directory.
 
 ### H10. End-to-end privacy (later)
 
@@ -693,7 +708,7 @@ control plane, behind the same edge. The BBS side is F18 and F19
 | **HM1** Reachable | H1, H2, minimal H3 (admin CLI) | A throwaway test ENiGMA½ (§6; never the personal dev VM) is reachable at `test.hub.cyberspace.nexus`, with AT login working through the hub. **Working on the public hub** (2026-11-22; locally 2026-11-09) |
 | **HM2** Self-service | H3, H4, H5 | Sysops register themselves, get handles, and users connect in the browser. **Working on the public hub**: H3 and H5 (2026-11-22, registration by the admin for now), H4 (2026-11-23) |
 | **HM3** Discovery | H6, H7 | Observed status and a public directory. **Working locally**: H7 (2026-11-09), H6 (2026-11-17). **Working on the public hub**: H6 (2026-11-25) |
-| **HM4** Public launch | H8 | Operations and moderation in place; open to outside sysops. H8 done (2026-11-25); before opening, H9's approval queue and minimum account age, and a lawyer's review of the terms |
+| **HM4** Public launch | H8 | Operations and moderation in place; open to outside sysops. H8 and H9 done (2026-11-25); before opening, a lawyer's review of the terms |
 | **HM5** Common space, first slice | H13 to H19 | Sign-in, presence, one chat room, the live model, a 2D map and an ANSI view, with basic blocking. Built on the test hub; needs HM3, not HM4, but must be in place (with H18) before a public hub turns it on. **Working locally** (2026-11-19): H13 to H18 all done on the test hub. **Working on the public hub** (2026-11-24), H13 to H19, with two people and two boards with different sysops: each sysop sees only their own board; both people see each other in the room and at the board one is logged in to (shown in two places at once, from the hub's page and the board's report); boards open from the map; chat works both ways |
 | Later | H9, H10, H11 | Sysop verification, end-to-end privacy, hosted accounts |
 

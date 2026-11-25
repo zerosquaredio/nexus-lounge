@@ -312,6 +312,9 @@ describe('the first sweep', () => {
             async resolveHandle() {
                 throw new Error('unused');
             },
+            async accountCreated() {
+                throw new Error('unused');
+            },
         };
         return { at, asked };
     }

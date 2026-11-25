@@ -42,6 +42,12 @@ BBSes
   remove NAME            everything of it is deleted; its name is held for
                          90 days, so nobody else takes it at once
   release NAME           free a removed BBS's name early
+
+Applications (when registration.approval is on, sysops apply on the site)
+  applications [--all]   those waiting, oldest first (--all: rejected ones too)
+  approve NAME           register it; its sysop gets the agent config on the site
+  reject NAME [--reason TEXT]
+                         turn it down; the sysop sees the reason for 30 days
   ban DID [--reason TEXT]
                          for good: remove every BBS the DID runs (or is), and
                          refuse it registering another, as sysop or BBS
@@ -320,6 +326,45 @@ export async function run(argv: string[]): Promise<void> {
                 registry.remove(name);
                 console.log(
                     `Removed ${name}. Its name is held until ${registry.heldUntil(name)?.slice(0, 10)}.`
+                );
+                return;
+            }
+            case 'applications': {
+                const apps = registry.applications(!!options.all);
+                if (!apps.length) {
+                    console.log(options.all ? 'No applications.' : 'No applications are waiting.');
+                }
+                for (const a of apps) {
+                    const kind = a.sysopDid.startsWith('did:web:') ? '  (did:web: its age is unknown)' : '';
+                    console.log(
+                        [
+                            `${a.name.padEnd(24)} ${a.createdAt.slice(0, 16).replace('T', ' ')}  ${
+                                'rejected' === a.status
+                                    ? `rejected${a.reason ? `: ${plain(a.reason)}` : ''}`
+                                    : 'waiting'
+                            }`,
+                            `  sysop    ${a.sysopDid}${kind}`,
+                            `  account  ${a.bbsDid ?? '(none given)'}`,
+                            a.note ? `  note     ${plain(a.note).replace(/\n/g, '\n           ')}` : '',
+                        ]
+                            .filter(Boolean)
+                            .join('\n')
+                    );
+                }
+                return;
+            }
+            case 'approve': {
+                const bbs = registry.approve(need(positional, 1, 'NAME'));
+                new Moderation(registry.db).log('approve', bbs.name, `for ${bbs.sysopDid}`);
+                console.log(describe(bbs, config));
+                console.log('\nApproved. Its sysop gets its agent config on the hub\'s site ("New token").');
+                return;
+            }
+            case 'reject': {
+                const app = registry.reject(need(positional, 1, 'NAME'), options.reason ?? '');
+                new Moderation(registry.db).log('reject', app.name, app.reason ?? '');
+                console.log(
+                    `Rejected the application for ${app.name}${app.reason ? ` (${app.reason})` : ''}.`
                 );
                 return;
             }

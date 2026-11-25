@@ -21,6 +21,9 @@ export interface AtClient {
     //  one page of the accounts holding a record type, from a relay
     listRepos(collection: string, cursor?: string): Promise<{ dids: string[]; cursor?: string }>;
     resolveHandle(handle: string): Promise<string>;
+    //  when a did:plc account was made (its first entry in the PLC
+    //  directory); null for a did:web, which records no such thing
+    accountCreated(did: string): Promise<string | null>;
 }
 
 export function atClient(fetchJson: JsonFetcher, relay: string): AtClient {
@@ -88,6 +91,22 @@ export function atClient(fetchJson: JsonFetcher, relay: string): AtClient {
                 dids,
                 cursor: 'string' === typeof reply.cursor && reply.cursor ? reply.cursor : undefined,
             };
+        },
+
+        async accountCreated(did) {
+            if (!isDid(did)) {
+                throw new HubError('did', `Not a DID: ${did}`);
+            }
+            if (!did.startsWith('did:plc:')) {
+                return null;
+            }
+            const log = await fetchJson(`${PlcDirectory}/${did}/log/audit`, { maxBytes: 512 * 1024 });
+            const first = Array.isArray(log) ? obj(log[0]) : {};
+            const at = 'string' === typeof first.createdAt ? first.createdAt : '';
+            if (!at || Number.isNaN(Date.parse(at))) {
+                throw new HubError('did', `The PLC directory has no history for ${did}`);
+            }
+            return new Date(at).toISOString();
         },
 
         //  A handle's DID, by DNS then HTTPS, checked against the DID

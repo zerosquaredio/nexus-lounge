@@ -13,6 +13,7 @@ import { createSite, type SignInLike } from '../src/site.ts';
 import { HubAccount, HubAccountMetadataPath, HubAccountWebCallbackPath } from '../src/hub_account.ts';
 import { Profiles } from '../src/profiles.ts';
 import { AbuseReports } from '../src/abuse.ts';
+import type { AtClient } from '../src/atproto.ts';
 import { OtherSysopDid, SysopDid, testConfig, testRegistry } from './helpers.ts';
 
 //  the AT step stood in for: "start" goes to a fake account host, and
@@ -116,17 +117,23 @@ before(async () => {
 
 beforeEach(() => start(false));
 
-async function start(space: boolean): Promise<void> {
+async function start(
+    space: boolean,
+    registration: Record<string, unknown> = {},
+    at: AtClient | null = null
+): Promise<void> {
     await stop();
     const config = makeConfig({
         database: ':memory:',
         site: { port, publicUrl: origin },
         space: { enabled: space },
+        //  registering at once; approval and account age have their own tests
+        registration: { approval: false, minAccountAgeDays: 0, ...registration },
     });
     registry = new Registry(':memory:', config.registration);
     signin = new FakeSignIn(registry.db, config);
     logs.length = 0;
-    server = createSite({ config, registry, signin: signin as SignInLike, log: line => logs.push(line) });
+    server = createSite({ config, registry, signin: signin as SignInLike, at, log: line => logs.push(line) });
     await new Promise<void>(r => server.listen(port, '127.0.0.1', r));
 }
 
@@ -709,6 +716,79 @@ describe('presence on the site', () => {
         const { token } = registry.add('coolbbs', SysopDid, null, {});
         assert.equal((await postReport(aliceOn(), token)).status, 404);
         assert.equal((await call('GET', '/space')).status, 404);
+    });
+});
+
+describe('registering with approval and an account age (H9)', () => {
+    //  accounts made on these dates, as the PLC directory would say
+    const made: Record<string, string | null> = {
+        [SysopDid]: '2025-01-01T00:00:00.000Z',
+        [OtherSysopDid]: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000).toISOString(),
+    };
+    const at = {
+        async accountCreated(did: string) {
+            if (!(did in made)) {
+                throw new Error('PLC directory unreachable');
+            }
+            return made[did] ?? null;
+        },
+    } as unknown as AtClient;
+
+    it('sends an application to the admin, which the sysop sees, and approving it lets them in', async () => {
+        await start(false, { approval: true, minAccountAgeDays: 30 }, at);
+        const cookie = await signedIn();
+        const form = await call('GET', '/bbs', { cookie });
+        assert.match(form.body, /Apply to register a BBS/);
+        assert.match(form.body, /at least 30 days old/);
+        const sent = await call('POST', '/bbs', {
+            cookie,
+            form: { rating: 'yes', name: 'coolbbs', note: 'Retro games' },
+        });
+        assert.equal(sent.status, 303);
+        assert.equal(registry.get('coolbbs'), null);
+        assert.equal(registry.application('coolbbs')?.note, 'Retro games');
+        const waiting = await call('GET', '/bbs', { cookie });
+        assert.match(waiting.body, /coolbbs<\/strong>[^<]*<\/td><td>waiting for the hub's admin/);
+
+        registry.approve('coolbbs');
+        const approved = await call('GET', '/bbs', { cookie });
+        assert.match(approved.body, /press <strong>New token<\/strong> to get its agent config/);
+        const token = await call('POST', '/bbs/rotate', { cookie, form: { name: 'coolbbs' } });
+        assert.match(token.body, /metadatas\.token = /);
+    });
+
+    it('shows why an application was turned down, and lets a sysop withdraw one', async () => {
+        await start(false, { approval: true, minAccountAgeDays: 0 }, at);
+        const cookie = await signedIn();
+        await call('POST', '/bbs', { cookie, form: { rating: 'yes', name: 'coolbbs' } });
+        registry.reject('coolbbs', 'Not a BBS');
+        assert.match((await call('GET', '/bbs', { cookie })).body, /not approved: Not a BBS/);
+        await call('POST', '/bbs', { cookie, form: { rating: 'yes', name: 'other' } });
+        assert.equal(
+            (await call('POST', '/bbs/withdraw', { cookie, form: { name: 'other' } })).location,
+            '/bbs'
+        );
+        assert.equal(registry.application('other'), null);
+    });
+
+    it('turns away accounts that are too new, or whose age it cannot check', async () => {
+        await start(false, { approval: false, minAccountAgeDays: 30 }, at);
+        const young = await signedIn({ did: OtherSysopDid, handle: 'other.example' });
+        const refused = await call('POST', '/bbs', { cookie: young, form: { rating: 'yes', name: 'young' } });
+        assert.equal(refused.status, 403);
+        assert.match(refused.body, /at least 30 days old\. Yours will be on \d{4}-\d\d-\d\d/);
+
+        const old = await signedIn();
+        assert.equal(
+            (await call('POST', '/bbs', { cookie: old, form: { rating: 'yes', name: 'old' } })).status,
+            200
+        );
+
+        delete made[SysopDid];
+        const unknown = await call('POST', '/bbs', { cookie: old, form: { rating: 'yes', name: 'again' } });
+        assert.equal(unknown.status, 403);
+        assert.match(unknown.body, /couldn&#39;t check how old|couldn't check how old/);
+        made[SysopDid] = '2025-01-01T00:00:00.000Z';
     });
 });
 

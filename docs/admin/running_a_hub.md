@@ -71,6 +71,34 @@ The token is printed once and only a hash is kept: send the output to the
 sysop privately, or to `/dev/null` if the config file is all they need. The
 sysop runs `frpc -c coolbbs-agent.toml` next to their BBS.
 
+### Approving new BBSes
+
+With `registration.open` on, two settings decide who gets in from the site:
+
+- **`registration.approval`** (on by default): registering sends an
+  application, with a note from the sysop about their BBS, and holds its
+  name. You decide:
+
+  ```sh
+  sudo hubctl applications          # those waiting, oldest first
+  sudo hubctl approve coolbbs
+  sudo hubctl reject coolbbs --reason "tell us more about it"
+  ```
+
+  An approved BBS is registered at once; its sysop gets the agent config from
+  their page on the site (**New token**). A rejected one shows the sysop
+  your reason for 30 days, and they may apply again. Applications count
+  toward the per-sysop limit, and sysops can withdraw their own.
+- **`registration.minAccountAgeDays`** (30 by default): a sysop's AT account
+  must be this old, from when the PLC directory first recorded its DID. A
+  `did:web` account records no such date: with approval on, it may still
+  apply (`applications` marks it), and without approval it can't register.
+  Set it to `0` for any age.
+
+These are what make a ban stick: someone banned can make a new account, but
+it has to wait out the age, and get past you. Approvals and rejections go in
+the moderation log.
+
 A BBS's own AT account, for its handle under the hub, is set with
 `hubctl set-did coolbbs did:plc:...` or by the sysop on the site. The steps
 are in [bbs_account.md](bbs_account.md).
@@ -175,8 +203,8 @@ as sysop or as a BBS's account. The DID stays on the ban list until you
 
 A ban stops an account, not a person: someone banned can make a new AT
 account and try again. While registration is by arrangement with the admin
-(`registration.open` is `false`), that's caught at the door; before opening
-it, the plan adds an approval queue and a minimum account age (H9).
+(`registration.open` is `false`), that's caught at the door; once it's open,
+approval and the minimum account age (above) are.
 
 ### Abuse reports
 

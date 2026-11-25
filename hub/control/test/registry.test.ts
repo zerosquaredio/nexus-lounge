@@ -124,6 +124,68 @@ describe('the registry', () => {
         assert.equal(registry.add('coolbbs', SysopDid).bbs.name, 'coolbbs');
     });
 
+    it('takes applications, and registers one when approved', () => {
+        let clock = new Date('2026-11-25T12:00:00Z');
+        const registry = testRegistry(() => clock);
+        const app = registry.apply(
+            'coolbbs',
+            SysopDid,
+            BbsDid,
+            { web: 9080 },
+            '  A board for\nretro games  '
+        );
+        assert.equal(app.status, 'pending');
+        assert.equal(app.note, 'A board for\nretro games');
+        assert.equal(registry.get('coolbbs'), null, 'not registered yet');
+        assert.throws(
+            () => registry.apply('coolbbs', OtherSysopDid),
+            { code: 'taken' },
+            'the name is spoken for'
+        );
+        assert.throws(() => registry.add('coolbbs', OtherSysopDid), { code: 'taken' });
+        assert.deepEqual(
+            registry.applications().map(a => a.name),
+            ['coolbbs']
+        );
+
+        const bbs = registry.approve('coolbbs');
+        assert.deepEqual(
+            [bbs.sysopDid, bbs.bbsDid, bbs.webPort, bbs.state],
+            [SysopDid, BbsDid, 9080, 'active']
+        );
+        assert.equal(registry.application('coolbbs'), null);
+        assert.throws(() => registry.approve('coolbbs'), { code: 'not-found' });
+
+        //  rejected: the sysop sees why for 30 days, and may apply again
+        registry.apply('second', SysopDid);
+        const no = registry.reject('second', 'Tell us more\nabout it');
+        assert.deepEqual([no.status, no.reason], ['rejected', 'Tell us more about it']);
+        assert.equal(registry.applications().length, 0);
+        assert.equal(registry.applications(true).length, 1);
+        assert.throws(() => registry.apply('second', OtherSysopDid), { code: 'taken' });
+        assert.equal(registry.apply('second', SysopDid).status, 'pending');
+        registry.reject('second');
+        clock = new Date('2026-12-26T12:00:00Z');
+        assert.equal(registry.applicationsFor(SysopDid).length, 0, 'forgotten after 30 days');
+
+        //  a sysop may withdraw only their own
+        registry.apply('third', SysopDid);
+        assert.equal(registry.withdraw('third', OtherSysopDid), false);
+        assert.equal(registry.withdraw('third', SysopDid), true);
+    });
+
+    it('counts applications toward the per-sysop limit, and refuses banned DIDs', () => {
+        const registry = testRegistry();
+        registry.add('one', SysopDid);
+        registry.apply('two', SysopDid);
+        registry.apply('three', SysopDid);
+        assert.throws(() => registry.apply('four', SysopDid), { code: 'limit' });
+        assert.equal(registry.approve('two').name, 'two', 'approving one counts it once');
+        registry.banDid(OtherSysopDid);
+        assert.throws(() => registry.apply('mine', OtherSysopDid), { code: 'banned' });
+        assert.throws(() => registry.apply('x', OtherSysopDid), { code: 'bad-name' });
+    });
+
     it('a BBS DID belongs to one BBS', () => {
         const registry = testRegistry();
         registry.add('coolbbs', SysopDid);
