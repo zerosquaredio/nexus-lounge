@@ -240,7 +240,7 @@ Set a limit that matches the hub's privacy notice, for example in
 
 ```ini
 [Journal]
-MaxRetentionSec=30day
+MaxRetentionSec=3month
 ```
 
 then `systemctl restart systemd-journald`. BBSes run in Docker on the hub's

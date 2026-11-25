@@ -503,7 +503,7 @@ it back after 28 s. 2 new tests for the public client.
 | Implements | Abuse reporting form and contact; suspend BBS and ban sysop DID; quotas and bandwidth limits; logging without content; metrics and alerting; database backups; terms of service and privacy notice (including the TLS-termination disclosure) |
 | Depends on | H3 |
 | Done when | Required before public launch: an abusive BBS can be suspended within minutes, logs contain no message content, and backups restore cleanly |
-| Status | **In progress.** Done: suspension cuts an open tunnel, and DIDs can be banned (2026-11-25); logs audited for content (2026-11-25); nightly backups to the dev VM and the NAS (2026-11-23, not yet restored into a running hub); a deploy script with rollback. To do: a log retention period (for the privacy notice), a restore test, quotas and bandwidth limits, alerting, the reporting form and contact, terms of service and privacy notice |
+| Status | **In progress.** Done: suspension cuts an open tunnel, and DIDs can be banned (2026-11-25); logs audited for content (2026-11-25); nightly backups to the dev VM and the NAS (2026-11-23, not yet restored into a running hub); a deploy script with rollback. Logs kept 3 months on the public hub (2026-11-25). To do: a restore test, usage trends, quotas and bandwidth limits, alerting, the reporting form and contact, terms of service and privacy notice |
 
 **Suspension and bans** (2026-11-25). frp only checks heartbeats when its
 connections aren't multiplexed, so a suspended BBS's open tunnel stayed up
@@ -527,7 +527,18 @@ logged with the parse error, which quotes the body and its token; it's now
 logged as "not JSON". frps now logs warnings only (two thirds of its log was
 the control plane's own polling, and the control plane logs every login and
 route). Tests check that tokens, the chat secret, what was said and what a
-report says never reach the logs. Retention is still the journal's default.
+report says never reach the logs. The public hub keeps its logs 3 months
+(`MaxRetentionSec=3month` for the journal), for looking into reports.
+
+**Usage trends** (to do, with metrics). Logs go after 3 months, so for the
+long view the hub keeps a separate summary, one row a day: BBSes registered,
+active and connected, hours each was connected, people signed in and in the
+common space, chat connections, reports and blocks, and bandwidth through
+each BBS's tunnel (frps counts traffic per proxy, `/api/traffic/NAME`).
+Totals only, never who: no DIDs, and BBSes by name only where the sysop
+agreed to it in the terms of service, so the summary can be kept for years
+and published if the hub wants. Alerts (a BBS gone, the hub down) come
+from the same checks.
 
 ### H9. Sysop admission requirements
 
