@@ -79,6 +79,7 @@ export function createControlServer(deps: ServerDeps): Server {
                 //  the content carries tokens: never logged
                 decision = decide(body.op, body.content, {
                     registry: deps.registry,
+                    bandwidthLimit: deps.config.tunnel.bandwidthLimit,
                     onEvent: event => {
                         if ('Ping' !== event.op || event.decision.reject) {
                             log(describe(event));

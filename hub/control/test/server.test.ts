@@ -70,6 +70,23 @@ describe('the control server', () => {
         assert.equal(result.reject, true);
     });
 
+    it("limits a proxy's bandwidth, and never sends its token back", async () => {
+        const answer = await hook({
+            op: 'NewProxy',
+            content: {
+                user: { user: 'coolbbs', metas: { token }, run_id: 'r' },
+                proxy_name: 'coolbbs.ws',
+                proxy_type: 'http',
+                subdomain: 'coolbbs',
+                locations: ['/ws'],
+            },
+        });
+        assert.equal(answer.reject, false);
+        assert.equal(answer.content.bandwidth_limit, '1MB');
+        assert.equal(answer.content.bandwidth_limit_mode, 'server');
+        assert.ok(!JSON.stringify(answer).includes(token));
+    });
+
     it('never logs a token, even from a request it could not read', async () => {
         await hook({ op: 'Login', content: { user: 'coolbbs', metas: { token } } });
         await hook({

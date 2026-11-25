@@ -79,3 +79,13 @@ const DidRe = /^did:(?:plc:[a-z2-7]{24}|web:[a-zA-Z0-9.%:-]{1,253})$/;
 export function isDid(value: string): boolean {
     return DidRe.test(value);
 }
+
+//  A bandwidth in frp's terms, as bytes a second; null if it isn't one
+export function bandwidthBytes(value: unknown): number | null {
+    const m = 'string' === typeof value ? /^\s*(\d+(?:\.\d+)?)(KB|MB)\s*$/.exec(value) : null;
+    if (!m) {
+        return null;
+    }
+    const bytes = Math.floor(Number(m[1]) * ('MB' === m[2] ? 1024 * 1024 : 1024));
+    return bytes > 0 ? bytes : null;
+}

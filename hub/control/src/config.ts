@@ -1,7 +1,7 @@
 //  The hub's configuration: a JSON file, merged over these defaults
 
 import { readFileSync } from 'node:fs';
-import { DefaultReservedNames } from './rules.ts';
+import { bandwidthBytes, DefaultReservedNames } from './rules.ts';
 import { HubError } from './errors.ts';
 
 export interface HubConfig {
@@ -29,6 +29,10 @@ export interface HubConfig {
         //  refuses for a suspended BBS or an old token; frps closes a tunnel
         //  with none accepted for three times this, open sessions and all
         heartbeatSeconds: number;
+        //  each BBS proxy's bandwidth (its web, and its WebSocket), in and
+        //  out together, enforced by frps: "1MB" or "500KB" a second; "" for
+        //  none
+        bandwidthLimit: string;
     };
     //  the hub's own AT account, which publishes observed status
     hubAccount: {
@@ -155,6 +159,7 @@ export const Defaults: HubConfig = {
         vhostHttpPort: 7080,
         adminPort: 7400,
         heartbeatSeconds: 20,
+        bandwidthLimit: '1MB',
     },
     hubAccount: { callbackPort: 7220 },
     observedStatus: { enabled: true, settleSeconds: 20, intervalSeconds: 15 },
@@ -294,6 +299,12 @@ export function makeConfig(overrides: Partial<Record<keyof HubConfig, unknown>> 
     const heartbeat = config.tunnel.heartbeatSeconds;
     if (!Number.isInteger(heartbeat) || heartbeat < 1 || heartbeat > 600) {
         throw new HubError('config', 'tunnel.heartbeatSeconds is a whole number of seconds, 1 to 600');
+    }
+    if ('' !== config.tunnel.bandwidthLimit && null === bandwidthBytes(config.tunnel.bandwidthLimit)) {
+        throw new HubError(
+            'config',
+            'tunnel.bandwidthLimit is like "1MB" or "500KB" (a second), or "" for none'
+        );
     }
     const { settleSeconds, intervalSeconds } = config.observedStatus;
     if (!(settleSeconds >= 0) || !(intervalSeconds >= 1)) {

@@ -4,12 +4,17 @@
 //  reached frps refuses too (spike H0.2), so it fails closed.
 //
 //  Request:  { "version": "0.1.0", "op": "Login" | "NewProxy" | ..., "content": {...} }
-//  Response: { "reject": false, "unchange": true } or { "reject": true, "reject_reason": "..." }
+//  Response: { "reject": false, "unchange": true } or { "reject": true, "reject_reason": "..." },
+//  or for a proxy, { "reject": false, "unchange": false, "content": {...} }: the
+//  proxy as the hub allows it, with the hub's bandwidth limit
 
 import type { Registry } from './registry.ts';
-import { AllowedLocations } from './rules.ts';
+import { AllowedLocations, bandwidthBytes } from './rules.ts';
 
-export type Decision = { reject: false; unchange: true } | { reject: true; reject_reason: string };
+export type Decision =
+    | { reject: false; unchange: true }
+    | { reject: false; unchange: false; content: Record<string, unknown> }
+    | { reject: true; reject_reason: string };
 
 export const Allow: Decision = { reject: false, unchange: true };
 
@@ -66,6 +71,9 @@ export interface HookEvent {
 
 export interface HookDeps {
     registry: Registry;
+    //  each proxy's limit, in frp's terms ("1MB" or "500KB" a second, in
+    //  and out together), enforced by frps; empty for none
+    bandwidthLimit?: string;
     onEvent?: (event: HookEvent) => void;
 }
 
@@ -93,7 +101,7 @@ export function decide(op: unknown, rawContent: unknown, deps: HookDeps): Decisi
             proxy = 'string' === typeof content.proxy_name ? content.proxy_name : undefined;
             const registered = deps.registry.authenticate(user.user, obj(user.metas).token);
             decision = registered
-                ? checkProxy(content, registered.name)
+                ? limited(checkProxy(content, registered.name), content, deps.bandwidthLimit)
                 : refuse('Unknown BBS, wrong token, or suspended');
             if (!decision.reject && registered && proxy) {
                 deps.registry.proxyOpened(
@@ -131,6 +139,27 @@ export function decide(op: unknown, rawContent: unknown, deps: HookDeps): Decisi
 
     deps.onEvent?.({ op: String(op), bbs, proxy, decision });
     return decision;
+}
+
+//  An allowed proxy, with the hub's limit enforced by frps itself: the
+//  agent may ask for less, never more. The agent's login (and token) isn't
+//  sent back; frps only reads the proxy.
+function limited(decision: Decision, content: Content, limit: string | undefined): Decision {
+    const hub = bandwidthBytes(limit);
+    if (decision.reject || null === hub) {
+        return decision;
+    }
+    const asked = 'server' === content.bandwidth_limit_mode ? bandwidthBytes(content.bandwidth_limit) : null;
+    const { user: _login, ...proxy } = content;
+    return {
+        reject: false,
+        unchange: false,
+        content: {
+            ...proxy,
+            bandwidth_limit: null !== asked && asked < hub ? content.bandwidth_limit : limit,
+            bandwidth_limit_mode: 'server',
+        },
+    };
 }
 
 function checkProxy(content: Content, name: string): Decision {

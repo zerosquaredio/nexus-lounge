@@ -50,6 +50,15 @@ describe('generated configs', () => {
         assert.throws(() => makeConfig({ tunnel: { heartbeatSeconds: 0 } }), /heartbeatSeconds/);
     });
 
+    it("takes a bandwidth limit in frp's terms, or none", () => {
+        assert.equal(makeConfig({}).tunnel.bandwidthLimit, '1MB');
+        assert.equal(makeConfig({ tunnel: { bandwidthLimit: '' } }).tunnel.bandwidthLimit, '');
+        assert.equal(makeConfig({ tunnel: { bandwidthLimit: '750KB' } }).tunnel.bandwidthLimit, '750KB');
+        for (const bad of ['1GB', '1 mb', 'lots', '0MB']) {
+            assert.throws(() => makeConfig({ tunnel: { bandwidthLimit: bad } }), /bandwidthLimit/, bad);
+        }
+    });
+
     it('opens the admin API on this machine only, its password from the environment', () => {
         const text = frpsConfig(config);
         assert.match(text, /^webServer\.addr = "127\.0\.0\.1"$/m);

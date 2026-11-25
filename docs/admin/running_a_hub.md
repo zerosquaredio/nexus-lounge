@@ -106,6 +106,19 @@ transport.heartbeatTimeout = 60
 
 (The numbers follow `tunnel.heartbeatSeconds` in the hub's config.)
 
+### Limits
+
+Each BBS's traffic is capped by the tunnel server, which the BBS can't get
+around: `tunnel.bandwidthLimit` in the hub's config, `1MB` a second by
+default (in and out together), for its web pages and again for its terminal
+connections. A BBS may ask for less in its agent's config, never more. Set
+it to `""` for no limit; a change applies as each BBS's tunnel next
+connects (restart frps to apply it to all at once).
+
+Other limits in the config: how many BBSes one sysop may register
+(`registration.maxBbsPerSysop`, 3), and how many chat connections one
+person may have open (`space.chat.maxConnections`).
+
 ### Tokens
 
 ```sh

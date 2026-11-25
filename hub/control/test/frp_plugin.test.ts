@@ -119,6 +119,35 @@ describe('the tunnel approval hook', () => {
             );
         });
 
+        it("gives every proxy the hub's bandwidth limit, enforced by frps; an agent may ask for less", () => {
+            const limited = (content: Record<string, unknown>) => {
+                const d = decide('NewProxy', content, { registry, bandwidthLimit: '1MB' });
+                assert.equal(d.reject, false);
+                assert.equal((d as { unchange: boolean }).unchange, false);
+                return (d as { content: Record<string, unknown> }).content;
+            };
+            const proxy = limited(honest());
+            assert.equal(proxy.bandwidth_limit, '1MB');
+            assert.equal(proxy.bandwidth_limit_mode, 'server');
+            assert.equal(proxy.subdomain, 'coolbbs');
+            assert.deepEqual(proxy.locations, honest().locations);
+            assert.equal(proxy.user, undefined, 'its login and token are not sent back');
+
+            const asks = (limit: string, mode = 'server') =>
+                limited(honest({ bandwidth_limit: limit, bandwidth_limit_mode: mode })).bandwidth_limit;
+            assert.equal(asks('500KB'), '500KB');
+            assert.equal(asks('5MB'), '1MB');
+            assert.equal(asks('500KB', 'client'), '1MB', 'its own limit is its own business');
+            assert.equal(asks('lots'), '1MB');
+
+            refused(
+                decide('NewProxy', honest({ subdomain: 'other' }), { registry, bandwidthLimit: '1MB' }),
+                /Subdomain/
+            );
+            const unlimited = decide('NewProxy', honest(), { registry, bandwidthLimit: '' });
+            assert.deepEqual(unlimited, { reject: false, unchange: true }, 'no limit: unchanged');
+        });
+
         it('checks the token again: rotation and suspension stop new proxies at once', () => {
             registry.rotateToken('coolbbs');
             refused(run('NewProxy', honest()), /wrong token/);

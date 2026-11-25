@@ -161,6 +161,11 @@ that sends none (a config made before heartbeats, or a dishonest agent) is
 cut too, so older agent configs need the two `transport.heartbeat` lines
 from `agent-config`.
 
+**Bandwidth.** The approval hook gives each BBS proxy the hub's limit,
+`tunnel.bandwidthLimit` (`1MB` a second by default, in and out together;
+`""` for none), enforced by frps itself (`bandwidth_limit_mode = "server"`),
+so an agent can ask for less but not more.
+
 **Banning a DID** (`ban DID --reason TEXT`) suspends every BBS it runs, or
 whose own account it is, and refuses it registering another, as sysop or as
 a BBS's account. `unban` lifts it; its BBSes stay suspended until each is
