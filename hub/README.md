@@ -170,6 +170,33 @@ servers. For the BBS's listing to appear under its name in the directory,
 give the BBS's own Bluesky account on the hub's site; the listing then
 names the hub address by itself.
 
+## Deploying
+
+`scripts/deploy.sh` (at the repo's root) updates a hub server from a
+checkout, over SSH, as a user with sudo:
+
+```sh
+export HUB_SSH=admin@hub.example
+scripts/deploy.sh hub            # deploy hub/control at HEAD (or a REF)
+scripts/deploy.sh rollback       # put the code from before back
+scripts/deploy.sh configs        # regenerate frps.toml and the Caddyfile
+scripts/deploy.sh status         # services, revision, BBSes
+```
+
+It expects the layout of the public hub: the code in `/srv/hub/control`
+(with `REVISION` naming the commit), run by the `hub` user as the
+`hub-control` unit, Node in `/opt/node/bin`, and the admin CLI wrapped as
+`hubctl`. Settings change each of these (see the script's header). A deploy
+installs the new code beside the running one, swaps it in and restarts; if
+the control plane doesn't answer `/healthz` within 30 seconds, the old code
+goes back. `configs` restarts frps or Caddy only if its config changed;
+restarting frps drops every tunnel for a few seconds.
+
+For a hub's own test boards in Docker, `board-image` builds an ENiGMA½ image
+on the server from a checkout of the fork (`FORK=...`), and `board NAME TAG`
+replaces a board's container with one from that image, keeping its ports,
+volumes, memory cap and restart policy.
+
 ## End-to-end test
 
 `test/e2e.sh` runs the whole hub on one machine in front of a real ENiGMA½
