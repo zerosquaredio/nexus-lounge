@@ -47,6 +47,7 @@ in `user/`.
 | [enigma_integration.md](development/enigma_integration.md) | How the specs map onto ENiGMA½: login type, routes, groups as attestations, transport, upstream strategy |
 | [attestation.md](development/attestation.md) | User authentication (AT OAuth), credential binding, attestations, access policies, verifier plugins |
 | [publishing.md](development/publishing.md) | The BBS's own AT account and public records: listing, events, status, announcements |
+| [assets.md](development/assets.md) | Art and models from leaves, their members and users: records, publishing, the hub's checks and cache, permissions and remixing, identity and impersonation |
 | [transport.md](development/transport.md) | HTTPS/WebSocket transport, tunnels and reachability, optional SSH, P2P backlog |
 | [networking.md](development/networking.md) | BBS-to-BBS peering: shared boards, files, and games; clusters of BBSes acting as one |
 | [overte_evaluation.md](development/overte_evaluation.md) | The 3D and VR choice: Overte worlds, a browser client from Vircadia's web SDK, and how identity and networking would fit |

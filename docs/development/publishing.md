@@ -66,6 +66,7 @@ One record per BBS (record key `self`), in the BBS's repo.
 | `admission` | object | `policy`: open list of values (`open`, `invite`, `invite-code`, `sysop-approval`, `verified`, …; the verifier ids ENiGMA½ uses) a directory can filter on; `howToJoin`: plain-text explanation |
 | `hours` | object | Optional; when a part-time BBS is usually up ([hub.md](hub.md) §6): `timezone` (IANA, e.g. `America/Los_Angeles`), `weekly`: `{ days, from, to }[]` (days `mon`…`sun`, times `HH:MM`), and `note`, plain text such as "most evenings". Absent: meant to be always up |
 | `banner` | ANSI art (§3.7) | Optional |
+| `emblem` | strongRef | Optional; the asset that represents the BBS in the common space, such as its logo ([assets.md](assets.md) §4.3) |
 | `sysop` | DID | Optional; the sysop's personal DID, if they choose to disclose it |
 | `createdAt` | datetime | |
 
