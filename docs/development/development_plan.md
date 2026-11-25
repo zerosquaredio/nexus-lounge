@@ -683,7 +683,7 @@ in.
 
 | | |
 |---|---|
-| Implements | The BBS's side of the [assets spec](assets.md) (§4.3): an `assets` section in its config (each piece's files, description, rating, licence, permissions and credit); its ANSI art published from the BBS's own AT account as blobs and asset records, the way it publishes its listing (F9); the listing's `emblem`, pointing to the asset that stands for the BBS (its logo); large files served under `/assets/<sha256>`; and an `oputil` command to publish an art pack at once. Baking (cleaning the art, drawing its pictures) is the hub's baker for now (hub H20); later the BBS bakes its own |
+| Implements | The BBS's side of the [assets spec](assets.md) (§4.3): an `assets` section in its config (each piece's files, description, rating, licence, permissions and credit); its ANSI art published from the BBS's own AT account as blobs and asset records, the way it publishes its listing (F9); the listing's `emblem`, pointing to the asset that stands for the BBS (its logo); its own **view** (assets spec §3.6: colours, fonts, how art is drawn), which the hub's menu then offers; large files served under `/assets/<sha256>`; and an `oputil` command to publish an art pack at once. Baking (cleaning the art, drawing its pictures) is the hub's baker for now (hub H20); later the BBS bakes its own |
 | Track | **Fork-only** (hub integration) |
 | Config | `atProto.publishing.assets` (to be drafted): the pieces, and which is the emblem |
 | Depends on | F9 (the BBS's AT account); hub H20 |

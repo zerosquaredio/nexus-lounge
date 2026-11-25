@@ -158,6 +158,49 @@ for credit and for tracing faults, never to decide whether it is accepted.
   a sprite sheet, a lighter model), which is showing it, not remixing it
   (§7.1). A leaf never has to re-bake for a hub.
 
+### 3.6 Views: `nexus.cyberspace.asset.view`
+
+A **view** is how a person sees the hub: its pages' colours and fonts, and
+how art and objects are drawn (pictures, ANSI or text: world.md's levels, on
+a web page). Views are assets: a leaf publishes its own, the hub has some
+of its own, and each person picks one from a menu listing them all, each
+credited ("CoolBBS's view"). With several leaves connected, their views are
+all there to choose from.
+
+**A view is data, not CSS.** A leaf's stylesheet on the hub's pages could
+cover or fake controls on pages that handle sign-in and tokens, signal
+what's on a page through clever selectors, or make pages unreadable. So a
+view carries values, and the hub builds the CSS from them:
+
+| Field | Type | Notes |
+|---|---|---|
+| `name` | string | Shown in the menu |
+| `colours` | object | Values for the slots the hub's pages are built on: `bg`, `fg`, `dim`, `line`, `accent`, `warn`, each `#rrggbb`. Absent: the hub's own, light or dark as the device prefers |
+| `fonts` | object | `body` and `heading`: each a font asset (a WOFF file, checked and licensed like any asset), or one the hub has |
+| `art` | string | How art is drawn unless the person chooses otherwise: `pictures`, `ansi` or `text` |
+| `ansi` | string[16] | Optional colours for ANSI art drawn as characters, in ANSI order. Art is recoloured as it's drawn, in each viewer's browser, and never copied, so this is showing art, not remixing it (§7.1) |
+| `frame` | strongRef | Optional ANSI art for the page's header, later |
+| `credit`, `licence`, `rating` | | As for any asset (§3.1) |
+
+The hub's rules for views:
+
+- **Contrast:** text colours (`fg`, `dim`, `accent`, `warn`) must reach
+  WCAG's contrast ratio of 4.5 against `bg`. A view that doesn't is refused.
+- **Plain where it matters:** pages where people sign in, see tokens or
+  report abuse keep the hub's own look under any view, so nothing on them
+  can be mistaken.
+- **The viewer has the last say:** a person's own settings (high contrast,
+  larger text, the plain hub look) win over any view (world.md §8's
+  cascade).
+- **Where a view applies:** the one a person chooses applies everywhere on
+  the hub. Later a leaf's own pages on the hub (its directory entry, its
+  zone of the space) may show in the leaf's view by default.
+
+The hub's first views are its own: **Hub** (its usual look), **BBS**
+(black, the IBM VGA font, ANSI art) and **Pink and white** (recolouring
+ANSI art as it's drawn), chosen from a menu in every page's header and kept
+in a cookie, so they work on pages without scripts (hub plan H20).
+
 ## 4. Publishing
 
 ### 4.1 Where files go
@@ -498,5 +541,7 @@ the chat.*
 - How long the hub keeps first-seen records, given the 3-month log rule
   (they hold hashes and DIDs, not activity).
 - How at3d.app's avatar records, if they settle, map onto §3.
+- A person's choice of view kept with their hub profile, so it follows
+  them between devices, rather than in a cookie.
 - When a hub makes derived versions itself (§3.5): always, or only for
   forms it serves that the publisher didn't make; and how it keeps them.

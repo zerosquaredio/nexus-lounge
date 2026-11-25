@@ -180,7 +180,11 @@ export const ChatScript = String.raw`(function () {
     //  How each person sees it, their own choice, remembered in this browser:
     //  pictures, ANSI drawn as characters, or text. Each is made from one of
     //  the versions the baker makes; nobody else is affected.
-    var CP437 = __CP437__, ViewKey = 'hub.chat.artView', view = 'pictures';
+    //  the page's view (views.ts) says how art is drawn unless they chose
+    //  otherwise, which is remembered for each view
+    var page = document.documentElement.dataset;
+    var CP437 = __CP437__, ViewKey = 'hub.chat.artView.' + (page.view || 'hub');
+    var view = /^(pictures|ansi|text)$/.test(page.art || '') ? page.art : 'pictures';
     var viewSelect = byId('chat-view'), viewWrap = byId('chat-view-wrap'), fetched = {};
     try {
         var saved = localStorage.getItem(ViewKey);

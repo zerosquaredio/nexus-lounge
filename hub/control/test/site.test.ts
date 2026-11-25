@@ -16,6 +16,7 @@ import { AbuseReports } from '../src/abuse.ts';
 import type { AtClient } from '../src/atproto.ts';
 import { AssetLibrary } from '../src/assets.ts';
 import { bake } from '../src/bake.ts';
+import { viewProblems, Views } from '../src/views.ts';
 import { OtherSysopDid, SysopDid, testConfig, testFont, testRegistry } from './helpers.ts';
 
 //  the AT step stood in for: "start" goes to a fake account host, and
@@ -868,9 +869,53 @@ describe('the art the hub offers (assets, a first slice)', () => {
 
     it('has none of it when the hub offers no art', async () => {
         await start(false);
-        assert.equal((await call('GET', '/fonts/vga-8x16.woff')).status, 404);
         assert.equal((await call('GET', '/art')).status, 404);
         assert.equal((await call('GET', '/art.json')).status, 404);
+    });
+});
+
+describe('views (how a person sees the hub)', () => {
+    it("the hub's own views can all be read", () => {
+        for (const view of Views) {
+            assert.deepEqual(viewProblems(view), [], view.id);
+        }
+        assert.match(
+            viewProblems({ ...Views[1]!, colours: { ...Views[1]!.colours!, dim: '#222222' } }).join(),
+            /dim on the background has a contrast of 1\.\d, under 4\.5/
+        );
+    });
+
+    it('sets a view for every page, from a menu that works without scripts', async () => {
+        await start(false);
+        const home = await call('GET', '/');
+        assert.match(home.body, /<form class="inline view-pick" method="post" action="\/view">/);
+        assert.match(home.body, /<html lang="en" data-view="hub" data-art="pictures">/);
+        const chose = await call('POST', '/view', { form: { view: 'pink', back: '/terms' } });
+        assert.equal(chose.status, 303);
+        assert.equal(chose.location, '/terms');
+        assert.match(chose.headers['set-cookie']?.[0] ?? '', /^hub_view=pink; Path=\/; SameSite=Lax/);
+        const pink = await call('GET', '/', { cookie: 'hub_view=pink' });
+        assert.match(pink.body, /data-view="pink" data-art="ansi"/);
+        assert.match(pink.body, /--bg: #fff5f9;/);
+        assert.match(pink.body, /<option value="pink" selected>/);
+        assert.match(pink.headers['content-security-policy'] as string, /font-src 'self'/);
+        const font = await call('GET', '/fonts/vga-8x16.woff');
+        assert.equal(font.status, 200, 'the font views use is there without art');
+    });
+
+    it('keeps the plain hub look where people sign in or see tokens, and goes back only to this hub', async () => {
+        await start(false);
+        const signin = await call('GET', '/signin', { cookie: 'hub_view=bbs' });
+        assert.doesNotMatch(signin.body, /data-view=|<form class="inline view-pick"|--bg: #000000/);
+        const cookie = await signedIn();
+        const bbs = await call('GET', '/bbs', { cookie: `${cookie}; hub_view=bbs` });
+        assert.doesNotMatch(bbs.body, /data-view=|<form class="inline view-pick"/);
+        for (const back of ['//evil.example/', 'https://evil.example/', '/\\evil.example']) {
+            const away = await call('POST', '/view', { form: { view: 'bbs', back } });
+            assert.equal(away.location, '/', back);
+        }
+        const unknown = await call('POST', '/view', { form: { view: 'nope', back: '/' } });
+        assert.equal(unknown.headers['set-cookie'], undefined);
     });
 });
 

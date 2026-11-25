@@ -34,6 +34,7 @@
 //  GET  /art              the art the hub offers (assets.ts), and /art.json for the chat
 //  GET  /assets/<sha256>  one of its files, named by its hash
 //  GET  /fonts/vga-8x16.woff  the IBM VGA font, for art drawn as characters
+//  POST /view             choose a view: the hub's colours, fonts and how art is drawn
 //  GET  /bbs              your BBSes, and registering a new one
 //  POST /bbs              register a BBS: shows its token and agent config, once
 //  POST /bbs/rotate       a new token and agent config
@@ -61,6 +62,7 @@ import type { HubConfig } from './config.ts';
 import { HubError } from './errors.ts';
 import { AbuseKinds, AbuseReports, MaxContact, MaxDetails } from './abuse.ts';
 import { artJson, ArtJsonPath, artPageBody, ArtPath } from './art_page.ts';
+import { viewById, viewCss, ViewCookie, ViewPath, viewPicker, Views } from './views.ts';
 import type { AssetLibrary } from './assets.ts';
 import { agentConfig } from './generate.ts';
 import { esc, page } from './html.ts';
@@ -271,10 +273,37 @@ export function createSite(deps: SiteDeps): Site {
             'Referrer-Policy': 'same-origin',
             //  forms post here, and sign-in then redirects to the account host
             'Content-Security-Policy':
-                "default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; form-action 'self' https:; frame-ancestors 'none'; base-uri 'none'",
+                "default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; font-src 'self'; form-action 'self' https:; frame-ancestors 'none'; base-uri 'none'",
             ...headers,
         });
-        res.end(html);
+        res.end(withView(res, html));
+    }
+
+    //  The viewer's view (views.ts), on every page the hub makes, but for
+    //  pages where people sign in, see tokens or report abuse: those keep
+    //  the hub's own look whatever the view, so nothing on them can be
+    //  mistaken
+    function withView(res: ServerResponse, html: string): string {
+        if (!html.includes('<!--hub:view-pick-->')) {
+            return html;
+        }
+        const req = res.req;
+        const path = new URL(req?.url ?? '/', 'http://hub').pathname;
+        const plain =
+            '/signin' === path ||
+            path.startsWith('/oauth') ||
+            '/bbs' === path ||
+            path.startsWith('/bbs/') ||
+            '/report' === path;
+        if (plain) {
+            return html.replace('<!--hub:view-pick-->', '');
+        }
+        const view = viewById(req ? cookies(req)[ViewCookie] : undefined);
+        const back = 'GET' === req?.method ? path : '/';
+        return html
+            .replace('<html lang="en">', `<html lang="en" data-view="${view.id}" data-art="${view.art}">`)
+            .replace('</head>', `<style>${viewCss(view)}</style>\n</head>`)
+            .replace('<!--hub:view-pick-->', viewPicker(view, back));
     }
 
     function redirect(res: ServerResponse, location: string, headers: Record<string, string> = {}): void {
@@ -1382,6 +1411,21 @@ ${footer()}`,
                 return chatToken(res, who);
             }
 
+            if (ViewPath === path) {
+                const view = Views.find(v => v.id === form.get('view'));
+                const back = form.get('back') ?? '/';
+                //  back to the page it came from, on this hub only
+                const to = /^\/(?![/\\])/.test(back) ? back : '/';
+                if (!view) {
+                    return redirect(res, to);
+                }
+                return redirect(res, to, {
+                    'Set-Cookie': `${ViewCookie}=${view.id}; Path=/; SameSite=Lax; Max-Age=${365 * 24 * 60 * 60}${
+                        secure ? '; Secure' : ''
+                    }`,
+                });
+            }
+
             if (moderation && ('/space/mute' === path || '/space/report' === path)) {
                 if (!who) {
                     return json(res, 401, { error: 'Sign in first.' });
@@ -1657,7 +1701,7 @@ ${footer()}`,
             return json(res, 200, artJson(art));
         }
 
-        if (art && VgaFontPath === path && VgaFont) {
+        if (VgaFontPath === path && VgaFont) {
             res.writeHead(200, {
                 'Content-Type': 'font/woff',
                 'Content-Length': String(VgaFont.length),

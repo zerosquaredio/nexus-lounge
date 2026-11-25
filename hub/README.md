@@ -152,6 +152,16 @@ and `/art NAME` to the chat, and serves the IBM VGA web font for it
 (**Art as**: pictures, ANSI drawn as characters, or text), remembered in
 their browser.
 
+### Views
+
+Every page has a **View** menu in its header (`src/views.ts`, [assets
+spec](../docs/development/assets.md) §3.6): Hub, BBS (black, the VGA font,
+ANSI art) and Pink and white. A view is data, colours for the pages' slots,
+fonts, how art is drawn and ANSI colours, from which the hub builds the
+CSS; its text must pass WCAG's contrast ratio (a test checks the hub's own).
+Sign-in, token and report pages keep the hub's own look under any view. The
+choice is kept in a `hub_view` cookie.
+
 ### Observed status
 
 The hub publishes whether each BBS's tunnel is up, from its own AT account,

@@ -36,6 +36,10 @@ article p { margin: .3rem 0; }
 .tags span { display: inline-block; border: 1px solid var(--line); border-radius: 3px; padding: 0 .4rem; font-size: .85rem; }
 .pre { white-space: pre-wrap; }
 header { display: flex; justify-content: space-between; align-items: baseline; gap: 1rem; flex-wrap: wrap; }
+form.view-pick label { display: inline; margin: 0; }
+form.view-pick select { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; }
+form.view-pick button { margin: 0; padding: .1rem .5rem; font-size: .9rem; }
+header .who { display: flex; gap: .8rem; align-items: baseline; flex-wrap: wrap; }
 `;
 
 export function page(title: string, body: string, signedIn?: { handle: string | null; did: string }): string {
@@ -53,7 +57,7 @@ export function page(title: string, body: string, signedIn?: { handle: string | 
 <style>${Style}</style>
 </head>
 <body><main>
-<header><h1>${esc(title)}</h1>${who}</header>
+<header><h1>${esc(title)}</h1><div class="who"><!--hub:view-pick-->${who}</div></header>
 ${body}
 </main></body>
 </html>
