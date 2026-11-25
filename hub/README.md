@@ -126,6 +126,31 @@ Moderation (H18): the admin blocks people from the space or its room with
 themselves, from the map or chat page, or `/mute` in a BBS's door. See
 `node src/cli.ts help`.
 
+### Art (proof of concept)
+
+The hub can offer ANSI art (hub plan H20, [assets spec](../docs/development/assets.md)).
+Bake it first, with the web terminal's VGA font (`fonts/pc/cp437-8x16.psf`
+in enig-term's release):
+
+```sh
+npm run bake -- --out ./art --font cp437-8x16.psf --author "Artist" --group "Group" \
+    --licence custom --licence-text "Ask the artist" some/*.ANS
+```
+
+Each file comes out cleaned (nothing but characters, colours and line
+ends), drawn as PNGs at full and half size, and as text, every file named
+by its hash, with `art/library.json` holding their records. Credit comes
+from each file's SAUCE, or the options when SAUCE names nobody; bake packs
+by different artists in separate runs into the same directory. `--mci`
+blanks ENiGMA½'s menu codes in its theme screens.
+
+Then set `assets.library` to that directory. The hub checks every file
+again as it starts (leaving out, and logging, anything that fails), serves
+them at `/assets/<sha256>`, shows them at `/art`, and adds an **Art** button
+and `/art NAME` to the chat. Each person picks how they see art in the chat
+(**Art as**: pictures, ANSI drawn as characters, or text), remembered in
+their browser.
+
 ### Observed status
 
 The hub publishes whether each BBS's tunnel is up, from its own AT account,

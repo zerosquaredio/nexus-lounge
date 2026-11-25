@@ -14,7 +14,9 @@ import { HubAccount, HubAccountMetadataPath, HubAccountWebCallbackPath } from '.
 import { Profiles } from '../src/profiles.ts';
 import { AbuseReports } from '../src/abuse.ts';
 import type { AtClient } from '../src/atproto.ts';
-import { OtherSysopDid, SysopDid, testConfig, testRegistry } from './helpers.ts';
+import { AssetLibrary } from '../src/assets.ts';
+import { bake } from '../src/bake.ts';
+import { OtherSysopDid, SysopDid, testConfig, testFont, testRegistry } from './helpers.ts';
 
 //  the AT step stood in for: "start" goes to a fake account host, and
 //  "finish" reports whoever the test says signed in
@@ -120,7 +122,8 @@ beforeEach(() => start(false));
 async function start(
     space: boolean,
     registration: Record<string, unknown> = {},
-    at: AtClient | null = null
+    at: AtClient | null = null,
+    art: AssetLibrary | null = null
 ): Promise<void> {
     await stop();
     const config = makeConfig({
@@ -133,7 +136,14 @@ async function start(
     registry = new Registry(':memory:', config.registration);
     signin = new FakeSignIn(registry.db, config);
     logs.length = 0;
-    server = createSite({ config, registry, signin: signin as SignInLike, at, log: line => logs.push(line) });
+    server = createSite({
+        config,
+        registry,
+        signin: signin as SignInLike,
+        at,
+        art,
+        log: line => logs.push(line),
+    });
     await new Promise<void>(r => server.listen(port, '127.0.0.1', r));
 }
 
@@ -789,6 +799,69 @@ describe('registering with approval and an account age (H9)', () => {
         assert.equal(unknown.status, 403);
         assert.match(unknown.body, /couldn&#39;t check how old|couldn't check how old/);
         made[SysopDid] = '2025-01-01T00:00:00.000Z';
+    });
+});
+
+describe('the art the hub offers (assets, a first slice)', () => {
+    function library(): AssetLibrary {
+        const dir = mkdtempSync(join(tmpdir(), 'hub-art-'));
+        try {
+            writeFileSync(join(dir, 'skull.ans'), Buffer.from('\x1b[1;32m\xdb\xdb SKULL', 'latin1'));
+            bake(
+                [join(dir, 'skull.ans')],
+                join(dir, 'lib'),
+                {
+                    font: testFont(dir),
+                    mci: false,
+                    licence: { id: 'custom', text: 'Ask the artist' },
+                    rating: 'general',
+                    themes: [],
+                    author: 'Ana',
+                    group: 'ACiD',
+                    note: '',
+                },
+                { name: 'Test art', description: 'Art for tests.' }
+            );
+            return AssetLibrary.load(join(dir, 'lib'));
+        } finally {
+            rmSync(dir, { recursive: true, force: true });
+        }
+    }
+
+    it('shows a gallery and its list to anyone, with credit and licence', async () => {
+        const art = library();
+        await start(false, {}, null, art);
+        const page = await call('GET', '/art');
+        assert.equal(page.status, 200);
+        assert.match(page.body, /<h3>skull<\/h3>/);
+        assert.match(page.body, /By Ana of ACiD/);
+        assert.match(page.body, /Licence: Ask the artist/);
+        assert.match(page.body, /<img src="\/assets\/[0-9a-f]{64}"/);
+        const list = JSON.parse((await call('GET', '/art.json')).body);
+        assert.equal(list.items.length, 1);
+        assert.equal(list.items[0].credit, 'Ana of ACiD');
+        assert.equal(list.items[0].id, art.items[0]!.id);
+    });
+
+    it('serves its files by hash, kept for good and never run as a page', async () => {
+        const art = library();
+        await start(false, {}, null, art);
+        const item = art.items[0]!;
+        const png = await call('GET', item.thumb.url);
+        assert.equal(png.status, 200);
+        assert.equal(png.headers['content-type'], 'image/png');
+        assert.equal(png.headers['cache-control'], 'public, max-age=31536000, immutable');
+        assert.equal(png.headers['content-security-policy'], "default-src 'none'; sandbox");
+        assert.equal(png.headers['x-content-type-options'], 'nosniff');
+        assert.equal((await call('GET', item.ansi)).headers['content-type'], 'text/x-ansi');
+        assert.equal((await call('GET', `/assets/${'0'.repeat(64)}`)).status, 404);
+        assert.equal((await call('GET', '/assets/../library.json')).status, 404);
+    });
+
+    it('has none of it when the hub offers no art', async () => {
+        await start(false);
+        assert.equal((await call('GET', '/art')).status, 404);
+        assert.equal((await call('GET', '/art.json')).status, 404);
     });
 });
 

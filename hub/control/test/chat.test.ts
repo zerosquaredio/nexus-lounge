@@ -4,7 +4,7 @@ import { createServer as createHttp, request, type Server } from 'node:http';
 import { createServer as createTcp, connect, type AddressInfo, type Server as TcpServer, type Socket } from 'node:net';
 import { Chat, chatHandle, chatNick, ClientFrames, MinChatSecret, parseIrc, signBroker } from '../src/chat.ts';
 import { Moderation } from '../src/moderation.ts';
-import { ChatScript, ChatScriptPath } from '../src/chat_page.ts';
+import { chatPane, ChatScript, ChatScriptPath } from '../src/chat_page.ts';
 import { WhoScript, WhoScriptPath } from '../src/moderation_page.ts';
 import { makeConfig, type HubConfig } from '../src/config.ts';
 import { chatCommand } from '../src/generate.ts';
@@ -801,5 +801,19 @@ describe('chat through the hub', () => {
         freeq.dropBot();
         await until(() => c.socket.destroyed || c.socket.readableEnded, 'the connection to close');
         await until(() => chat.ready, 'the room to come back');
+    });
+});
+
+describe('art in the chat page', () => {
+    it('offers pictures, ANSI or text, with the colours and the character set filled in', () => {
+        //  the script parses as it is sent
+        assert.doesNotThrow(() => new Function(ChatScript));
+        assert.ok(!ChatScript.includes('__CP437__'), 'the CP437 table is filled in');
+        assert.ok(ChatScript.includes('░▒▓'), 'with the PC block characters');
+        const pane = chatPane('#space');
+        assert.match(pane, /<select id="chat-view">/);
+        assert.match(pane, /<option value="pictures">.*<option value="ansi">.*<option value="text">/s);
+        assert.match(pane, /\.ansi \.f9 \{ color: #ff5555; \}/);
+        assert.match(pane, /id="chat-view-wrap" class="chat-view" hidden/, 'hidden until the hub has art');
     });
 });

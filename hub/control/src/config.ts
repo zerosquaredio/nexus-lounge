@@ -16,6 +16,10 @@ export interface HubConfig {
     //  for none), and its terms of service and privacy notice, as HTML
     //  files the hub serves at /terms and /privacy ("" for none)
     policy: { operator: string; minimumAge: number; termsFile: string; privacyFile: string };
+    //  art the hub offers (assets spec, a first slice): a directory made by
+    //  the baker ("npm run bake"), served at /assets and shown at /art and in
+    //  the chat; "" for none
+    assets: { library: string };
     //  the control plane's own HTTP listener: frp's hooks, Caddy's
     //  certificate check, and handle verification (through the edge).
     //  Never public.
@@ -214,6 +218,7 @@ export const Defaults: HubConfig = {
     edge: { tls: 'internal', bindAddr: '127.0.0.1', httpPort: 7081, httpsPort: 7443 },
     contact: { abuse: '' },
     policy: { operator: '', minimumAge: 16, termsFile: '', privacyFile: '' },
+    assets: { library: '' },
     registration: {
         open: true,
         approval: true,
@@ -251,6 +256,7 @@ export function makeConfig(overrides: Partial<Record<keyof HubConfig, unknown>> 
         edge: { ...Defaults.edge, ...(overrides.edge as object) },
         contact: { ...Defaults.contact, ...(overrides.contact as object) },
         policy: { ...Defaults.policy, ...(overrides.policy as object) },
+        assets: { ...Defaults.assets, ...(overrides.assets as object) },
         registration: { ...Defaults.registration, ...(overrides.registration as object) },
     };
     if (!DomainRe.test(config.domain)) {

@@ -679,6 +679,17 @@ in.
 | Done when | As for H19; and a member the hub no longer lists, or a board whose reports stopped reaching the hub, falls back to the normal idle limit |
 | Status | **Working** (2026-11-23), with hub H19. The presence reporter keeps the hub's latest answer (forgotten 3 minutes after the last report that got through, and never a time from the future); the idle check asks it before logging a member off: they stay while their latest action, on the board or the hub, is within the longer of `users.idleLogoutSeconds` and `atProto.hub.presence.hubIdleMinutes` (30; 0 turns it off). Documented under "Busy on the Hub". 5 new tests. **Tested live** on the public hub's test board, as for H19 |
 
+### F21. Publishing art and an emblem
+
+| | |
+|---|---|
+| Implements | The BBS's side of the [assets spec](assets.md) (§4.3): an `assets` section in its config (each piece's files, description, rating, licence, permissions and credit); its ANSI art published from the BBS's own AT account as blobs and asset records, the way it publishes its listing (F9); the listing's `emblem`, pointing to the asset that stands for the BBS (its logo); large files served under `/assets/<sha256>`; and an `oputil` command to publish an art pack at once. Baking (cleaning the art, drawing its pictures) is the hub's baker for now (hub H20); later the BBS bakes its own |
+| Track | **Fork-only** (hub integration) |
+| Config | `atProto.publishing.assets` (to be drafted): the pieces, and which is the emblem |
+| Depends on | F9 (the BBS's AT account); hub H20 |
+| Done when | A test board's emblem appears on the hub's map |
+| Status | Planned (2026-11-25). Waits on F9's app passwords for the test boards (your to-do list) |
+
 ## 4. Milestones
 
 | Milestone | Features | Outcome |
@@ -689,6 +700,7 @@ in.
 | **M3** Public presence | F9, F10, F11, F17 | Publishing (including invite notifications), tunnels, the hub, and ready-made BBS images, for hosted and home-based boards |
 | **M4** Common space, first slice | F18, F19, F20 (with hub H13 to H19) | Members appear on the hub and can chat with people on other BBSes, from a browser or from inside the BBS (decided 2026-11-08, vision §3.2) |
 | **M5** Networking | F12 | Shared boards between BBSes |
+| **M6** Art on the hub | F21 (with hub H20) | The BBS's ANSI art and emblem on the hub ([assets spec](assets.md)) |
 | Later | F7, F8, F13, F15 | Paid verification, attestation table, clusters, in-BBS user manager |
 | After M4 | (not yet split into features) | Voice, then assets and avatars, then the 3D and VR social space: Overte worlds, AT login through a hub-run metaverse server, a browser client, an in-world BBS terminal. Decision and next steps in [overte_evaluation.md](overte_evaluation.md) |
 

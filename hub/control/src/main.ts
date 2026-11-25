@@ -10,6 +10,7 @@ import { createControlServer } from './server.ts';
 import { isPublicClient, SignIn } from './signin.ts';
 import { createSite } from './site.ts';
 import { loadWebTerm } from './webterm.ts';
+import { AssetLibrary } from './assets.ts';
 import { atClient } from './atproto.ts';
 import { Directory } from './directory.ts';
 import { followStream } from './jetstream.ts';
@@ -120,6 +121,15 @@ if (isPublicClient(config)) {
         e => log(`public sign-in client failed: ${(e as Error).message}`)
     );
 }
+//  art the hub offers (assets spec, a first slice): checked as it loads
+let art: AssetLibrary | null = null;
+if (config.assets.library) {
+    try {
+        art = AssetLibrary.load(config.assets.library, log);
+    } catch (e) {
+        log(`assets: can't load ${config.assets.library}: ${(e as Error).message}`);
+    }
+}
 const site = createSite({
     config,
     registry,
@@ -130,6 +140,7 @@ const site = createSite({
     directory,
     at,
     chat,
+    art,
     tunnels: () => tunnels,
     log,
 });

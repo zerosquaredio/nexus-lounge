@@ -12,7 +12,8 @@
         "start": "node src/main.ts",
         "hub": "node src/cli.ts",
         "test": "node --test --test-concurrency=1 --test-reporter=spec \"test/*.test.ts\"",
-        "typecheck": "tsc"
+        "typecheck": "tsc",
+        "bake": "node src/bake.ts"
     },
     "devDependencies": {
         "@types/node": "24.19.2",

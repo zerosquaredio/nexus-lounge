@@ -31,6 +31,8 @@
 //  GET  /api/bbs/mutes    who they muted
 //  POST /api/bbs/report   a member reports someone (JSON body)
 //    (the door's calls: bearer, ?bbs=name and ?did= or ?user= for the member)
+//  GET  /art              the art the hub offers (assets.ts), and /art.json for the chat
+//  GET  /assets/<sha256>  one of its files, named by its hash
 //  GET  /bbs              your BBSes, and registering a new one
 //  POST /bbs              register a BBS: shows its token and agent config, once
 //  POST /bbs/rotate       a new token and agent config
@@ -50,6 +52,8 @@ import { MapPagePath, spacePageBody, SpaceScript, SpaceScriptPath } from './spac
 import type { HubConfig } from './config.ts';
 import { HubError } from './errors.ts';
 import { AbuseKinds, AbuseReports, MaxContact, MaxDetails } from './abuse.ts';
+import { artJson, ArtJsonPath, artPageBody, ArtPath } from './art_page.ts';
+import type { AssetLibrary } from './assets.ts';
 import { agentConfig } from './generate.ts';
 import { esc, page } from './html.ts';
 import { MaxApplicationNote, type Application, type Bbs, type Registry } from './registry.ts';
@@ -99,6 +103,8 @@ export interface SiteDeps {
     at?: AtClient | null;
     //  the common space's chat, if it's on
     chat?: Chat | null;
+    //  art the hub offers (assets.library), if any
+    art?: AssetLibrary | null;
     //  what the control plane last heard from the tunnel server, for
     //  /status.json: "ok", "down", "error", or "unchecked"
     tunnels?: () => string;
@@ -197,6 +203,7 @@ async function readForm(req: IncomingMessage): Promise<URLSearchParams> {
 
 export function createSite(deps: SiteDeps): Site {
     const { config, registry, signin } = deps;
+    const art = deps.art ?? null;
     const log = deps.log ?? (() => {});
     const now = deps.now ?? Date.now;
     const secure = config.site.publicUrl.startsWith('https://');
@@ -1624,6 +1631,33 @@ ${footer()}`,
 
         if ('/report' === path) {
             return send(res, 200, reportPage(who, { bbs: url.searchParams.get('bbs') ?? '' }));
+        }
+
+        if (art && ArtPath === path) {
+            return send(res, 200, page(art.name, artPageBody(art), who ?? undefined));
+        }
+
+        if (art && ArtJsonPath === path) {
+            return json(res, 200, artJson(art));
+        }
+
+        //  a file is named by its hash, so it never changes: kept for a year,
+        //  and never run as a page
+        const asset = /^\/assets\/([0-9a-f]{64})$/.exec(path);
+        if (art && asset) {
+            const file = art.file(asset[1]!);
+            if (!file) {
+                return send(res, 404, page('Not found', '<p>Nothing here.</p>'));
+            }
+            res.writeHead(200, {
+                'Content-Type': file.type,
+                'Content-Length': String(file.body.length),
+                'Cache-Control': 'public, max-age=31536000, immutable',
+                'X-Content-Type-Options': 'nosniff',
+                'Content-Security-Policy': "default-src 'none'; sandbox",
+                'Cross-Origin-Resource-Policy': 'same-origin',
+            });
+            return void res.end('HEAD' === req.method ? undefined : file.body);
         }
 
         if ('/terms' === path || '/privacy' === path) {

@@ -4,12 +4,20 @@
 //  name by the hub, never by the nick, which a client picks for itself. Text
 //  from others only ever reaches the page as text.
 
+import { Cp437 } from './ansi.ts';
+import { Palette } from './ansi_image.ts';
 import { esc } from './html.ts';
 
 export const ChatScriptPath = '/space/chat.js';
 export const MaxLabelLookups = 50;
 //  an IRC line has room for about this much text
 export const MaxChatMessage = 400;
+
+//  The VGA colours, as classes for art drawn as characters (the ANSI view)
+const AnsiColours = Palette.map(([r, g, b], i) => {
+    const hex = `#${[r, g, b].map(v => v.toString(16).padStart(2, '0')).join('')}`;
+    return `.ansi .f${i} { color: ${hex}; } .ansi .b${i} { background: ${hex}; }`;
+}).join('\n');
 
 //  The chat itself, for its own page or beside the map (space_page.ts).
 //  wait: join only when asked, not as soon as the page opens
@@ -27,10 +35,27 @@ export function chatPane(room: string, wait = false): string {
 .chat-say button { margin-top: 0; }
 @media (max-width: 40rem) { .chat { grid-template-columns: 1fr; } .chat-log { height: 20rem; } }
 .chat-join button { margin-top: 0; }
+.chat-log figure { margin: .2rem 0 .5rem; }
+.chat-log figure img { display: block; max-width: 100%; max-height: 14rem; width: auto; height: auto; image-rendering: pixelated; border: 1px solid var(--line); background: #000; }
+.chat-log figcaption { color: var(--dim); font-size: .8rem; }
+.art-pick { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: .5rem; max-height: 16rem; overflow-y: auto; }
+.art-pick[hidden] { display: none; }
+.art-pick button { margin: 0; padding: .2rem; border-color: var(--line); }
+.art-pick img { display: block; width: 8rem; height: auto; image-rendering: pixelated; }
+.chat-view label { display: inline; margin: 0; }
+.chat-view select { font: inherit; color: inherit; background: var(--bg); border: 1px solid var(--line); border-radius: 4px; }
+.chat-log pre { margin: 0; overflow-x: auto; max-width: 100%; }
+.chat-log pre.ansi { display: inline-block; padding: 2px; background: #000; color: #aaa; border: 1px solid var(--line);
+  font: 8px/1 "Px437 IBM VGA 8x16", "PxPlus IBM VGA 8x16", ui-monospace, Consolas, monospace; }
+.chat-log pre.text { font: 8px/1.15 ui-monospace, Consolas, monospace; }
+.chat-log details summary { cursor: pointer; color: var(--accent); font-size: .85rem; }
+${AnsiColours}
 </style>
 <p class="dim"><span id="chat-room">${esc(room)}</span> · <span id="chat-status" role="status">${
         wait ? 'Not in the room' : 'Connecting…'
-    }</span></p>
+    }</span><span id="chat-view-wrap" class="chat-view" hidden> · <label>Art as <select id="chat-view">
+<option value="pictures">pictures</option><option value="ansi">ANSI</option><option value="text">text</option>
+</select></label></span></p>
 <noscript><p class="error">Chat needs JavaScript.</p></noscript>
 ${
     wait
@@ -44,7 +69,9 @@ ${
 <form id="chat-say" class="chat-say">
 <input type="text" id="chat-text" aria-label="Message" maxlength="${MaxChatMessage}" autocomplete="off" disabled>
 <button id="chat-send" disabled>Send</button>
+<button type="button" id="chat-art" aria-expanded="false" aria-controls="chat-art-pick" hidden>Art</button>
 </form>
+<div id="chat-art-pick" class="art-pick" role="group" aria-label="Share a piece of art" hidden></div>
 </div>
 <aside aria-label="In the room"><h2>Here now</h2><ul id="chat-people" class="chat-people"></ul></aside>
 </div>`;
@@ -127,9 +154,179 @@ export const ChatScript = String.raw`(function () {
         }
         p.appendChild(time);
         p.appendChild(who);
+        //  a piece from the hub's art, named by its id: drawn, never fetched
+        //  from anywhere else; anything else stays text
+        var shared = /^\[art:([0-9a-f]{12})\]/.exec(text), piece = shared && artById[shared[1]];
+        if (piece) {
+            p.appendChild(document.createTextNode('shares ' + piece.name));
+            addLine(p);
+            addLine(artFigure(piece));
+            return;
+        }
         p.appendChild(document.createTextNode(clean(action ? '* ' + action[1] : text)));
         addLine(p);
     }
+
+    //  The hub's art (/art.json), if it offers any
+    var artById = {}, artItems = [], artButton = byId('chat-art'), artPick = byId('chat-art-pick');
+
+    //  How each person sees it, their own choice, remembered in this browser:
+    //  pictures, ANSI drawn as characters, or text. Each is made from one of
+    //  the versions the baker makes; nobody else is affected.
+    var CP437 = __CP437__, ViewKey = 'hub.chat.artView', view = 'pictures';
+    var viewSelect = byId('chat-view'), viewWrap = byId('chat-view-wrap'), fetched = {};
+    try {
+        var saved = localStorage.getItem(ViewKey);
+        if (/^(pictures|ansi|text)$/.test(saved || '')) { view = saved; }
+    } catch (e) {}
+    viewSelect.value = view;
+    viewSelect.addEventListener('change', function () {
+        view = viewSelect.value;
+        try { localStorage.setItem(ViewKey, view); } catch (e) {}
+        log.querySelectorAll('figure[data-art]').forEach(function (fig) {
+            if (artById[fig.dataset.art]) { fillArt(fig, artById[fig.dataset.art]); }
+        });
+    });
+    function fetchOnce(url, as) {
+        if (!fetched[url]) {
+            fetched[url] = fetch(url, { credentials: 'same-origin' }).then(function (r) {
+                if (!r.ok) { throw new Error(String(r.status)); }
+                return 'text' === as ? r.text() : r.arrayBuffer();
+            });
+        }
+        return fetched[url];
+    }
+    //  The hub's cleaned ANSI holds nothing but characters, colours (SGR) and
+    //  line ends (ansi.ts), so this is all it takes to draw it
+    function drawAnsi(bytes, label) {
+        var pre = document.createElement('pre');
+        pre.className = 'ansi';
+        pre.setAttribute('role', 'img');
+        pre.setAttribute('aria-label', label);
+        var fg = 7, bg = 0, bold = false, blink = false, run = '';
+        function flush() {
+            if (!run) { return; }
+            var span = document.createElement('span');
+            span.className = 'f' + (fg + (bold ? 8 : 0)) + ' b' + (bg + (blink ? 8 : 0));
+            span.textContent = run;
+            pre.appendChild(span);
+            run = '';
+        }
+        for (var i = 0; i < bytes.length; i++) {
+            var c = bytes[i];
+            if (0x1a === c) { break; }
+            if (0x1b === c && 0x5b === bytes[i + 1]) {
+                var j = i + 2;
+                while (j < bytes.length && bytes[j] < 0x40) { j++; }
+                if (0x6d === bytes[j]) {
+                    flush();
+                    String.fromCharCode.apply(null, bytes.subarray(i + 2, j)).split(';').forEach(function (v) {
+                        var p = Number(v || 0);
+                        if (0 === p) { fg = 7; bg = 0; bold = blink = false; }
+                        else if (1 === p) { bold = true; }
+                        else if (5 === p) { blink = true; }
+                        else if (p >= 30 && p <= 37) { fg = p - 30; }
+                        else if (p >= 40 && p <= 47) { bg = p - 40; }
+                    });
+                }
+                i = j;
+            } else if (0x0a === c) {
+                flush();
+                pre.appendChild(document.createTextNode('\n'));
+            } else if (0x0d !== c) {
+                run += c ? CP437[c] : ' ';
+            }
+        }
+        flush();
+        return pre;
+    }
+    function fillArt(fig, piece) {
+        fig.textContent = '';
+        if ('ansi' === view) {
+            var wait = document.createElement('p');
+            wait.className = 'system';
+            wait.textContent = 'Drawing ' + piece.name + '…';
+            fig.appendChild(wait);
+            fetchOnce(piece.ansi, 'bytes').then(function (buf) {
+                if ('ansi' === view && wait.parentNode === fig) {
+                    fig.replaceChild(drawAnsi(new Uint8Array(buf), piece.short), wait);
+                }
+            }, function () { wait.textContent = "Couldn't load " + piece.name + '.'; });
+        } else if ('text' === view) {
+            var more = document.createElement('details');
+            var summary = document.createElement('summary');
+            summary.textContent = 'Show it as text';
+            more.appendChild(summary);
+            more.addEventListener('toggle', function () {
+                if (!more.open || more.querySelector('pre') || !piece.text) { return; }
+                fetchOnce(piece.text, 'text').then(function (t) {
+                    var pre = document.createElement('pre');
+                    pre.className = 'text';
+                    pre.textContent = t;
+                    more.appendChild(pre);
+                }, function () {});
+            });
+            fig.appendChild(more);
+        } else {
+            var link = document.createElement('a');
+            link.href = piece.image.url;
+            link.target = '_blank';
+            link.rel = 'noopener';
+            var img = document.createElement('img');
+            img.src = piece.thumb.url;
+            img.width = piece.thumb.width;
+            img.height = piece.thumb.height;
+            img.alt = piece.short;
+            link.appendChild(img);
+            fig.appendChild(link);
+        }
+        var cap = document.createElement('figcaption');
+        cap.textContent = 'text' === view ? piece.short : piece.name + ' · by ' + piece.credit;
+        fig.appendChild(cap);
+    }
+    function artFigure(piece) {
+        var fig = document.createElement('figure');
+        fig.dataset.art = piece.id.slice(0, 12);
+        fillArt(fig, piece);
+        return fig;
+    }
+    function shareArt(piece) {
+        if (!ws || input.disabled) { return; }
+        raw('PRIVMSG ' + ticket.room + ' :[art:' + piece.id.slice(0, 12) + '] ' + piece.name);
+        artPick.hidden = true;
+        artButton.setAttribute('aria-expanded', 'false');
+        input.focus();
+    }
+    function findArt(name) {
+        name = name.toLowerCase();
+        return artItems.filter(function (a) { return a.name.toLowerCase() === name; })[0]
+            || artItems.filter(function (a) { return 0 === a.name.toLowerCase().indexOf(name); })[0];
+    }
+    fetch('/art.json', { credentials: 'same-origin' })
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(function (lib) {
+            if (!lib || !lib.items || !lib.items.length) { return; }
+            artItems = lib.items;
+            artItems.forEach(function (a) {
+                artById[a.id.slice(0, 12)] = a;
+                var b = document.createElement('button');
+                b.type = 'button';
+                b.title = a.name + ', by ' + a.credit;
+                var img = document.createElement('img');
+                img.src = a.thumb.url;
+                img.alt = a.short;
+                b.appendChild(img);
+                b.addEventListener('click', function () { shareArt(a); });
+                artPick.appendChild(b);
+            });
+            artButton.hidden = false;
+            viewWrap.hidden = false;
+        })
+        .catch(function () {});
+    artButton.addEventListener('click', function () {
+        artPick.hidden = !artPick.hidden;
+        artButton.setAttribute('aria-expanded', String(!artPick.hidden));
+    });
 
     function lookUp(did) {
         if (labels[did] || waiting[did]) { return; }
@@ -311,6 +508,17 @@ export const ChatScript = String.raw`(function () {
         e.preventDefault();
         var text = clean(input.value).trim();
         if (!text || !ws) { return; }
+        //  /art NAME shares a piece; /art alone lists them
+        var command = /^\/art(?:\s+(.+))?$/i.exec(text);
+        if (command) {
+            input.value = '';
+            if (!artItems.length) { return system('This hub offers no art.'); }
+            if (!command[1]) {
+                return system('Art: ' + artItems.map(function (a) { return a.name; }).join(', '));
+            }
+            var piece = findArt(command[1].trim());
+            return piece ? shareArt(piece) : system('No art called ' + command[1].trim() + '.');
+        }
         if (new TextEncoder().encode(text).length > 400) { return system('That message is too long.'); }
         raw('PRIVMSG ' + ticket.room + ' :' + text);
         input.value = '';
@@ -359,4 +567,4 @@ export const ChatScript = String.raw`(function () {
     };
     if (!pane || !pane.dataset.wait) { start(); }
 })();
-`;
+`.replace('__CP437__', JSON.stringify(Cp437.join('')));

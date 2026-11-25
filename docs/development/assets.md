@@ -42,6 +42,7 @@ or more **versions**, each one file:
 | Form | Formats | For |
 |---|---|---|
 | `ansi` | ANSI art (CP437, with SAUCE) | The text level; emblems, banners, signs, portraits everywhere (world.md §6.2) |
+| `text` | Plain UTF-8 | The text of ANSI art without its colours: for screen readers and anything that can't show colour (publishing spec §3.7) |
 | `icon` | PNG, WebP | Small, square: the map, lists, nameplates |
 | `image` | PNG, WebP, JPEG | Emblems, backgrounds, textures, patterns |
 | `panorama` | PNG, WebP, JPEG (equirectangular) | Backgrounds on the map, skies in 3D |
@@ -49,6 +50,9 @@ or more **versions**, each one file:
 | `model` | glTF binary (`.glb`); VRM for humanoid avatars | 3D, at a budget class: `light`, `standard`, `full` |
 | `voxel` | MagicaVoxel `.vox` | The grid style (world.md §8.1); later |
 | `splat` | `.spz`, `.ply` | Backdrops only; later |
+
+An asset may have several versions of one form at different sizes, such as
+a full-size and a half-size `image`; a client takes the size it needs.
 
 Every asset also has a **description** (text, in the record), its text
 version (world.md §4), used for `look` and by screen readers.
@@ -429,6 +433,10 @@ warning.
   VRChat come from their source files, never from uploads (world.md §7.1).
 
 ## 11. Order
+
+*A proof of concept of step 1 works (hub plan H20, 2026-11-25): the baker,
+for ANSI; a library the hub checks and serves; a gallery; and art shared in
+the chat.*
 
 1. **A leaf's emblem on the map.** Draft records (`dev.asset.item`); the
    listing's `emblem`; the fork publishes an ANSI logo; the hub fetches,
