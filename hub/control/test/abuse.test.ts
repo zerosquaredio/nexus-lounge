@@ -47,6 +47,27 @@ describe('the abuse report store', () => {
         assert.throws(() => reports.mustGet(99), { code: 'not-found' });
     });
 
+    it('takes a minimum age that fits the ratings the hub lists', () => {
+        assert.equal(makeConfig({}).policy.minimumAge, 16);
+        assert.equal(makeConfig({ policy: { minimumAge: 0 } }).policy.minimumAge, 0);
+        assert.equal(
+            makeConfig({ policy: { minimumAge: 18 }, directory: { ratings: ['general', 'adult'] } }).policy
+                .minimumAge,
+            18
+        );
+        assert.throws(
+            () => makeConfig({ policy: { minimumAge: 16 }, directory: { ratings: ['general', 'adult'] } }),
+            /"adult", so policy\.minimumAge must be 18/
+        );
+        assert.throws(
+            () => makeConfig({ policy: { minimumAge: 13 }, directory: { ratings: ['general', 'mature'] } }),
+            /must be 16/
+        );
+        for (const bad of [12, 22, 16.5]) {
+            assert.throws(() => makeConfig({ policy: { minimumAge: bad } }), /minimumAge/, String(bad));
+        }
+    });
+
     it('takes an abuse address in the config, or none', () => {
         assert.equal(makeConfig({}).contact.abuse, '');
         assert.equal(

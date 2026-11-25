@@ -12,6 +12,10 @@ export interface HubConfig {
     //  where people write about abuse (shown on the report page); "" for
     //  the form only
     contact: { abuse: string };
+    //  the hub's terms: who runs it, the age people confirm at sign-in (0
+    //  for none), and its terms of service and privacy notice, as HTML
+    //  files the hub serves at /terms and /privacy ("" for none)
+    policy: { operator: string; minimumAge: number; termsFile: string; privacyFile: string };
     //  the control plane's own HTTP listener: frp's hooks, Caddy's
     //  certificate check, and handle verification (through the edge).
     //  Never public.
@@ -203,6 +207,7 @@ export const Defaults: HubConfig = {
     },
     edge: { tls: 'internal', bindAddr: '127.0.0.1', httpPort: 7081, httpsPort: 7443 },
     contact: { abuse: '' },
+    policy: { operator: '', minimumAge: 16, termsFile: '', privacyFile: '' },
     registration: { open: true, reservedNames: DefaultReservedNames, maxBbsPerSysop: 3 },
 };
 
@@ -233,6 +238,7 @@ export function makeConfig(overrides: Partial<Record<keyof HubConfig, unknown>> 
         },
         edge: { ...Defaults.edge, ...(overrides.edge as object) },
         contact: { ...Defaults.contact, ...(overrides.contact as object) },
+        policy: { ...Defaults.policy, ...(overrides.policy as object) },
         registration: { ...Defaults.registration, ...(overrides.registration as object) },
     };
     if (!DomainRe.test(config.domain)) {
@@ -304,6 +310,22 @@ export function makeConfig(overrides: Partial<Record<keyof HubConfig, unknown>> 
     const abuse = config.contact.abuse;
     if ('string' !== typeof abuse || ('' !== abuse && !/^[^\s@<>"]+@[^\s@<>"]+\.[^\s@<>"]+$/.test(abuse))) {
         throw new HubError('config', 'contact.abuse is an email address, or "" for none');
+    }
+    const age = config.policy.minimumAge;
+    if (!Number.isInteger(age) || (0 !== age && (age < 13 || age > 21))) {
+        throw new HubError('config', 'policy.minimumAge is 13 to 21, or 0 for none');
+    }
+    //  a hub that lists older ratings asks for an age to match
+    for (const [rating, least] of [
+        ['mature', 16],
+        ['adult', 18],
+    ] as const) {
+        if (config.directory.ratings.includes(rating) && age < least) {
+            throw new HubError(
+                'config',
+                `directory.ratings allows "${rating}", so policy.minimumAge must be ${least} or more`
+            );
+        }
     }
     const heartbeat = config.tunnel.heartbeatSeconds;
     if (!Number.isInteger(heartbeat) || heartbeat < 1 || heartbeat > 600) {

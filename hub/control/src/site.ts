@@ -37,6 +37,7 @@
 //  POST /bbs/remove
 //  POST /signout
 
+import { readFileSync } from 'node:fs';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { BbsChatPath, ChatPath, type Chat } from './chat.ts';
@@ -262,6 +263,27 @@ export function createSite(deps: SiteDeps): Site {
         return `${Cookie}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${maxAge}${secure ? '; Secure' : ''}`;
     }
 
+    //  What someone agrees to by signing in: the hub's age, and its terms
+    function agreementText(): string {
+        const age = config.policy.minimumAge;
+        const docs = [
+            config.policy.termsFile ? '<a href="/terms">terms of service</a>' : '',
+            config.policy.privacyFile ? '<a href="/privacy">privacy notice</a>' : '',
+        ].filter(Boolean);
+        const parts = [
+            age ? `I'm ${age} or older` : '',
+            docs.length ? `I agree to this hub's ${docs.join(' and ')}` : '',
+        ].filter(Boolean);
+        return parts.join(', and ');
+    }
+
+    function agreement(): string {
+        const text = agreementText();
+        return text
+            ? `<p><label><input type="checkbox" name="agree" value="yes" required> ${text}.</label></p>`
+            : '';
+    }
+
     function landing(error?: string): string {
         const intro = profiles
             ? `<p>Sign in to take part in this hub's common space, or to register your BBS: a registered BBS
@@ -275,6 +297,7 @@ ${error ? `<p class="error">${esc(error)}</p>` : ''}
 <form method="post" action="/signin">
 <label for="handle">Sign in with your Bluesky (AT Protocol) handle</label>
 <input type="text" id="handle" name="handle" placeholder="you.bsky.social" autocomplete="username" required>
+${agreement()}
 <button>Sign in</button>
 </form>
 <p class="hint">Signing in only tells the hub who you are. It can't post or read anything in your account,
@@ -286,7 +309,11 @@ and it keeps no access to it afterwards.</p>
     function bbsRow(bbs: Bbs): string {
         const status =
             'suspended' === bbs.state
-                ? 'suspended by the hub'
+                ? `suspended by the hub${bbs.stateReason ? `: ${esc(bbs.stateReason)}` : ''}${
+                      config.contact.abuse
+                          ? ` (write to <a href="mailto:${esc(config.contact.abuse)}">${esc(config.contact.abuse)}</a>)`
+                          : ''
+                  }`
                 : bbs.connected
                   ? 'connected'
                   : 'not connected';
@@ -306,7 +333,21 @@ and it keeps no access to it afterwards.</p>
                       config.domain
                   )}</span>`
                 : '<br><span class="dim">not listed: no Bluesky account given for it</span>';
-        return `<tr><td><strong>${esc(bbs.name)}</strong>.${esc(config.domain)}${listed}</td><td>${esc(status)}</td><td>${actions}</td></tr>`;
+        return `<tr><td><strong>${esc(bbs.name)}</strong>.${esc(config.domain)}${listed}</td><td>${status}</td><td>${actions}</td></tr>`;
+    }
+
+    //  What a sysop confirms of their BBS's content, from the ratings this
+    //  hub lists
+    function ratingText(): string {
+        const ratings = config.directory.ratings;
+        const highest = ratings.includes('adult')
+            ? 'adult'
+            : ratings.includes('mature')
+              ? 'mature'
+              : 'general';
+        return 'general' === highest
+            ? 'My BBS is suitable for everyone: nothing adult, explicit or mature (a "general" rating).'
+            : `Nothing on my BBS goes beyond a "${highest}" rating, and its listing says so.`;
     }
 
     function dashboard(who: WebSession, error?: string, values: Record<string, string> = {}): string {
@@ -323,7 +364,8 @@ and it keeps no access to it afterwards.</p>
 <input type="text" id="rname" name="name" autocomplete="off">
 <button>Remove it</button>
 </form>
-<p class="hint">Its tunnel stops working and its name becomes free for anyone.</p>`
+<p class="hint">Its tunnel stops working and everything the hub holds about it is deleted. Its name is held
+for 90 days, so nobody else takes it straight away.</p>`
             : '';
         const add = canAdd
             ? `<h2>Register a BBS</h2>
@@ -340,6 +382,7 @@ ${error ? `<p class="error">${esc(error)}</p>` : ''}
 <input type="text" id="bbsAccount" name="bbsAccount" value="${esc(values.bbsAccount)}" placeholder="coolbbs.bsky.social" autocomplete="off">
 <p class="hint">The account your BBS publishes its listing from. The directory shows that listing here once it
 names your BBS's address on this hub (<code>https://name.${esc(config.domain)}</code>).</p>
+<p><label><input type="checkbox" name="rating" value="yes" required> ${esc(ratingText())}</label></p>
 <button>Register</button>
 </form>`
             : config.registration.open
@@ -1062,6 +1105,17 @@ ${entry ? listingDetails(entry, false) : ''}
     }
 
     //  The directory: this hub's BBSes first, then others on the network
+    //  Who runs the hub, its terms, and where to report a problem
+    function footer(): string {
+        const p = config.policy;
+        const links = [
+            p.termsFile ? '<a href="/terms">Terms of service</a>' : '',
+            p.privacyFile ? '<a href="/privacy">Privacy</a>' : '',
+            '<a href="/report">Report a problem</a>',
+        ].filter(Boolean);
+        return `<p class="dim">${p.operator ? `This hub is run by ${esc(p.operator)}. ` : ''}${links.join(' · ')}</p>`;
+    }
+
     //  The abuse report form, for anyone
     function reportPage(
         who: WebSession | null,
@@ -1169,7 +1223,7 @@ ${
 ${others.map(otherCard).join('\n')}`
         : ''
 }
-<p class="dim"><a href="/report">Report a problem</a> with a BBS or this hub.</p>`,
+${footer()}`,
             who ?? undefined
         );
     }
@@ -1256,6 +1310,9 @@ ${others.map(otherCard).join('\n')}`
                         400,
                         landing('That doesn\'t look like a handle, such as "you.bsky.social".')
                     );
+                }
+                if (agreementText() && 'yes' !== form.get('agree')) {
+                    return send(res, 400, landing('To sign in, tick the box to confirm.'));
                 }
                 if (!signinLimit.allow(clientAddress(req))) {
                     return send(res, 429, landing('Too many sign-in attempts. Try again in a few minutes.'));
@@ -1397,6 +1454,13 @@ ${others.map(otherCard).join('\n')}`
                 if (!config.registration.open) {
                     return send(res, 403, dashboard(who));
                 }
+                if ('yes' !== form.get('rating')) {
+                    return send(
+                        res,
+                        400,
+                        dashboard(who, "Confirm your BBS's rating to register it.", values)
+                    );
+                }
                 if (!changeLimit.allow(who.did)) {
                     return send(res, 429, dashboard(who, 'Too many changes. Try again later.', values));
                 }
@@ -1469,6 +1533,21 @@ ${others.map(otherCard).join('\n')}`
 
         if ('/report' === path) {
             return send(res, 200, reportPage(who, { bbs: url.searchParams.get('bbs') ?? '' }));
+        }
+
+        if ('/terms' === path || '/privacy' === path) {
+            const file = '/terms' === path ? config.policy.termsFile : config.policy.privacyFile;
+            const title = '/terms' === path ? 'Terms of service' : 'Privacy notice';
+            if (!file) {
+                return send(res, 404, page('Not found', '<p>Nothing here.</p>', who ?? undefined));
+            }
+            try {
+                //  read each time, so the admin can change it without a restart
+                return send(res, 200, page(title, readFileSync(file, 'utf8'), who ?? undefined));
+            } catch (e) {
+                log(`site: can't read ${title.toLowerCase()} (${file}): ${(e as Error).message}`);
+                return send(res, 503, page(title, '<p>Not available right now.</p>', who ?? undefined));
+            }
         }
 
         //  fetched by account hosts, to learn who is asking them to sign

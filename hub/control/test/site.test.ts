@@ -2,7 +2,7 @@ import { after, before, beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { request, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
-import { mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -148,9 +148,18 @@ describe('the hub site', () => {
         assert.match(String(home.headers['content-security-policy']), /frame-ancestors 'none'/);
         assert.equal(home.headers['referrer-policy'], 'same-origin');
 
-        const go = await call('POST', '/signin', { form: { handle: '@Sysop.Example' } });
+        const go = await call('POST', '/signin', { form: { handle: '@Sysop.Example', agree: 'yes' } });
         assert.equal(go.status, 303);
         assert.equal(go.location, 'https://account.example/authorize?for=Sysop.Example');
+    });
+
+    it('asks people to confirm their age before signing in', async () => {
+        const home = await call('GET', '/signin');
+        assert.match(home.body, /name="agree" value="yes" required> I'm 16 or older\./);
+        const refused = await call('POST', '/signin', { form: { handle: 'a.example' } });
+        assert.equal(refused.status, 400);
+        assert.match(refused.body, /tick the box/);
+        assert.deepEqual(signin.started, []);
     });
 
     it('refuses things that are not handles', async () => {
@@ -184,7 +193,7 @@ describe('the hub site', () => {
             assert.equal(
                 (
                     await call('POST', '/signin', {
-                        form: { handle: 'a.example' },
+                        form: { handle: 'a.example', agree: 'yes' },
                         forwardedFor: '203.0.113.9',
                     })
                 ).status,
@@ -192,13 +201,21 @@ describe('the hub site', () => {
             );
         }
         assert.equal(
-            (await call('POST', '/signin', { form: { handle: 'a.example' }, forwardedFor: '203.0.113.9' }))
-                .status,
+            (
+                await call('POST', '/signin', {
+                    form: { handle: 'a.example', agree: 'yes' },
+                    forwardedFor: '203.0.113.9',
+                })
+            ).status,
             429
         );
         assert.equal(
-            (await call('POST', '/signin', { form: { handle: 'a.example' }, forwardedFor: '203.0.113.10' }))
-                .status,
+            (
+                await call('POST', '/signin', {
+                    form: { handle: 'a.example', agree: 'yes' },
+                    forwardedFor: '203.0.113.10',
+                })
+            ).status,
             303
         );
     });
@@ -227,7 +244,7 @@ describe('the hub site', () => {
         const cookie = await signedIn();
         const reply = await call('POST', '/bbs', {
             cookie,
-            form: { name: 'CoolBBS', webPort: '9080', wsPort: '9810' },
+            form: { name: 'CoolBBS', webPort: '9080', wsPort: '9810', rating: 'yes' },
         });
         assert.equal(reply.status, 200);
         const bbs = registry.mustGet('coolbbs');
@@ -247,26 +264,31 @@ describe('the hub site', () => {
 
     it('explains a refused registration', async () => {
         const cookie = await signedIn();
-        assert.match((await call('POST', '/bbs', { cookie, form: { name: 'admin' } })).body, /reserved/);
         assert.match(
-            (await call('POST', '/bbs', { cookie, form: { name: 'x', webPort: '8080' } })).body,
+            (await call('POST', '/bbs', { cookie, form: { rating: 'yes', name: 'admin' } })).body,
+            /reserved/
+        );
+        assert.match(
+            (await call('POST', '/bbs', { cookie, form: { rating: 'yes', name: 'x', webPort: '8080' } }))
+                .body,
             /2 to 32/
         );
         assert.match(
-            (await call('POST', '/bbs', { cookie, form: { name: 'ok', webPort: '99999' } })).body,
+            (await call('POST', '/bbs', { cookie, form: { rating: 'yes', name: 'ok', webPort: '99999' } }))
+                .body,
             /Ports are/
         );
-        await call('POST', '/bbs', { cookie, form: { name: 'mine' } });
+        await call('POST', '/bbs', { cookie, form: { rating: 'yes', name: 'mine' } });
         const other = await signedIn({ did: OtherSysopDid, handle: 'other.example' });
         assert.match(
-            (await call('POST', '/bbs', { cookie: other, form: { name: 'mine' } })).body,
+            (await call('POST', '/bbs', { cookie: other, form: { rating: 'yes', name: 'mine' } })).body,
             /already registered/
         );
     });
 
     it('lets a sysop rotate or remove only their own BBSes', async () => {
         const mine = await signedIn();
-        await call('POST', '/bbs', { cookie: mine, form: { name: 'coolbbs' } });
+        await call('POST', '/bbs', { cookie: mine, form: { rating: 'yes', name: 'coolbbs' } });
         const theirs = await signedIn({ did: OtherSysopDid, handle: 'other.example' });
 
         assert.equal(
@@ -296,10 +318,41 @@ describe('the hub site', () => {
         assert.equal(registry.get('coolbbs'), null);
     });
 
+    it('asks a sysop to confirm the rating, and holds a removed name', async () => {
+        const cookie = await signedIn();
+        const page = await call('GET', '/bbs', { cookie });
+        assert.match(page.body, /name="rating" value="yes" required> My BBS is suitable for everyone/);
+        const unrated = await call('POST', '/bbs', { cookie, form: { name: 'coolbbs' } });
+        assert.equal(unrated.status, 400);
+        assert.match(unrated.body, /Confirm your BBS/);
+        assert.equal(registry.get('coolbbs'), null);
+
+        await call('POST', '/bbs', { cookie, form: { rating: 'yes', name: 'coolbbs' } });
+        await call('POST', '/bbs/remove', { cookie, form: { name: 'coolbbs' } });
+        const other = await signedIn({ did: OtherSysopDid, handle: 'other.example' });
+        assert.match(
+            (await call('POST', '/bbs', { cookie: other, form: { rating: 'yes', name: 'coolbbs' } })).body,
+            /removed lately/
+        );
+        registry.release('coolbbs');
+        assert.equal(
+            (await call('POST', '/bbs', { cookie: other, form: { rating: 'yes', name: 'coolbbs' } })).status,
+            200
+        );
+    });
+
+    it('shows a sysop why their BBS was suspended', async () => {
+        const cookie = await signedIn();
+        await call('POST', '/bbs', { cookie, form: { rating: 'yes', name: 'coolbbs' } });
+        registry.setState('coolbbs', 'suspended', 'Reports of <spam>');
+        const page = await call('GET', '/bbs', { cookie });
+        assert.match(page.body, /suspended by the hub: Reports of &lt;spam&gt;/);
+    });
+
     it('stops at the per-sysop limit', async () => {
         const cookie = await signedIn();
         for (const name of ['one', 'two', 'three']) {
-            await call('POST', '/bbs', { cookie, form: { name } });
+            await call('POST', '/bbs', { cookie, form: { rating: 'yes', name } });
         }
         const page = await call('GET', '/bbs', { cookie });
         assert.match(page.body, /the most this hub allows/);
@@ -735,6 +788,53 @@ describe('abuse reports', () => {
 
     it('links to the form from the directory and from each BBS page', async () => {
         assert.match((await call('GET', '/')).body, /href="\/report"/);
+    });
+});
+
+describe("the hub's terms", () => {
+    it('serves its terms and privacy notice from files, and asks people to agree to them', async () => {
+        const dir = mkdtempSync(join(tmpdir(), 'hub-policy-'));
+        const config = makeConfig({
+            policy: { termsFile: join(dir, 'terms.html'), privacyFile: join(dir, 'privacy.html') },
+        });
+        const reg = testRegistry();
+        const site = createSite({ config, registry: reg, signin: new SignIn(reg.db, config) });
+        await new Promise<void>(r => site.listen(0, '127.0.0.1', r));
+        const at = `http://127.0.0.1:${(site.address() as AddressInfo).port}`;
+        try {
+            assert.equal((await fetch(`${at}/terms`)).status, 503, 'the file is missing');
+            writeFileSync(join(dir, 'terms.html'), '<p>Be kind.</p>');
+            writeFileSync(join(dir, 'privacy.html'), '<p>We keep little.</p>');
+            const terms = await fetch(`${at}/terms`);
+            assert.equal(terms.status, 200);
+            assert.match(await terms.text(), /<h1>Terms of service<\/h1>[\s\S]*<p>Be kind\.<\/p>/);
+            assert.match(await (await fetch(`${at}/privacy`)).text(), /We keep little/);
+            assert.match(
+                await (await fetch(`${at}/signin`)).text(),
+                /I'm 16 or older, and I agree to this hub's <a href="\/terms">terms of service<\/a> and <a href="\/privacy">privacy notice<\/a>\./
+            );
+        } finally {
+            site.closeAllConnections();
+            await new Promise(r => site.close(r));
+            reg.close();
+            rmSync(dir, { recursive: true, force: true });
+        }
+    });
+
+    it('has no terms pages, and asks nothing, when a hub sets none', async () => {
+        assert.equal((await call('GET', '/terms')).status, 404);
+        const config = makeConfig({ policy: { minimumAge: 0 } });
+        const reg = testRegistry();
+        const site = createSite({ config, registry: reg, signin: new SignIn(reg.db, config) });
+        await new Promise<void>(r => site.listen(0, '127.0.0.1', r));
+        try {
+            const page = await fetch(`http://127.0.0.1:${(site.address() as AddressInfo).port}/signin`);
+            assert.doesNotMatch(await page.text(), /name="agree"/);
+        } finally {
+            site.closeAllConnections();
+            await new Promise(r => site.close(r));
+            reg.close();
+        }
     });
 });
 

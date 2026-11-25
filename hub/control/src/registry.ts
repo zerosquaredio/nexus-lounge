@@ -16,6 +16,8 @@ export interface Bbs {
     sysopDid: string;
     bbsDid: string | null;
     state: BbsState;
+    //  why the hub suspended it, for its sysop (schema 11)
+    stateReason: string | null;
     createdAt: string;
     webPort: number;
     wsPort: number;
@@ -30,6 +32,7 @@ interface BbsRow {
     sysop_did: string;
     bbs_did: string | null;
     state: BbsState;
+    state_reason: string | null;
     token_hash: string;
     created_at: string;
     web_port: number;
@@ -39,7 +42,7 @@ interface BbsRow {
     open_proxies: number;
 }
 
-const SchemaVersion = 9;
+const SchemaVersion = 11;
 
 const Schema = `
 CREATE TABLE IF NOT EXISTS bbs (
@@ -48,6 +51,7 @@ CREATE TABLE IF NOT EXISTS bbs (
     bbs_did              TEXT,
     state                TEXT NOT NULL DEFAULT 'active'
                               CHECK (state IN ('active', 'suspended')),
+    state_reason         TEXT,
     token_hash           TEXT NOT NULL,
     created_at           TEXT NOT NULL,
     --  where the BBS's web and WebSocket servers listen on its own machine,
@@ -239,6 +243,12 @@ CREATE TABLE IF NOT EXISTS abuse_report (
     closed_at  TEXT,
     outcome    TEXT
 );
+--  names of BBSes removed, held for a while so nobody else takes one at
+--  once (schema 10)
+CREATE TABLE IF NOT EXISTS released_name (
+    name       TEXT PRIMARY KEY,
+    removed_at TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS web_session (
     token_hash TEXT PRIMARY KEY,
     did        TEXT NOT NULL,
@@ -258,6 +268,7 @@ function toBbs(row: BbsRow): Bbs {
         sysopDid: row.sysop_did,
         bbsDid: row.bbs_did,
         state: row.state,
+        stateReason: row.state_reason ?? null,
         createdAt: row.created_at,
         webPort: row.web_port,
         wsPort: row.ws_port,
@@ -272,6 +283,9 @@ export interface Ban {
     reason: string;
     bannedAt: string;
 }
+
+//  How long a removed BBS's name is held
+export const NameHoldDays = 90;
 
 export interface RegistryOptions {
     reservedNames: readonly string[];
@@ -310,6 +324,11 @@ export class Registry {
             );
         }
         this.db.exec(Schema);
+        //  columns added to an existing table (schema 11)
+        const columns = this.db.prepare('PRAGMA table_info(bbs)').all() as { name: string }[];
+        if (!columns.some(c => 'state_reason' === c.name)) {
+            this.db.exec('ALTER TABLE bbs ADD COLUMN state_reason TEXT');
+        }
         this.db.exec(`PRAGMA user_version = ${SchemaVersion}`);
     }
 
@@ -382,6 +401,13 @@ export class Registry {
         if (this.get(name)) {
             throw new HubError('taken', `"${name}" is already registered`);
         }
+        const held = this.heldUntil(name);
+        if (held) {
+            throw new HubError(
+                'taken',
+                `"${name}" belonged to a BBS removed lately; it's free again on ${held.slice(0, 10)}`
+            );
+        }
         if (bbsDid && this.getByDid(bbsDid)) {
             throw new HubError('taken', `${bbsDid} is already registered for another BBS`);
         }
@@ -423,13 +449,23 @@ export class Registry {
         return token;
     }
 
-    setState(name: string, state: BbsState): Bbs {
+    //  Suspend a BBS (with why, for its sysop) or make it active again
+    setState(name: string, state: BbsState, reason = ''): Bbs {
         const bbs = this.mustGet(name);
         const banned = 'active' === state ? this.banOf(bbs) : null;
         if (banned) {
             throw new HubError('banned', `${banned.did} is banned from this hub; unban it first`);
         }
-        this.db.prepare('UPDATE bbs SET state = ? WHERE name = ?').run(state, name);
+        const why =
+            'suspended' === state
+                ? reason
+                      .replace(/[\u0000-\u001f\u007f]/g, ' ')
+                      .trim()
+                      .slice(0, 300)
+                : '';
+        this.db
+            .prepare('UPDATE bbs SET state = ?, state_reason = ? WHERE name = ?')
+            .run(state, why || null, name);
         return this.mustGet(name);
     }
 
@@ -451,29 +487,28 @@ export class Registry {
         return this.mustGet(name);
     }
 
-    //  Ban a DID from the hub: every BBS it runs, or that is its own
-    //  account, is suspended (so their tunnels are cut), and it can't
-    //  register another. Returns the BBSes suspended now.
-    banDid(did: string, reason = ''): { ban: Ban; suspended: string[] } {
+    //  Ban a DID from the hub for good: every BBS it runs, or that is its own
+    //  account, is removed (their tunnels drop, and their names are held as
+    //  for any removed BBS), and it can't register another. Returns the
+    //  BBSes removed now.
+    banDid(did: string, reason = ''): { ban: Ban; removed: string[] } {
         if (!isDid(did)) {
             throw new HubError('bad-did', `"${did}" is not a did:plc or did:web`);
         }
-        const suspended = this.bbsesOf(did)
-            .filter(b => 'active' === b.state)
-            .map(b => b.name);
         this.db
             .prepare(
                 'INSERT INTO hub_ban (did, reason, banned_at) VALUES (?, ?, ?) ' +
                     'ON CONFLICT (did) DO UPDATE SET reason = excluded.reason'
             )
             .run(did, reason.slice(0, 300), this.stamp());
-        for (const name of suspended) {
-            this.db.prepare("UPDATE bbs SET state = 'suspended' WHERE name = ?").run(name);
+        const removed = this.bbsesOf(did).map(b => b.name);
+        for (const name of removed) {
+            this.remove(name);
         }
-        return { ban: this.ban(did) as Ban, suspended };
+        return { ban: this.ban(did) as Ban, removed };
     }
 
-    //  Lift a ban. Its BBSes stay suspended until each is resumed.
+    //  Lift a ban: the DID may register BBSes again (its old ones are gone)
     unbanDid(did: string): Ban {
         const ban = this.ban(did);
         if (!ban) {
@@ -513,9 +548,34 @@ export class Registry {
         ).map(toBbs);
     }
 
+    //  Remove a BBS: everything of it goes at once, and its name is held
+    //  for NameHoldDays so nobody else takes it straight away
     remove(name: string): void {
         this.mustGet(name);
         this.db.prepare('DELETE FROM bbs WHERE name = ?').run(name);
+        this.db
+            .prepare('INSERT OR REPLACE INTO released_name (name, removed_at) VALUES (?, ?)')
+            .run(name, this.stamp());
+    }
+
+    //  When a removed BBS's name is free again, if it's still held
+    heldUntil(name: string): string | null {
+        const row = this.db.prepare('SELECT removed_at FROM released_name WHERE name = ?').get(name) as
+            { removed_at: string } | undefined;
+        if (!row) {
+            return null;
+        }
+        const until = new Date(Date.parse(row.removed_at) + NameHoldDays * 24 * 60 * 60 * 1000);
+        if (until <= this.now()) {
+            this.db.prepare('DELETE FROM released_name WHERE name = ?').run(name);
+            return null;
+        }
+        return until.toISOString();
+    }
+
+    //  Free a held name early (the admin's choice)
+    release(name: string): boolean {
+        return this.db.prepare('DELETE FROM released_name WHERE name = ?').run(name).changes > 0;
     }
 
     //  Tunnel bookkeeping, from the tunnel server's hooks. A BBS is

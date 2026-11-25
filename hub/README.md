@@ -166,10 +166,13 @@ from `agent-config`.
 `""` for none), enforced by frps itself (`bandwidth_limit_mode = "server"`),
 so an agent can ask for less but not more.
 
-**Banning a DID** (`ban DID --reason TEXT`) suspends every BBS it runs, or
-whose own account it is, and refuses it registering another, as sysop or as
-a BBS's account. `unban` lifts it; its BBSes stay suspended until each is
-resumed. Bans, suspensions and resumptions go in the moderation log
+**Probation and bans.** A suspension (`suspend NAME --reason TEXT`) is
+probation: the BBS stays registered, its sysop sees the reason on their
+page, and `resume` reinstates it. A ban (`ban DID --reason TEXT`) is for
+good: it removes every BBS the DID runs, or whose own account it is (their
+names are held as for any removed BBS), refuses it registering another, as
+sysop or as a BBS's account, and keeps the DID on the ban list until
+`unban`. Bans, suspensions and resumptions go in the moderation log
 (`space log`). A ban covers BBSes only: to keep the person out of the common
 space too, use `space block`.
 

@@ -62,18 +62,29 @@ describe('the registry', () => {
         assert.equal(registry.authenticate('coolbbs', token)?.name, 'coolbbs');
     });
 
-    it('a ban suspends every BBS a DID runs or is, and refuses it another', () => {
+    it('a suspension says why, for its sysop, until resumed', () => {
+        const registry = testRegistry();
+        registry.add('coolbbs', SysopDid);
+        const on = registry.setState('coolbbs', 'suspended', 'Spam in the\nfile areas');
+        assert.equal(on.stateReason, 'Spam in the file areas');
+        assert.equal(registry.setState('coolbbs', 'active', 'ignored').stateReason, null);
+        assert.equal(registry.setState('coolbbs', 'suspended').stateReason, null);
+    });
+
+    it('a ban removes every BBS a DID runs or is, for good, and refuses it another', () => {
         const registry = testRegistry();
         const { token } = registry.add('coolbbs', SysopDid);
         registry.add('second', SysopDid);
         registry.add('theirs', OtherSysopDid, BbsDid);
         registry.add('other', OtherSysopDid);
-        registry.setState('second', 'suspended');
+        registry.setState('second', 'suspended', 'on probation');
 
-        const { ban, suspended } = registry.banDid(SysopDid, 'spam');
-        assert.deepEqual(suspended, ['coolbbs'], 'only those still active');
+        const { ban, removed } = registry.banDid(SysopDid, 'spam');
+        assert.deepEqual(removed, ['coolbbs', 'second'], 'suspended ones too');
         assert.equal(ban.reason, 'spam');
+        assert.equal(registry.get('coolbbs'), null);
         assert.equal(registry.authenticate('coolbbs', token), null);
+        assert.ok(registry.heldUntil('coolbbs'), 'its name is held as for any removed BBS');
         assert.throws(() => registry.add('again', SysopDid), { code: 'banned' });
         assert.throws(
             () => registry.add('again', OtherSysopDid, SysopDid),
@@ -81,23 +92,36 @@ describe('the registry', () => {
             'nor as a BBS DID'
         );
         assert.throws(() => registry.setBbsDid('other', SysopDid), { code: 'banned' });
-        assert.throws(() => registry.setState('coolbbs', 'active'), { code: 'banned' });
 
         //  a banned BBS account takes its BBS with it, not its sysop's others
-        assert.deepEqual(registry.banDid(BbsDid).suspended, ['theirs']);
+        assert.deepEqual(registry.banDid(BbsDid).removed, ['theirs']);
         assert.equal(registry.get('other')?.state, 'active');
         assert.deepEqual(
             registry.bans().map(b => b.did),
             [SysopDid, BbsDid]
         );
 
-        //  lifted: may register again, but suspended BBSes wait to be resumed
+        //  lifted: may register again, under a new name
         registry.unbanDid(SysopDid);
-        assert.equal(registry.get('coolbbs')?.state, 'suspended');
-        assert.equal(registry.setState('coolbbs', 'active').state, 'active');
         assert.equal(registry.add('again', SysopDid).bbs.name, 'again');
         assert.throws(() => registry.unbanDid(SysopDid), { code: 'not-found' });
         assert.throws(() => registry.banDid('nope'), { code: 'bad-did' });
+    });
+
+    it("holds a removed BBS's name for 90 days, unless the admin frees it", () => {
+        let clock = new Date('2026-11-25T12:00:00Z');
+        const registry = testRegistry(() => clock);
+        registry.add('coolbbs', SysopDid);
+        registry.remove('coolbbs');
+        assert.equal(registry.heldUntil('coolbbs'), '2027-02-23T12:00:00.000Z');
+        assert.throws(() => registry.add('coolbbs', OtherSysopDid), { code: 'taken' });
+        clock = new Date('2027-02-23T12:00:01Z');
+        assert.equal(registry.add('coolbbs', OtherSysopDid).bbs.sysopDid, OtherSysopDid);
+
+        registry.remove('coolbbs');
+        assert.equal(registry.release('coolbbs'), true);
+        assert.equal(registry.release('coolbbs'), false);
+        assert.equal(registry.add('coolbbs', SysopDid).bbs.name, 'coolbbs');
     });
 
     it('a BBS DID belongs to one BBS', () => {

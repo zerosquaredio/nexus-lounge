@@ -503,7 +503,7 @@ it back after 28 s. 2 new tests for the public client.
 | Implements | Abuse reporting form and contact; suspend BBS and ban sysop DID; quotas and bandwidth limits; logging without content; metrics and alerting; database backups; terms of service and privacy notice (including the TLS-termination disclosure) |
 | Depends on | H3 |
 | Done when | Required before public launch: an abusive BBS can be suspended within minutes, logs contain no message content, and backups restore cleanly |
-| Status | **In progress.** Done: suspension cuts an open tunnel, and DIDs can be banned (2026-11-25); logs audited for content (2026-11-25); nightly backups to the dev VM and the NAS (2026-11-23), restored and checked (2026-11-25); a deploy script with rollback. Logs kept 3 months on the public hub (2026-11-25). Bandwidth limited per BBS (2026-11-25). Usage trends and a status for monitors (2026-11-25). Abuse report form (2026-11-25). To do: alerts (a monitoring service on the status), the abuse address's mail, terms of service and privacy notice |
+| Status | **In progress.** Done: suspension cuts an open tunnel, and DIDs can be banned (2026-11-25); logs audited for content (2026-11-25); nightly backups to the dev VM and the NAS (2026-11-23), restored and checked (2026-11-25); a deploy script with rollback. Logs kept 3 months on the public hub (2026-11-25). Bandwidth limited per BBS (2026-11-25). Usage trends and a status for monitors (2026-11-25). Abuse report form (2026-11-25). Terms of service and privacy notice drafted, with age and rating confirmations (2026-11-25). To do: alerts (a monitoring service on the status), the abuse address's mail, DMCA agent, a lawyer's review of the terms |
 
 **Suspension and bans** (2026-11-25). frp only checks heartbeats when its
 connections aren't multiplexed, so a suspended BBS's open tunnel stayed up
@@ -511,7 +511,12 @@ until frps restarted. Agents now send one every `tunnel.heartbeatSeconds`
 (20) and frps closes a tunnel with none accepted for three times that; the
 control plane refuses a suspended BBS's, as it already did. `ban DID`
 suspends every BBS the DID runs or is, and refuses it another; bans,
-suspensions and resumptions go in the moderation log. **Tested on the public
+suspensions and resumptions go in the moderation log. Later the same day,
+on the user's direction, a suspension became probation, with a reason shown
+to the sysop, and a ban became for good: it removes the DID's BBSes, holding
+their names, and keeps the DID on the ban list. Banned people can make new
+AT accounts; H9's approval queue and a minimum account age (from the PLC
+directory's record of when a DID was made) are the answer to that. **Tested on the public
 hub**: with both boards' agent configs given the heartbeat lines, both stayed
 connected past the timeout; suspending test2 cut its tunnel after 19 s (the
 agent drops the connection itself when its heartbeat is refused, and can't

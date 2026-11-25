@@ -82,12 +82,17 @@ sudo hubctl list                 # every BBS: state, and whether connected
 sudo hubctl show coolbbs         # one BBS in full
 ```
 
-### Suspending
+### Suspending (probation)
 
 ```sh
-sudo hubctl suspend coolbbs
+sudo hubctl suspend coolbbs --reason "reports of spam; write to us to sort it out"
 sudo hubctl resume coolbbs
 ```
+
+A suspension is probation while a problem is worked out: the BBS stays
+registered, and its sysop sees the reason on their page on the hub, with
+the abuse address to write to. Resuming it reinstates it. If it can't be
+worked out, ban its sysop (below), which removes it for good.
 
 Suspending a BBS takes effect at once for anything new: its agent can't log
 in or open routes, no certificate is made for its name, its page on the hub
@@ -136,6 +141,20 @@ reports presence to the hub, its copy of the token has to change too.
 status record is taken down. To keep someone from coming back, ban them
 first (below).
 
+### Terms, age and ratings
+
+The hub's terms of service and privacy notice are HTML files it serves at
+`/terms` and `/privacy` (`policy.termsFile` and `policy.privacyFile` in the
+config; the public hub's are in `hub/policy/`). People confirm the hub's
+minimum age (`policy.minimumAge`, 16 by default) and agree to those terms
+before signing in; sysops confirm their BBS's rating before registering.
+The age has to fit the ratings the directory lists (`directory.ratings`): 16
+or more for `mature`, 18 or more for `adult`. `policy.operator` names who
+runs the hub, at the foot of its front page.
+
+When a BBS is removed, its name is held for 90 days;
+`hubctl release NAME` frees it early.
+
 ## 4. Moderation
 
 The hub has two kinds of moderation, for two different things.
@@ -148,11 +167,16 @@ sudo hubctl bans
 sudo hubctl unban did:plc:...
 ```
 
-A ban is on a DID. It suspends every BBS that DID runs as sysop, or whose own
-account it is, so their tunnels are cut within a minute; and it refuses that
-DID registering another BBS, as sysop or as a BBS's account. A ban doesn't
-end on its own. Unbanning leaves the BBSes suspended: resume each one that
-should come back.
+A ban is for good, and on a DID. It removes every BBS that DID runs as sysop,
+or whose own account it is, so their tunnels drop within a minute and their
+names are held for 90 days; and it refuses that DID registering another BBS,
+as sysop or as a BBS's account. The DID stays on the ban list until you
+`unban` it, which lets it register again but brings nothing back.
+
+A ban stops an account, not a person: someone banned can make a new AT
+account and try again. While registration is by arrangement with the admin
+(`registration.open` is `false`), that's caught at the door; before opening
+it, the plan adds an approval queue and a minimum account age (H9).
 
 ### Abuse reports
 
