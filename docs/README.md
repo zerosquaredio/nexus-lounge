@@ -41,7 +41,7 @@ hub.
 | Doc | Covers |
 |---|---|
 | [development_plan.md](development/development_plan.md) | Features, delivery tracks (upstream / fork / mods / this repo), configuration model, milestones, PR sequence |
-| [hub_development_plan.md](development/hub_development_plan.md) | Hub features H0–H24, architecture (Caddy, frp, TypeScript control plane), milestones, testing, deployment |
+| [hub_development_plan.md](development/hub_development_plan.md) | Hub features H0–H25, architecture (Caddy, frp, TypeScript control plane), milestones, testing, deployment |
 | [hub.md](development/hub.md) | Optional central hub: tunnel relay, sysop registration, routing, directory |
 | [live_model.md](development/live_model.md) | The hub's common space as a live stream: who is there, where, and who is together, for its map and the BBS door |
 | [enigma_integration.md](development/enigma_integration.md) | How the specs map onto ENiGMA½: login type, routes, groups as attestations, transport, upstream strategy |

@@ -814,12 +814,21 @@ serves a library baked by the admin):
 | Done when | Two people in different places don't hear each other, walk to the same one, and do; one of them in a terminal |
 | Status | Ideas (2026-11-25) |
 
+### H25. Models on the hub: the first 3D slice
+
+| | |
+|---|---|
+| Implements | [build_3d_slice.md](build_3d_slice.md): BBSes publish 3D models (binary glTF, class `light`) with a preview picture; the hub checks and measures them with its own checker (`gltf.ts`), keeps and serves the cleaned file, lists them in the gallery by their preview, and shows each on a page of its own with a viewer (a pinned three.js, served by the hub) that plays its animations; blocking, reports, withdrawal, refusal and caps as for ANSI art (H20). `assets.models` (off by default) |
+| Depends on | H20; F21 for the fork's publishing |
+| Done when | A board publishes a model from its own account and someone turns it and plays its animation on the hub's page, in a browser, with nothing fetched from anywhere but the hub |
+| Status | **Specified, decisions made, stage 0 done** (2026-11-26): Bluesky's host accepts model files as blobs up to the 8 MB tried. Built in three stages, with trials after each ([trials.md](trials.md) §2) |
+
 ### H24. Compute (later)
 
 | | |
 |---|---|
 | Implements | The [compute spec](compute.md): driven models and object state in the live model; WebAssembly programs run by the hub within its admin's limits (`compute.*`), with fuel metering; capacity reports from BBSes and resource nodes; placement in a configurable order (the hub first, then the owner's own compute, their group, their BBS, a node) and moving programs between places; trust in shared results |
-| Depends on | H16 (live model), H20 and the first glTF slice of the assets spec; H21 for nodes; F18's reports for capacity |
+| Depends on | H16 (live model), H20 and the first 3D slice (H25); H21 for nodes; F18's reports for capacity |
 | Done when | A 3D object driven by a streaming feed moves for everyone looking at it, its program running on the hub until the hub's budget is full, then on its owner's node, without the viewers noticing the move |
 | Status | Ideas (2026-11-26), from looking at live 3D explainers (an animated mechanical watch) and real-time 3D infographics |
 

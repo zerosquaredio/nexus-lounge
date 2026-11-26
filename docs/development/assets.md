@@ -80,7 +80,9 @@ duplicating them.
 
 ### 3.1 Asset: `nexus.cyberspace.asset.item`
 
-One record per asset (record key: a TID).
+One record per asset. Its record key is the SHA-256 of its first
+version's file (as the fork and the hub have it since F21, 2026-11-26):
+publishing the same file twice then makes one record, not two.
 
 | Field | Type | Notes |
 |---|---|---|
@@ -104,7 +106,8 @@ One record per asset (record key: a TID).
 |---|---|---|
 | `form` | string | §2: `ansi`, `icon`, `image`, `panorama`, `sprite`, `model`, … |
 | `class` | string | Models only: `light`, `standard` or `full` (world.md §2.2) |
-| `file` | object | Either `blob` (an AT blob in this repo) or `{ url, sha256, size, mediaType }` (§4.2) |
+| `file` | object | `{ sha256, size, mediaType }`: what the file is, whoever serves it. For a file outside the repo, also `url` (§4.2) |
+| `blob` | blob | The file as an AT blob in this repo, beside `file` (the usual case) |
 | `data` | object | Optional second file, the same way: a sprite sheet's frame data |
 | `budget` | object | Measured, for models and sprites: `triangles`, `textureBytes`, `drawCalls`, `bones`, `frames` |
 | `size` | object | Pixels or characters: `width`, `height` |
@@ -359,11 +362,16 @@ Once per hash, before anything is served:
    - **Images:** decoded and re-encoded, which strips metadata (including
      location data in photos) and anything hidden after the image.
    - **SVG** is never served as SVG: the hub rasterizes it to PNG.
-   - **Models:** checked with the glTF validator; no external references, no
-     scripts; extensions only from an allowed list (VRM, meshopt, KTX2 and
-     the like).
-4. **Measure** budgets for models and sprites, and compare with the
-   record's figures (which are only the publisher's word).
+   - **Models:** checked by the hub's own checker, rule by rule
+     ([build_3d_slice.md](build_3d_slice.md) §4): a well-formed binary
+     glTF and nothing after it; no external references, not even `data:`
+     addresses; every reference within the file; extensions it requires
+     only from an allowed list (in the first slice, none of the
+     compressed formats, nor VRM); its images cleaned as images are. The
+     hub serves the cleaned model, named by its own hash.
+4. **Measure** budgets for models and sprites. The hub's own measurement
+   decides; a record's figures are only the publisher's word, and are
+   ignored. Over budget is refused, with the figure.
 5. **Apply rules:** the rating against the hub's and the place's, the
    licence and permissions (§7), the hub's blocklist (§9), its caps and
    the publisher's quota.
@@ -383,7 +391,7 @@ Suggested starting caps, to be tuned with use:
 | `icon` | 256 KB, 512 × 512 |
 | `image`, `panorama` | 2 MB, 4096 px on a side |
 | `sprite` | 4 MB |
-| `model` `light` / `standard` / `full` | 8 / 25 / 100 MB, with budgets per class (world.md §2.2) |
+| `model` `light` / `standard` / `full` | 8 / 25 / 100 MB, with a budget per class. `light`, provisionally ([trials.md](trials.md)): 30,000 triangles, 32 draw calls, 4 MB of textures at up to 1024 pixels a side, 64 bones, 16 animations of up to 60 seconds. The others when they are built |
 
 ### 6.4 Serving
 
