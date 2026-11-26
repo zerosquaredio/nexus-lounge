@@ -702,12 +702,42 @@ in.
 
 | | |
 |---|---|
-| Implements | The BBS's side of the [assets spec](assets.md) (§4.3): an `assets` section in its config (each piece's files, description, rating, licence, permissions and credit); its ANSI art published from the BBS's own AT account as blobs and asset records, the way it publishes its listing (F9); the listing's `emblem`, pointing to the asset that stands for the BBS (its logo); its own **view** (assets spec §3.6: colours, fonts, how art is drawn), which the hub's menu then offers; large files served under `/assets/<sha256>`; and an `oputil` command to publish an art pack at once. Baking (cleaning the art, drawing its pictures) is the hub's baker for now (hub H20); later the BBS bakes its own |
+| Implements | The BBS's side of the [assets spec](assets.md) (§4.3): an `assets` section in its config (each piece's files, description, rating, licence, permissions and credit); its ANSI art published from the BBS's own AT account as blobs and asset records, the way it publishes its listing (F9); the listing's `emblem`, pointing to the asset that stands for the BBS (its logo), and its `splash`, the screen it greets callers with (below), which the hub's directory and the BBS's page show; its own **view** (assets spec §3.6: colours, fonts, how art is drawn), which the hub's menu then offers; large files served under `/assets/<sha256>`; and an `oputil` command to publish an art pack at once. Baking (cleaning the art, drawing its pictures) is the hub's baker for now (hub H20); later the BBS bakes its own |
 | Track | **Fork-only** (hub integration) |
-| Config | `atProto.publishing.assets` (to be drafted): the pieces, and which is the emblem |
+| Config | `atProto.publishing.assets` (to be drafted): the pieces, and which are the emblem and the splash |
 | Depends on | F9 (the BBS's AT account); hub H20 |
-| Done when | A test board's emblem appears on the hub's map |
+| Done when | A test board's splash appears on the hub's directory, and its emblem on the hub's map, both from the board itself |
 | Status | Planned (2026-11-25); the test boards' own accounts are connected (F9), so it can start |
+
+**The splash: consent once, the login screen by default** (decided
+2026-11-26):
+
+- **Consent at setup.** The sysop is asked once, when connecting the
+  board's account on the `BA` screen (and in the first-run setup of the
+  ready-made images, F17): "Show this board's login screen on the hub?
+  It's shown with its artist's credit; you can choose another piece, or
+  none, at any time." Yes by default. The answer and when it was given are
+  kept, and a setting changes it later.
+- **The login screen itself, by default.** The fork takes the art its login
+  menu shows, from whatever theme the board uses, so nobody has to choose.
+  Files are named by their content, so a new theme or new art is offered
+  by itself. The sysop can name another piece, or none.
+- **The board offers the file as it is; the hub bakes it.** The board
+  serves the raw file at `/assets/<sha256>` through its tunnel and names
+  it (hash, size, credit) in its listing's `splash`. The hub fetches it and
+  runs the baker it already has: ENiGMA½'s menu codes blanked, so no live
+  data (node counts, dates, addresses) is shown; the art cleaned; its
+  pictures drawn; its credit from SAUCE. So the fork needs no ANSI code,
+  and every board's art passes the same checks. No AT blob is needed for
+  it, which leaves the blob question (step 1 below) to the rest of the art.
+- **Not covered by consent:** the artist's rights, when the art isn't the
+  sysop's. Boards on ENiGMA½'s stock theme show Luciano Ayres's art, so
+  the hub asks him and Blocktronics before showing it, and its terms need
+  their section on assets first (hub plan §5.2, item 9).
+- **Later, an option:** a hub capturing what a board actually sends up to
+  its login prompt, for boards not running the fork, by the board's
+  opt-in. It needs a small terminal emulator, patience with slow-drawn
+  screens, and the same blanking of live data.
 
 **First, before any code** (found reviewing the plans, 2026-11-25):
 

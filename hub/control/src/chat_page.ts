@@ -5,22 +5,15 @@
 //  from others only ever reaches the page as text.
 
 import { Cp437 } from './ansi.ts';
-import { Palette } from './ansi_image.ts';
+import { AnsiColours, VgaFontPath } from './art_html.ts';
 import { esc } from './html.ts';
+
+export { VgaFontPath };
 
 export const ChatScriptPath = '/space/chat.js';
 export const MaxLabelLookups = 50;
 //  an IRC line has room for about this much text
 export const MaxChatMessage = 400;
-//  The IBM VGA font, for art drawn as characters: VileR's, CC BY-SA 4.0,
-//  served unchanged (fonts/LICENSE-int10h.txt)
-export const VgaFontPath = '/fonts/vga-8x16.woff';
-
-//  The VGA colours, as classes for art drawn as characters (the ANSI view)
-const AnsiColours = Palette.map(([r, g, b], i) => {
-    const hex = `#${[r, g, b].map(v => v.toString(16).padStart(2, '0')).join('')}`;
-    return `.ansi .f${i} { color: ${hex}; } .ansi .b${i} { background: ${hex}; }`;
-}).join('\n');
 
 //  The chat itself, for its own page or beside the map (space_page.ts).
 //  wait: join only when asked, not as soon as the page opens

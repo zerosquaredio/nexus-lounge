@@ -152,6 +152,16 @@ and `/art NAME` to the chat, and serves the IBM VGA web font for it
 (**Art as**: pictures, ANSI drawn as characters, or text), remembered in
 their browser.
 
+**Splash screens.** `assets.splashes` gives a BBS its splash screen, the
+screen it greets callers with, as a piece of that art by name or short id
+(`{ "coolbbs": "Welcome" }`; a name is its SAUCE title, or its file name).
+The directory shows each BBS with its splash, small, and the BBS's own page
+shows it full size with its credit, each drawn as the viewer's view says:
+a picture, ANSI as coloured characters in the VGA font (drawn by the hub,
+so it needs no scripts), or a description. A splash naming art the hub
+doesn't have is logged at start and left out. Until BBSes publish their own
+(development plan F21), the hub's admin chooses them.
+
 ### Views
 
 Every page has a **View** menu in its header (`src/views.ts`, [assets
@@ -159,8 +169,13 @@ spec](../docs/development/assets.md) §3.6): Hub, BBS (black, the VGA font,
 ANSI art) and Pink and white. A view is data, colours for the pages' slots,
 fonts, how art is drawn and ANSI colours, from which the hub builds the
 CSS; its text must pass WCAG's contrast ratio (a test checks the hub's own).
-Sign-in, token and report pages keep the hub's own look under any view. The
-choice is kept in a `hub_view` cookie.
+Every page follows it, sign-in, token and report pages included, and so
+do BBSes' own pages at their addresses, whose menu sends the choice to the
+hub's site and comes back. The choice is kept in a `hub_view` cookie, for
+the hub's whole domain when its site is at that domain, so BBSes' pages
+see it too (it holds only the view's name). The hub also serves the VGA
+font at each BBS's address, for its page, and lets those pages show the
+hub's art (`Cross-Origin-Resource-Policy: same-site`).
 
 ### Observed status
 

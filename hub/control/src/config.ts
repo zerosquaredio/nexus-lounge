@@ -18,8 +18,10 @@ export interface HubConfig {
     policy: { operator: string; minimumAge: number; termsFile: string; privacyFile: string };
     //  art the hub offers (assets spec, a first slice): a directory made by
     //  the baker ("npm run bake"), served at /assets and shown at /art and in
-    //  the chat; "" for none
-    assets: { library: string };
+    //  the chat; "" for none. splashes: each BBS's splash screen, by its
+    //  name, as a piece of that art (its name or short id), shown on the
+    //  directory and the BBS's page until BBSes publish their own (F21)
+    assets: { library: string; splashes: Record<string, string> };
     //  the control plane's own HTTP listener: frp's hooks, Caddy's
     //  certificate check, and handle verification (through the edge).
     //  Never public.
@@ -227,7 +229,7 @@ export const Defaults: HubConfig = {
     edge: { tls: 'internal', bindAddr: '127.0.0.1', httpPort: 7081, httpsPort: 7443 },
     contact: { abuse: '' },
     policy: { operator: '', minimumAge: 16, termsFile: '', privacyFile: '' },
-    assets: { library: '' },
+    assets: { library: '', splashes: {} },
     registration: {
         open: true,
         approval: true,
@@ -367,6 +369,15 @@ export function makeConfig(overrides: Partial<Record<keyof HubConfig, unknown>> 
             'config',
             'tunnel.bandwidthLimit is like "1MB" or "500KB" (a second), or "" for none'
         );
+    }
+    const splashes = config.assets.splashes;
+    if (
+        null === splashes ||
+        'object' !== typeof splashes ||
+        Array.isArray(splashes) ||
+        Object.values(splashes).some(v => 'string' !== typeof v)
+    ) {
+        throw new HubError('config', 'assets.splashes maps BBS names to pieces of art: { "coolbbs": "WELCOME" }');
     }
     if (('' === config.tunnel.tlsCertFile) !== ('' === config.tunnel.tlsKeyFile)) {
         throw new HubError('config', 'tunnel.tlsCertFile and tunnel.tlsKeyFile go together: both or neither');

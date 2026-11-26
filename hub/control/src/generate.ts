@@ -1,6 +1,7 @@
 //  Config files generated from the hub's config and rules.ts, so the edge,
 //  the tunnel server and every agent agree on names, ports and paths.
 
+import { VgaFontPath } from './art_html.ts';
 import { chatDomain, ChatSecretEnv } from './chat.ts';
 import { FrpsAdminPasswordEnv, type HubConfig } from './config.ts';
 import { BbsExactPaths, BbsPrefixPaths, OddPathRe2 } from './rules.ts';
@@ -202,8 +203,9 @@ ${tls}
 			reverse_proxy ${control}
 		}
 
-		#  served by the hub, not the BBS: its page, and the web terminal
-		@hubpage path / /_enig/ws-term /_enig/ws-term/*
+		#  served by the hub, not the BBS: its page, the font that page and
+		#  views use, and the web terminal
+		@hubpage path / ${VgaFontPath} /_enig/ws-term /_enig/ws-term/*
 		handle @hubpage {
 			reverse_proxy ${config.site.host}:${config.site.port} {
 				header_up -X-Real-IP

@@ -230,6 +230,15 @@ account (publishing spec §2). It gains:
   written, changed records updated, removed ones deleted;
 - a listing field, **`emblem`**: a strongRef to the asset that represents
   the BBS in the space (its logo; an `ansi` version at least);
+- a listing field, **`splash`**: its splash screen, the screen it greets
+  callers with, which the hub shows on its directory and the BBS's page.
+  With the sysop's consent, given once at setup, the fork offers by
+  default the art its login menu shows. It names the raw file (its hash,
+  size and credit), served at `/assets/<sha256>`, and the hub bakes it as
+  it fetches it: menu codes blanked (as the baker's `--mci` does), so no
+  live data is shown, then cleaned and drawn like any art (development plan
+  F21). Until boards offer one, a hub's admin can choose it from the hub's
+  own art (hub plan H20);
 - large files served by its web server under `/assets/<sha256>`;
 - an `oputil` command to publish an art pack in one go, as a catalogue.
 

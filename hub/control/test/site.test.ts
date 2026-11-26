@@ -854,6 +854,7 @@ describe('the art the hub offers (assets, a first slice)', () => {
         assert.equal(png.headers['cache-control'], 'public, max-age=31536000, immutable');
         assert.equal(png.headers['content-security-policy'], "default-src 'none'; sandbox");
         assert.equal(png.headers['x-content-type-options'], 'nosniff');
+        assert.equal(png.headers['cross-origin-resource-policy'], 'same-site');
         assert.equal((await call('GET', item.ansi)).headers['content-type'], 'text/x-ansi');
         assert.equal((await call('GET', `/assets/${'0'.repeat(64)}`)).status, 404);
         assert.equal((await call('GET', '/assets/../library.json')).status, 404);
@@ -903,13 +904,16 @@ describe('views (how a person sees the hub)', () => {
         assert.equal(font.status, 200, 'the font views use is there without art');
     });
 
-    it('keeps the plain hub look where people sign in or see tokens, and goes back only to this hub', async () => {
+    it('follows the view where people sign in or see tokens too, and goes back only to this hub', async () => {
         await start(false);
         const signin = await call('GET', '/signin', { cookie: 'hub_view=bbs' });
-        assert.doesNotMatch(signin.body, /data-view=|<form class="inline view-pick"|--bg: #000000/);
+        assert.match(signin.body, /data-view="bbs"[\s\S]*--bg: #000000[\s\S]*<form class="inline view-pick"/);
         const cookie = await signedIn();
         const bbs = await call('GET', '/bbs', { cookie: `${cookie}; hub_view=bbs` });
-        assert.doesNotMatch(bbs.body, /data-view=|<form class="inline view-pick"/);
+        assert.match(bbs.body, /data-view="bbs"[\s\S]*<form class="inline view-pick"/);
+        //  the site here isn't at the hub's domain, so the cookie stays its own
+        const chose = await call('POST', '/view', { form: { view: 'bbs', back: '/' } });
+        assert.doesNotMatch(String(chose.headers['set-cookie']), /Domain=/);
         for (const back of ['//evil.example/', 'https://evil.example/', '/\\evil.example']) {
             const away = await call('POST', '/view', { form: { view: 'bbs', back } });
             assert.equal(away.location, '/', back);

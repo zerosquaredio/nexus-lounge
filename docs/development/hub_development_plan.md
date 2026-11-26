@@ -373,7 +373,7 @@ it to its registered name. 85 unit tests.
   is given the accounts in its address, which keeps it to a few hundred).
 
 Still open, for the public server (the first two are requirements for
-public launch, §5.2):
+public launch, §5.2; both done 2026-11-26):
 
 - **The agent's connection.** Agents must use TLS (the tunnel server
   refuses them otherwise, tested), but don't yet check the hub's
@@ -396,7 +396,7 @@ public launch, §5.2):
 |---|---|
 | Implements | Caddy with on-demand TLS (certificates only for registered names); host-based routing to frps; the endpoint allowlist from [hub.md](hub.md) §4; WebSocket passthrough with keepalive; per-BBS rate limits; 404 for everything else |
 | Depends on | H0 |
-| Status | **Working on the public hub** (2026-11-22; locally 2026-11-09), with public certificates made on demand. Open: cookies a BBS sets for the whole hub domain (§5.2) |
+| Status | **Working on the public hub** (2026-11-22; locally 2026-11-09), with public certificates made on demand. Cookies a BBS sets keep to its own name (2026-11-26, §5.2) |
 | Done when | Allowed paths reach the BBS; all other paths return 404 without touching the tunnel; WebSocket sessions survive idle periods |
 
 ### H2. Tunnel server and agent
@@ -405,7 +405,7 @@ public launch, §5.2):
 |---|---|
 | Implements | `frps` with authentication delegated to the control plane through the server plugin (tokens validated, subdomain and paths enforced); `frpc` config templates for ENiGMA½; agent setup script; reconnection behavior |
 | Depends on | H0.2 |
-| Status | **Working on the public hub** (2026-11-22; locally 2026-11-09), with heartbeats since H8. Open: the agent doesn't check the hub's certificate (§5.2) |
+| Status | **Working on the public hub** (2026-11-22; locally 2026-11-09), with heartbeats since H8. Agents check the hub's certificate (2026-11-26, §5.2) |
 | Done when | A BBS's agent connects with its token, can serve only its own subdomain and allowed paths, and reconnects automatically after network loss or hub restart |
 
 ### H3. Sysop registration and BBS registry
@@ -731,7 +731,7 @@ record how each part was first built and tested.
 
 | | |
 |---|---|
-| Implements | The first slice of the [assets spec](assets.md) (its §11, step 1), starting with ANSI art. **The baker** (`npm run bake`): ANSI files in; out, named by the SHA-256 of their bytes, the art cleaned (written out again from a grid of characters, so nothing but characters, colours and line ends survives), a PNG drawn with the web terminal's VGA font, a half-size one, its plain text, and a catalogue of asset records in the spec's draft shapes. **The hub** (`assets.library`): loads a baked library and checks every file again (its hash, its size, its format, ANSI clean by the spec's rule rather than by matching our own writer, versions of kinds it doesn't serve passed over, so art from any version of the baker or another tool is taken alike; assets spec §3.5) before serving any of it at `/assets/<sha256>`; a gallery at `/art` with credit and licence; and art in the chat: an **Art** button and `/art NAME` share a piece, which every browser in the room draws, and a door shows as text. Each person chooses how they see art (**Art as**: pictures, ANSI drawn as coloured characters, or text, its description with the art's text on request), remembered in their browser. **Views** ([assets spec](assets.md) §3.6): a **View** menu in every page's header (a form, so it works without scripts, kept in a cookie) restyles the whole hub from data, colours for its slots, fonts, how art is drawn and ANSI colours, never from a leaf's CSS, with text that must pass WCAG's contrast ratio, and sign-in, token and report pages left plain. The hub's own views: Hub, BBS (black, VGA font, ANSI art) and Pink and white (ANSI art recoloured as it's drawn); leaves' views come with F21. These are the levels of [One World at Every Level](https://github.com/zerosquaredio/cyberspace-framework/blob/main/docs/world.md) in miniature, each made from one of the baked versions. **Then:** a BBS's emblem on the map, from its listing (F21) through Jetstream, in place of the library |
+| Implements | The first slice of the [assets spec](assets.md) (its §11, step 1), starting with ANSI art. **The baker** (`npm run bake`): ANSI files in; out, named by the SHA-256 of their bytes, the art cleaned (written out again from a grid of characters, so nothing but characters, colours and line ends survives), a PNG drawn with the web terminal's VGA font, a half-size one, its plain text, and a catalogue of asset records in the spec's draft shapes. **The hub** (`assets.library`): loads a baked library and checks every file again (its hash, its size, its format, ANSI clean by the spec's rule rather than by matching our own writer, versions of kinds it doesn't serve passed over, so art from any version of the baker or another tool is taken alike; assets spec §3.5) before serving any of it at `/assets/<sha256>`; a gallery at `/art` with credit and licence; and art in the chat: an **Art** button and `/art NAME` share a piece, which every browser in the room draws, and a door shows as text. Each person chooses how they see art (**Art as**: pictures, ANSI drawn as coloured characters, or text, its description with the art's text on request), remembered in their browser. **Views** ([assets spec](assets.md) §3.6): a **View** menu in every page's header (a form, so it works without scripts, kept in a cookie) restyles the whole hub from data, colours for its slots, fonts, how art is drawn and ANSI colours, never from a leaf's CSS, with text that must pass WCAG's contrast ratio, on every page (sign-in, token and report pages too, since 2026-11-26) and on BBSes' own pages at their addresses. The hub's own views: Hub, BBS (black, VGA font, ANSI art) and Pink and white (ANSI art recoloured as it's drawn); leaves' views come with F21. These are the levels of [One World at Every Level](https://github.com/zerosquaredio/cyberspace-framework/blob/main/docs/world.md) in miniature, each made from one of the baked versions. **Splash screens** (2026-11-26): each BBS on the directory with its splash screen, small, and full size on its own page, drawn as the viewer's view says (the hub draws ANSI as coloured characters itself, so the pages need no scripts); chosen from the hub's art by its admin (`assets.splashes`) until BBSes publish their own. **Then:** a BBS's emblem and splash from its listing (F21) through Jetstream, in place of the library |
 | Depends on | H15 (chat), H17 (map); F21 for emblems |
 | Privacy | Art and its records are public; sharing a piece in the chat is a message like any other |
 | Done when | A BBS publishes its ANSI logo and the hub's map draws its board with it; until then, art from a library can be shared in the chat |
@@ -746,6 +746,8 @@ serves a library baked by the admin):
 - Fetching blobs from account servers and files from boards
   (`/assets/<sha256>` through the tunnel, a path to add, §5.2), with the
   directory's guarded fetcher, then the checks the library already gets.
+  A board's splash comes raw, as its login menu shows it, and the hub
+  bakes it on arrival (development plan F21).
 - Caps and quotas for each publisher, and withdrawal when a record goes
   ([assets spec](assets.md) §6.3, §6.5).
 - Moderation before any of it is public: `hubctl asset block`, `hubctl
@@ -815,16 +817,18 @@ Gathered 2026-11-25, reviewing the plans. Opening registration to outside
 sysops waits for all of these. The first four are faults or gaps; the rest
 are things far cheaper to settle while every board is ours.
 
-1. **Cookies for the whole hub domain.** A BBS can set a cookie with
-   `Domain=` the hub's domain, which browsers then send to the hub's own
-   site and every other BBS. The edge drops any `Set-Cookie` from a BBS
-   that names a domain (BBSes' own cookies are host-only, F14), or the
-   hub's domain goes on the Public Suffix List; the first is ours to do and
-   quick.
-2. **The agent checks the hub's certificate.** The tunnel is encrypted, but
-   the agent would accept anyone's certificate, and its token crosses that
-   connection. The tunnel server gets a real certificate and the generated
-   agent config names it; or the tunnel moves to `wss://` on 443.
+1. ~~**Cookies for the whole hub domain.**~~ **Done** (2026-11-26): the
+   edge strips the `Domain` attribute from every cookie a BBS sets, so
+   each stays with that BBS's own name. Tested with real Caddy (three
+   spellings of the attribute stripped, the rest of each cookie kept) and
+   live on the public hub.
+2. ~~**The agent checks the hub's certificate.**~~ **Done** (2026-11-26):
+   frps presents the edge's Let's Encrypt certificate for the hub's name
+   (`tunnel.tlsCertFile`, copied daily by `scripts/tunnel-cert.sh`, which
+   restarts frps when it renews), and agent configs check it against the
+   system's authorities before sending their token. Tested with real frp:
+   refused for a self-made certificate, another name, or an unknown
+   authority. Both public test boards' agents check it.
 3. **A sysop's guide to joining** (development plan F17, first part).
 4. **The operator's list:** a lawyer's review of the terms, the abuse
    address (`contact.abuse`) and an uptime monitor.

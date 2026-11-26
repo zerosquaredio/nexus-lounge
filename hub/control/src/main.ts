@@ -130,6 +130,11 @@ if (config.assets.library) {
         log(`assets: can't load ${config.assets.library}: ${(e as Error).message}`);
     }
 }
+for (const [bbs, piece] of Object.entries(config.assets.splashes)) {
+    if (!art?.find(piece)) {
+        log(`assets: no art named ${piece} for ${bbs}'s splash; its pages go without`);
+    }
+}
 const site = createSite({
     config,
     registry,

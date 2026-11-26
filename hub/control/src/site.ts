@@ -61,9 +61,10 @@ import { MapPagePath, spacePageBody, SpaceScript, SpaceScriptPath } from './spac
 import type { HubConfig } from './config.ts';
 import { HubError } from './errors.ts';
 import { AbuseKinds, AbuseReports, MaxContact, MaxDetails } from './abuse.ts';
-import { artJson, ArtJsonPath, artPageBody, ArtPath } from './art_page.ts';
-import { viewById, viewCss, ViewCookie, ViewPath, viewPicker, Views } from './views.ts';
-import type { AssetLibrary } from './assets.ts';
+import { artJson, ArtJsonPath, artPageBody, ArtPath, creditLine } from './art_page.ts';
+import { artHtml, ArtStyle } from './art_html.ts';
+import { type View, viewById, viewCss, ViewCookie, ViewPath, viewPicker, Views } from './views.ts';
+import type { AssetLibrary, PublicItem } from './assets.ts';
 import { agentConfig } from './generate.ts';
 import { esc, page } from './html.ts';
 import { MaxApplicationNote, type Application, type Bbs, type Registry } from './registry.ts';
@@ -273,37 +274,87 @@ export function createSite(deps: SiteDeps): Site {
             'Referrer-Policy': 'same-origin',
             //  forms post here, and sign-in then redirects to the account host
             'Content-Security-Policy':
-                "default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; font-src 'self'; form-action 'self' https:; frame-ancestors 'none'; base-uri 'none'",
+                `default-src 'none'; style-src 'unsafe-inline'; img-src 'self' ${config.site.publicUrl}; font-src 'self'; form-action 'self' https:; frame-ancestors 'none'; base-uri 'none'`,
             ...headers,
         });
         res.end(withView(res, html));
     }
 
-    //  The viewer's view (views.ts), on every page the hub makes, but for
-    //  pages where people sign in, see tokens or report abuse: those keep
-    //  the hub's own look whatever the view, so nothing on them can be
-    //  mistaken
+    //  The viewer's view (views.ts), on every page the hub makes, its
+    //  sign-in, token and report pages included, and on BBSes' own pages
+    //  at their addresses, where the menu sends the choice to the hub's
+    //  site and comes back. A view is only colours, fonts and how art is
+    //  drawn (views.ts), so it can't hide or fake anything on a page
     function withView(res: ServerResponse, html: string): string {
         if (!html.includes('<!--hub:view-pick-->')) {
             return html;
         }
         const req = res.req;
         const path = new URL(req?.url ?? '/', 'http://hub').pathname;
-        const plain =
-            '/signin' === path ||
-            path.startsWith('/oauth') ||
-            '/bbs' === path ||
-            path.startsWith('/bbs/') ||
-            '/report' === path;
-        if (plain) {
-            return html.replace('<!--hub:view-pick-->', '');
-        }
-        const view = viewById(req ? cookies(req)[ViewCookie] : undefined);
-        const back = 'GET' === req?.method ? path : '/';
+        const view = viewOf(req);
+        const label = labelForHost(req?.headers.host, config.domain);
+        const picker = label
+            ? viewPicker(view, `${hubUrl(`${label}.${config.domain}`)}/`, `${config.site.publicUrl}${ViewPath}`)
+            : viewPicker(view, 'GET' === req?.method ? path : '/');
         return html
             .replace('<html lang="en">', `<html lang="en" data-view="${view.id}" data-art="${view.art}">`)
             .replace('</head>', `<style>${viewCss(view)}</style>\n</head>`)
-            .replace('<!--hub:view-pick-->', viewPicker(view, back));
+            .replace('<!--hub:view-pick-->', picker);
+    }
+
+    function viewOf(req: IncomingMessage | undefined): View {
+        return viewById(req ? cookies(req)[ViewCookie] : undefined);
+    }
+
+    //  The view cookie: for the hub's whole domain when its site is at that
+    //  domain, so BBSes' own pages (name.domain) follow it too. It holds a
+    //  view's id and nothing else; BBSes see it, as they would any cookie
+    //  for the domain, and it tells them only how someone likes the hub
+    //  drawn
+    function viewCookie(id: string): string {
+        const host = new URL(config.site.publicUrl).hostname;
+        const domain = host === config.domain ? `; Domain=${config.domain}` : '';
+        return `${ViewCookie}=${id}; Path=/${domain}; SameSite=Lax; Max-Age=${365 * 24 * 60 * 60}${
+            secure ? '; Secure' : ''
+        }`;
+    }
+
+    //  Where the view menu may send someone back to: a page of this hub's
+    //  site, or a BBS's own page at its address on this hub
+    function viewBack(back: string): string {
+        if (/^\/(?![/\\])/.test(back)) {
+            return back;
+        }
+        try {
+            const label = labelForHost(new URL(back).host, config.domain);
+            if (label && `${hubUrl(`${label}.${config.domain}`)}/` === back) {
+                return back;
+            }
+        } catch {
+            //  not a URL
+        }
+        return '/';
+    }
+
+    //  Whether a form came from a BBS's own page on this hub (name.domain).
+    //  Only the view menu may be posted from there
+    function fromBoardPage(origin: string | undefined): boolean {
+        if (!origin) {
+            return false;
+        }
+        try {
+            const label = labelForHost(new URL(origin).host, config.domain);
+            return !!label && hubUrl(`${label}.${config.domain}`) === origin;
+        } catch {
+            return false;
+        }
+    }
+
+    //  A BBS's splash screen, as the hub's admin chose it from the hub's art
+    //  (assets.splashes), until BBSes publish their own (F21)
+    function splashFor(bbs: Bbs): PublicItem | null {
+        const name = config.assets.splashes[bbs.name];
+        return art && name ? art.find(name) : null;
     }
 
     function redirect(res: ServerResponse, location: string, headers: Record<string, string> = {}): void {
@@ -1111,7 +1162,12 @@ it is your BBS's password on this hub. If you lose it, come back for a new token
             );
         }
         if ('/' === path) {
-            return send(res, 200, boardPage(bbs));
+            return send(res, 200, boardPage(bbs, viewOf(req)));
+        }
+        //  the font views and art use, here as on the hub's site, so the
+        //  BBS's page can use it as its own
+        if (VgaFontPath === path && VgaFont) {
+            return sendFont(req, res);
         }
         const webterm = deps.webterm;
         if (webterm && `${WebTermPath}config.json` === path) {
@@ -1148,6 +1204,16 @@ it is your BBS's password on this hub. If you lose it, come back for a new token
         res.end('HEAD' === req.method ? undefined : found.file.body);
     }
 
+    function sendFont(req: IncomingMessage, res: ServerResponse): void {
+        res.writeHead(200, {
+            'Content-Type': 'font/woff',
+            'Content-Length': String(VgaFont!.length),
+            'Cache-Control': 'public, max-age=86400',
+            'X-Content-Type-Options': 'nosniff',
+        });
+        res.end('HEAD' === req.method ? undefined : VgaFont);
+    }
+
     function lastSeen(bbs: Bbs): string {
         if (bbs.connected) {
             return '<p><strong>Online</strong> now.</p>';
@@ -1160,15 +1226,23 @@ it is your BBS's password on this hub. If you lose it, come back for a new token
             : "<p><strong>Offline.</strong> It hasn't connected to the hub yet.</p>";
     }
 
-    function boardPage(bbs: Bbs): string {
+    function boardPage(bbs: Bbs, view: View): string {
         const connect = deps.webterm
             ? `<p><a href="${WebTermPath}?connect=1">Connect in your browser</a></p>`
             : '';
         const entry = deps.directory?.forBbs(bbs) ?? null;
         const title = entry ? entry.listing.name : `${bbs.name}.${config.domain}`;
+        const splash = splashFor(bbs);
         return page(
             title,
             `${entry ? `<p class="dim">${esc(bbs.name)}.${esc(config.domain)}</p>` : ''}
+${
+    splash && art
+        ? `<style>${ArtStyle}</style>
+${artHtml(art, splash, view.art, 'full', config.site.publicUrl)}
+<p class="dim">${esc(splash.name)}, by ${esc(creditLine(splash))}.</p>`
+        : ''
+}
 ${lastSeen(bbs)}
 ${connect}
 ${entry ? listingDetails(entry, false) : ''}
@@ -1290,7 +1364,7 @@ scams, someone's private information, a copyright claim, or a security problem.$
         );
     }
 
-    function directoryPage(who: WebSession | null): string {
+    function directoryPage(who: WebSession | null, view: View): string {
         const directory = deps.directory;
         const ratings = config.directory.ratings;
         const ours = registry
@@ -1306,12 +1380,22 @@ scams, someone's private information, a copyright claim, or a security problem.$
                 (a, b) =>
                     Number(b.bbs.connected) - Number(a.bbs.connected) || a.bbs.name.localeCompare(b.bbs.name)
             );
-        const card = ({ bbs, entry }: { bbs: Bbs; entry: DirectoryEntry | null }) => `<article>
-<h3><a href="${esc(hubUrl(`${bbs.name}.${config.domain}`))}/">${esc(
-            entry?.listing.name ?? bbs.name
-        )}</a> <span class="dim">${bbs.connected ? 'online' : 'offline'}</span></h3>
+        const card = ({ bbs, entry }: { bbs: Bbs; entry: DirectoryEntry | null }) => {
+            const splash = splashFor(bbs);
+            const address = `${hubUrl(`${bbs.name}.${config.domain}`)}/`;
+            return `<article>
+<h3><a href="${esc(address)}">${esc(entry?.listing.name ?? bbs.name)}</a> <span class="dim">${
+                bbs.connected ? 'online' : 'offline'
+            }</span></h3>
+${
+    splash && art
+        ? `<a class="splash" href="${esc(address)}" tabindex="-1">${artHtml(art, splash, view.art, 'card')}</a>`
+        : ''
+}
 ${entry ? listingDetails(entry, true) : ''}
 </article>`;
+        };
+        const anySplash = ours.some(({ bbs }) => splashFor(bbs));
         const others =
             directory && 'network' === config.directory.scope
                 ? directory
@@ -1337,7 +1421,7 @@ ${e.listing.endpoints
               : '<p>Run a BBS? <a href="/signin">Register it on this hub</a>.</p>';
         return page(
             `${config.domain}`,
-            `${join}
+            `${anySplash ? `<style>${ArtStyle}\na.splash { text-decoration: none; }</style>\n` : ''}${join}
 <h2>BBSes on this hub</h2>
 ${ours.length ? ours.map(card).join('\n') : '<p class="dim">None yet.</p>'}
 ${
@@ -1401,8 +1485,12 @@ ${footer()}`,
         }
 
         if ('POST' === req.method) {
-            //  forms are only accepted from the hub's own pages
-            if (req.headers.origin !== config.site.publicUrl) {
+            //  forms are only accepted from the hub's own pages, but for the
+            //  view menu, which BBSes' own pages on the hub show too
+            if (
+                req.headers.origin !== config.site.publicUrl &&
+                !(ViewPath === path && fromBoardPage(req.headers.origin))
+            ) {
                 return send(res, 403, page('Not allowed', '<p>That form came from somewhere else.</p>'));
             }
             const form = await readForm(req);
@@ -1413,17 +1501,12 @@ ${footer()}`,
 
             if (ViewPath === path) {
                 const view = Views.find(v => v.id === form.get('view'));
-                const back = form.get('back') ?? '/';
                 //  back to the page it came from, on this hub only
-                const to = /^\/(?![/\\])/.test(back) ? back : '/';
+                const to = viewBack(form.get('back') ?? '/');
                 if (!view) {
                     return redirect(res, to);
                 }
-                return redirect(res, to, {
-                    'Set-Cookie': `${ViewCookie}=${view.id}; Path=/; SameSite=Lax; Max-Age=${365 * 24 * 60 * 60}${
-                        secure ? '; Secure' : ''
-                    }`,
-                });
+                return redirect(res, to, { 'Set-Cookie': viewCookie(view.id) });
             }
 
             if (moderation && ('/space/mute' === path || '/space/report' === path)) {
@@ -1680,7 +1763,7 @@ ${footer()}`,
         }
 
         if ('/' === path) {
-            return send(res, 200, directoryPage(who));
+            return send(res, 200, directoryPage(who, viewOf(req)));
         }
 
         //  for monitors outside the hub: 503 when the hub can't carry
@@ -1702,13 +1785,7 @@ ${footer()}`,
         }
 
         if (VgaFontPath === path && VgaFont) {
-            res.writeHead(200, {
-                'Content-Type': 'font/woff',
-                'Content-Length': String(VgaFont.length),
-                'Cache-Control': 'public, max-age=86400',
-                'X-Content-Type-Options': 'nosniff',
-            });
-            return void res.end('HEAD' === req.method ? undefined : VgaFont);
+            return sendFont(req, res);
         }
 
         //  a file is named by its hash, so it never changes: kept for a year,
@@ -1725,7 +1802,9 @@ ${footer()}`,
                 'Cache-Control': 'public, max-age=31536000, immutable',
                 'X-Content-Type-Options': 'nosniff',
                 'Content-Security-Policy': "default-src 'none'; sandbox",
-                'Cross-Origin-Resource-Policy': 'same-origin',
+                //  the hub's pages, and its BBSes' pages at their addresses (name.domain,
+                //  the same site), may show it; other sites may not
+                'Cross-Origin-Resource-Policy': 'same-site',
             });
             return void res.end('HEAD' === req.method ? undefined : file.body);
         }

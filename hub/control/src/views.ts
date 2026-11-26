@@ -8,7 +8,7 @@
 //  For now the views are the hub's own; later leaves publish theirs as
 //  assets, and the menu lists them all, each credited.
 
-import { VgaFontPath } from './chat_page.ts';
+import { VgaFontPath } from './art_html.ts';
 import { esc } from './html.ts';
 
 export type ArtForm = 'pictures' | 'ansi' | 'text';
@@ -182,17 +182,17 @@ export function viewCss(view: View): string {
                 )
                 .join('\n')
         );
-        parts.push(`html[data-view] .chat-log pre.ansi { background: ${ansi[0]}; }`);
+        parts.push(`html[data-view] pre.ansi { background: ${ansi[0]}; }`);
     }
     return parts.join('\n');
 }
 
 //  The menu in each page's header. A form, so it works without scripts
-export function viewPicker(current: View, back: string): string {
+export function viewPicker(current: View, back: string, action = ViewPath): string {
     const options = Views.map(
         v => `<option value="${esc(v.id)}"${v.id === current.id ? ' selected' : ''}>${esc(v.name)}</option>`
     ).join('');
-    return `<form class="inline view-pick" method="post" action="${ViewPath}"><input type="hidden" name="back" value="${esc(
+    return `<form class="inline view-pick" method="post" action="${esc(action)}"><input type="hidden" name="back" value="${esc(
         back
     )}"><label for="view-pick">View</label> <select id="view-pick" name="view">${options}</select> <button>Use</button></form>`;
 }

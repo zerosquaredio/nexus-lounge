@@ -78,6 +78,8 @@ describe('generated configs', () => {
         assert.match(text, /header_up -X-Real-IP/);
         assert.match(text, /handle @hub \{\n\t+reverse_proxy 127\.0\.0\.1:7210/);
         assert.match(text, /tls internal/);
+        //  a BBS's page at its own address uses the hub's VGA font
+        assert.match(text, /@hubpage path \/ \/fonts\/vga-8x16\.woff \/_enig\/ws-term /);
     });
 
     it("strips the Domain from a BBS's cookies, and only a BBS's", () => {

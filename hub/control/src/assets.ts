@@ -172,4 +172,14 @@ export class AssetLibrary {
     byShortId(short: string): PublicItem | null {
         return this.byShort.get(short) ?? null;
     }
+
+    //  A piece by its name (any case) or short id, as a config names it
+    find(nameOrId: string): PublicItem | null {
+        const wanted = nameOrId.trim().toLowerCase();
+        return (
+            this.byShort.get(wanted) ??
+            this.items.find(item => item.name.toLowerCase() === wanted) ??
+            null
+        );
+    }
 }
