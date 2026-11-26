@@ -18,6 +18,10 @@ export interface AtClient {
     //  the account's server (PDS), from its DID document
     resolvePds(did: string): Promise<string>;
     getRecord(did: string, collection: string, rkey: string): Promise<{ cid: string; value: unknown } | null>;
+    //  an account's records of one type, up to |max|
+    listRecords(did: string, collection: string, max?: number): Promise<{ rkey: string; cid: string; value: unknown }[]>;
+    //  a file (blob) of an account, by its CID, up to |maxBytes|
+    getBlob(did: string, cid: string, maxBytes: number): Promise<Buffer>;
     //  one page of the accounts holding a record type, from a relay
     listRepos(collection: string, cursor?: string): Promise<{ dids: string[]; cursor?: string }>;
     resolveHandle(handle: string): Promise<string>;
@@ -72,6 +76,37 @@ export function atClient(fetchJson: JsonFetcher, relay: string): AtClient {
                 }
                 throw e;
             }
+        },
+
+        async listRecords(did, collection, max = 200) {
+            const pds = await this.resolvePds(did);
+            const out: { rkey: string; cid: string; value: unknown }[] = [];
+            let cursor: string | undefined;
+            do {
+                const q = new URLSearchParams({ repo: did, collection, limit: '100', ...(cursor ? { cursor } : {}) });
+                const reply = obj(
+                    await fetchJson(`${pds}/xrpc/com.atproto.repo.listRecords?${q}`, { maxBytes: 512 * 1024 })
+                );
+                for (const r of Array.isArray(reply.records) ? reply.records : []) {
+                    const rec = obj(r);
+                    const uri = 'string' === typeof rec.uri ? rec.uri : '';
+                    if ('string' === typeof rec.cid && uri.startsWith(`at://${did}/${collection}/`)) {
+                        out.push({ rkey: uri.split('/').pop() ?? '', cid: rec.cid, value: rec.value });
+                    }
+                }
+                cursor = 'string' === typeof reply.cursor && reply.cursor ? reply.cursor : undefined;
+            } while (cursor && out.length < max);
+            return out.slice(0, max);
+        },
+
+        async getBlob(did, cid, maxBytes) {
+            if (!/^[a-z0-9]{8,200}$/i.test(cid)) {
+                throw new HubError('blob', `Not a CID: ${cid}`);
+            }
+            const pds = await this.resolvePds(did);
+            const q = new URLSearchParams({ did, cid });
+            const body = await fetchJson(`${pds}/xrpc/com.atproto.sync.getBlob?${q}`, { bytes: true, maxBytes });
+            return body as Buffer;
         },
 
         async listRepos(collection, cursor) {

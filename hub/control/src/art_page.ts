@@ -31,23 +31,39 @@ function itemHtml(item: PublicItem): string {
 </article>`;
 }
 
-export function artPageBody(art: AssetLibrary): string {
+//  Art BBSes on this hub publish (board_art.ts), by BBS
+export interface BoardPieces {
+    bbs: string;
+    title: string;
+    items: PublicItem[];
+}
+
+export function artPageBody(art: AssetLibrary | null, fromBoards: BoardPieces[] = []): string {
+    const boards = fromBoards.filter(b => b.items.length);
     return `<style>
 .art img { display: block; max-width: 100%; height: auto; image-rendering: pixelated; border: 1px solid var(--line); background: #000; }
 </style>
-<p>${esc(art.description || 'ANSI art this hub offers.')} Share a piece in the chat with its <strong>Art</strong> button,
+<p>${esc(art?.description || 'ANSI art this hub offers.')} Share a piece in the chat with its <strong>Art</strong> button,
 or by typing <code>/art</code> and its name.</p>
-${art.items.length ? art.items.map(itemHtml).join('\n') : '<p class="dim">Nothing here yet.</p>'}
+${art && art.items.length ? art.items.map(itemHtml).join('\n') : boards.length ? '' : '<p class="dim">Nothing here yet.</p>'}
+${boards
+    .map(
+        b => `<h2>From ${esc(b.title)}</h2>
+<p class="dim">Published by the BBS from its own account.</p>
+${b.items.map(itemHtml).join('\n')}`
+    )
+    .join('\n')}
 <p class="hint">Pictures are drawn from the ANSI with the IBM VGA font from VileR's
 <a href="https://int10h.org/oldschool-pc-fonts/" rel="noopener">Ultimate Oldschool PC Font Pack</a> (CC BY-SA 4.0).</p>
 <p><a href="/space/chat">The chat</a> · <a href="/">The directory</a></p>`;
 }
 
 //  What the chat needs, for /art.json
-export function artJson(art: AssetLibrary): unknown {
+export function artJson(art: AssetLibrary | null, fromBoards: BoardPieces[] = []): unknown {
+    const all = [...(art?.items ?? []), ...fromBoards.flatMap(b => b.items)];
     return {
-        name: art.name,
-        items: art.items.map(item => ({
+        name: art?.name ?? 'Art',
+        items: all.map(item => ({
             id: item.id,
             name: item.name,
             short: item.description.short,

@@ -18,6 +18,7 @@ import { MaxAnsiBytes } from './ansi.ts';
 import { readPsf, type Font } from './ansi_image.ts';
 import { AssetLibrary, type PublicItem } from './assets.ts';
 import { bakeOne, Prefix, type Library, type LibraryItem } from './bake.ts';
+import type { AtClient } from './atproto.ts';
 import type { HubConfig } from './config.ts';
 import type { Bbs } from './registry.ts';
 
@@ -39,6 +40,71 @@ export interface BoardArtDeps {
     log?: (line: string) => void;
     //  for tests: fetch a BBS's file through its tunnel
     fetch?: (bbs: Bbs, sha256: string) => Promise<Buffer>;
+    //  for the art BBSes publish from their accounts: the AT network, and
+    //  whether a BBS's account is linked to it here (its listing names it)
+    at?: AtClient | null;
+    linked?: (bbs: Bbs) => boolean;
+}
+
+//  A piece a BBS publishes (its asset.item record), as the hub reads it
+export interface Piece {
+    sha256: string;
+    size: number;
+    cid: string;
+    name: string;
+    rating: string;
+    licence: { id: string; url?: string; text?: string };
+    credit: { author?: string; group?: string; note?: string };
+}
+
+const Ratings = ['general', 'mature', 'adult'];
+
+type Json = Record<string, unknown>;
+const obj = (v: unknown): Json => (v && 'object' === typeof v && !Array.isArray(v) ? (v as Json) : {});
+const str = (v: unknown, max: number): string | undefined =>
+    'string' === typeof v && v.trim() ? v.trim().slice(0, max) : undefined;
+
+//  A record, if it is a piece the hub can take: ANSI art, by a file named
+//  by its hash and keyed by it, small enough, with a blob to fetch
+export function pieceOf(rkey: string, value: unknown): Piece | null {
+    const v = obj(value);
+    const version = obj(Array.isArray(v.versions) ? v.versions[0] : null);
+    const file = obj(version.file);
+    const blob = obj(version.blob);
+    const ref = obj(blob.ref);
+    const size = file.size;
+    if (
+        'ansi' !== version.form ||
+        'string' !== typeof file.sha256 ||
+        !/^[0-9a-f]{64}$/.test(file.sha256) ||
+        file.sha256 !== rkey ||
+        !Number.isInteger(size) ||
+        (size as number) < 1 ||
+        (size as number) > MaxAnsiBytes ||
+        'string' !== typeof ref.$link
+    ) {
+        return null;
+    }
+    const licence = obj(v.licence);
+    const url = str(licence.url, 512);
+    const credit = obj(v.credit);
+    return {
+        sha256: file.sha256,
+        size: size as number,
+        cid: ref.$link,
+        name: str(v.name, 80) ?? '',
+        rating: Ratings.includes(v.rating as string) ? (v.rating as string) : 'general',
+        licence: {
+            id: str(licence.id, 64) ?? 'custom',
+            ...(url && /^https:\/\//.test(url) ? { url } : {}),
+            ...(str(licence.text, 500) ? { text: str(licence.text, 500) } : {}),
+        },
+        credit: {
+            ...(str(credit.author, 80) ? { author: str(credit.author, 80) } : {}),
+            ...(str(credit.group, 80) ? { group: str(credit.group, 80) } : {}),
+            ...(str(credit.note, 200) ? { note: str(credit.note, 200) } : {}),
+        },
+    };
 }
 
 interface Kept {
@@ -57,6 +123,8 @@ export class BoardArt {
     log: (line: string) => void;
     //  by keyOf()
     kept = new Map<string, Kept>();
+    //  by BBS name: the baked items of the pieces it publishes now
+    pieces = new Map<string, string[]>();
     library: AssetLibrary | null = null;
     //  files that failed, so they aren't fetched again each time
     failed = new Map<string, number>();
@@ -74,7 +142,98 @@ export class BoardArt {
                 this.kept.set(key.includes(':') ? key : keyOf('splash', key), kept);
             }
         }
+        const published = join(dir, 'pieces.json');
+        if (existsSync(published)) {
+            for (const [name, ids] of Object.entries(JSON.parse(readFileSync(published, 'utf8')) as Record<string, string[]>)) {
+                this.pieces.set(name, ids);
+            }
+        }
         this.load();
+    }
+
+    //  The pieces a BBS publishes, as the hub took them
+    piecesFor(bbs: Bbs): PublicItem[] {
+        if (!this.allowed(bbs) || !this.library) {
+            return [];
+        }
+        const library = this.library;
+        return (this.pieces.get(bbs.name) ?? [])
+            .map(id => library.items.find(item => item.id === id))
+            .filter((item): item is PublicItem => !!item);
+    }
+
+    //  Read what each BBS publishes from its account, and take what is new.
+    //  Pieces with a rating this hub's directory doesn't show are left out
+    async refreshPieces(): Promise<void> {
+        const at = this.deps.at;
+        if (!at) {
+            return;
+        }
+        const collection = `${this.deps.config.directory.nsidPrefix}.asset.item`;
+        const ratings = this.deps.config.directory.ratings;
+        for (const bbs of this.deps.list()) {
+            if (!this.allowed(bbs) || !bbs.bbsDid || !(this.deps.linked?.(bbs) ?? false)) {
+                this.pieces.delete(bbs.name);
+                continue;
+            }
+            let records: { rkey: string; cid: string; value: unknown }[];
+            try {
+                records = await at.listRecords(bbs.bbsDid, collection, 100);
+            } catch (e) {
+                this.log(`board art: can't read ${bbs.name}'s art: ${(e as Error).message}`);
+                continue;
+            }
+            const ids: string[] = [];
+            for (const record of records) {
+                const piece = pieceOf(record.rkey, record.value);
+                if (!piece || !ratings.includes(piece.rating)) {
+                    continue;
+                }
+                const key = `piece:${bbs.name}:${piece.sha256}`;
+                if (!this.kept.has(key)) {
+                    if (Date.now() - (this.failed.get(key) ?? 0) < 60 * 60 * 1000) {
+                        continue;
+                    }
+                    try {
+                        await this.takePiece(bbs, piece, key);
+                    } catch (e) {
+                        this.failed.set(key, Date.now());
+                        this.log(`board art: ${bbs.name}'s ${piece.name || 'piece'} not taken: ${(e as Error).message}`);
+                        continue;
+                    }
+                }
+                const id = this.kept.get(key)?.id;
+                if (id && !ids.includes(id)) {
+                    ids.push(id);
+                }
+            }
+            this.pieces.set(bbs.name, ids);
+        }
+        this.save(join(this.dir, 'pieces.json'), Object.fromEntries(this.pieces));
+    }
+
+    async takePiece(bbs: Bbs, piece: Piece, key: string): Promise<void> {
+        const body = await this.deps.at!.getBlob(bbs.bbsDid!, piece.cid, MaxAnsiBytes);
+        if (createHash('sha256').update(body).digest('hex') !== piece.sha256 || body.length !== piece.size) {
+            throw new Error("the file isn't the one its record names");
+        }
+        this.font ??= readPsf(fontPath(this.deps.config));
+        const { files, item } = bakeOne(`${piece.name || bbs.name}.ans`, body, {
+            font: '',
+            mci: true,
+            licence: piece.licence,
+            rating: piece.rating,
+            themes: [],
+            author: piece.credit.author ?? '',
+            group: piece.credit.group ?? '',
+            note: piece.credit.note ?? `from ${bbs.name}`,
+        }, this.font);
+        //  the name the BBS gives it, over its SAUCE title
+        if (piece.name) {
+            item.record.name = piece.name;
+        }
+        this.keep(files, item, key, piece.sha256);
+        this.log(`board art: took ${bbs.name}'s ${item.record.name} (${item.id.slice(0, 12)})`);
     }
 
     //  The art of this kind to show for a BBS, if it still offers the one
@@ -154,6 +313,13 @@ export class BoardArt {
             group: '',
             note: `${bbs.name}'s ${KindName[kind]}`,
         }, this.font);
+        this.keep(files, item, keyOf(kind, bbs.name), named.sha256);
+        this.log(`board art: took ${bbs.name}'s ${KindName[kind]}, ${item.record.name} (${item.id.slice(0, 12)})`);
+    }
+
+    //  Baked files and item into the library, kept under |key|; refused if
+    //  the library's own checks refuse it
+    keep(files: Map<string, Buffer>, item: LibraryItem, key: string, raw: string): void {
         for (const [hash, bytes] of files) {
             writeFileSync(join(this.dir, 'files', hash), bytes);
         }
@@ -162,13 +328,12 @@ export class BoardArt {
             library.items.push(item);
         }
         this.save(join(this.dir, 'library.json'), library);
-        this.kept.set(keyOf(kind, bbs.name), { raw: named.sha256, id: item.id });
-        this.save(join(this.dir, 'boards.json'), Object.fromEntries(this.kept));
         this.load();
         if (!this.library?.items.some(i => i.id === item.id)) {
             throw new Error("its art didn't pass the hub's checks");
         }
-        this.log(`board art: took ${bbs.name}'s ${KindName[kind]}, ${item.record.name} (${item.id.slice(0, 12)})`);
+        this.kept.set(key, { raw, id: item.id });
+        this.save(join(this.dir, 'boards.json'), Object.fromEntries(this.kept));
     }
 
     readLibrary(): Library {

@@ -325,6 +325,12 @@ describe('the first sweep', () => {
                 const value = collection === ListingNsid ? r?.listing : r?.status;
                 return value ? { cid: `cid-${did}`, value } : null;
             },
+            async listRecords() {
+                return [];
+            },
+            async getBlob() {
+                throw new Error('no blobs here');
+            },
             async listRepos(_collection, cursor) {
                 const i = cursor ? Number(cursor) : 0;
                 return { dids: pages[i] ?? [], cursor: i + 1 < pages.length ? String(i + 1) : undefined };

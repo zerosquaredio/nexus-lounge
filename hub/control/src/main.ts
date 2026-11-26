@@ -142,12 +142,19 @@ if (config.assets.boardArt.length) {
                 list: () => registry.list(),
                 artOf: (bbs, kind) => directory?.forBbs(bbs)?.listing[kind] ?? null,
                 log,
+                at: atClient(fetchPublicJson, config.directory.relay),
+                linked: bbs => !!directory?.forBbs(bbs),
             },
             join(dirname(config.database), 'board-art')
         );
         const take = () => void boardArt?.refresh().catch(e => log(`board art: ${(e as Error).message}`));
         setTimeout(take, 5_000).unref();
         setInterval(take, 60_000).unref();
+        //  the art they publish from their accounts, less often
+        const read = () =>
+            void boardArt?.refreshPieces().catch(e => log(`board art: ${(e as Error).message}`));
+        setTimeout(read, 20_000).unref();
+        setInterval(read, 10 * 60_000).unref();
     } catch (e) {
         log(`board art: off: ${(e as Error).message}`);
     }

@@ -61,7 +61,7 @@ import { MapPagePath, spacePageBody, SpaceScript, SpaceScriptPath } from './spac
 import type { HubConfig } from './config.ts';
 import { HubError } from './errors.ts';
 import { AbuseKinds, AbuseReports, MaxContact, MaxDetails } from './abuse.ts';
-import { artJson, ArtJsonPath, artPageBody, ArtPath, creditLine } from './art_page.ts';
+import { artJson, ArtJsonPath, artPageBody, ArtPath, type BoardPieces, creditLine } from './art_page.ts';
 import { artHtml, ArtStyle } from './art_html.ts';
 import { type View, viewById, viewCss, ViewCookie, ViewPath, viewPicker, Views } from './views.ts';
 import type { AssetLibrary, PublicItem } from './assets.ts';
@@ -383,6 +383,23 @@ export function createSite(deps: SiteDeps): Site {
     //  hub's art (assets.splashes); and the library it is drawn from
     function splashOf(bbs: Bbs): { item: PublicItem; library: AssetLibrary } | null {
         return boardArtOf(bbs, 'splash', config.assets.splashes);
+    }
+
+    //  The art BBSes publish from their accounts, by BBS, for the gallery
+    //  and the chat (board_art.ts)
+    function boardPieces(): BoardPieces[] {
+        if (!boardArt) {
+            return [];
+        }
+        return registry
+            .list()
+            .filter(bbs => 'active' === bbs.state)
+            .map(bbs => ({
+                bbs: bbs.name,
+                title: deps.directory?.forBbs(bbs)?.listing.name ?? bbs.name,
+                items: boardArt.piecesFor(bbs),
+            }))
+            .filter(b => b.items.length);
     }
 
     //  Its emblem, for the map, likewise (assets.emblems)
@@ -1823,12 +1840,13 @@ ${footer()}`,
             return send(res, 200, reportPage(who, { bbs: url.searchParams.get('bbs') ?? '' }));
         }
 
-        if (art && ArtPath === path) {
-            return send(res, 200, page(art.name, artPageBody(art), who ?? undefined));
+        const fromBoards = ArtPath === path || ArtJsonPath === path ? boardPieces() : [];
+        if ((art || fromBoards.length) && ArtPath === path) {
+            return send(res, 200, page(art?.name ?? 'Art', artPageBody(art, fromBoards), who ?? undefined));
         }
 
-        if (art && ArtJsonPath === path) {
-            return json(res, 200, artJson(art));
+        if ((art || fromBoards.length) && ArtJsonPath === path) {
+            return json(res, 200, artJson(art, fromBoards));
         }
 
         if (VgaFontPath === path && VgaFont) {

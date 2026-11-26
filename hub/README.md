@@ -192,6 +192,17 @@ terms cover assets, the hub takes them only from the BBSes named in
 `assets.boardArt`. Art is drawn with the web terminal's VGA font
 (`fonts/pc/cp437-8x16.psf` in `webTerminal.root`), or `assets.font`.
 
+**Art BBSes publish.** A BBS can publish ANSI art from its own account, as
+asset records with the files attached as blobs (development plan F21). For
+the BBSes in `assets.boardArt` whose accounts are linked here, the hub reads
+those records every ten minutes, fetches each new file from the account's
+host (public `https://` only, size-limited), checks it against the hash its
+record names, and bakes it, named, credited and licensed as the record says
+(SAUCE credit first). The gallery shows each BBS's pieces under its name,
+and the chat's **Art** picker lists them; pieces with a rating the directory
+doesn't show are left out. Kept in `board-art/`, so nothing is fetched
+twice, and a piece the BBS stops publishing goes with the next reading.
+
 ### Views
 
 Every page has a **View** menu in its header (`src/views.ts`, [assets

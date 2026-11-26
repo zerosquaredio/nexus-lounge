@@ -80,6 +80,8 @@ export interface FetchOptions {
     timeoutMs?: number;
     //  return the body as text instead of parsing it as JSON
     text?: boolean;
+    //  return the body as bytes (a Buffer), whatever its type
+    bytes?: boolean;
 }
 
 export type JsonFetcher = (url: string, options?: FetchOptions) => Promise<unknown>;
@@ -108,7 +110,7 @@ export const fetchPublicJson: JsonFetcher = (url, options = {}) => {
                 method: 'GET',
                 lookup: publicLookup as never,
                 headers: {
-                    Accept: options.text ? 'text/plain' : 'application/json',
+                    Accept: options.bytes ? '*/*' : options.text ? 'text/plain' : 'application/json',
                     'User-Agent': 'nexus-lounge-hub',
                 },
                 timeout: timeoutMs,
@@ -129,6 +131,9 @@ export const fetchPublicJson: JsonFetcher = (url, options = {}) => {
                     chunks.push(chunk);
                 });
                 res.on('end', () => {
+                    if (options.bytes) {
+                        return resolve(Buffer.concat(chunks));
+                    }
                     const body = Buffer.concat(chunks).toString('utf8');
                     if (options.text) {
                         return resolve(body);
