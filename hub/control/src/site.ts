@@ -65,6 +65,7 @@ import { artJson, ArtJsonPath, artPageBody, ArtPath, creditLine } from './art_pa
 import { artHtml, ArtStyle } from './art_html.ts';
 import { type View, viewById, viewCss, ViewCookie, ViewPath, viewPicker, Views } from './views.ts';
 import type { AssetLibrary, PublicItem } from './assets.ts';
+import type { BoardArt } from './board_art.ts';
 import { agentConfig } from './generate.ts';
 import { esc, page } from './html.ts';
 import { MaxApplicationNote, type Application, type Bbs, type Registry } from './registry.ts';
@@ -116,6 +117,8 @@ export interface SiteDeps {
     chat?: Chat | null;
     //  art the hub offers (assets.library), if any
     art?: AssetLibrary | null;
+    //  BBSes' own splash screens (board_art.ts), if any are taken
+    boardArt?: BoardArt | null;
     //  what the control plane last heard from the tunnel server, for
     //  /status.json: "ok", "down", "error", or "unchecked"
     tunnels?: () => string;
@@ -223,6 +226,7 @@ async function readForm(req: IncomingMessage): Promise<URLSearchParams> {
 export function createSite(deps: SiteDeps): Site {
     const { config, registry, signin } = deps;
     const art = deps.art ?? null;
+    const boardArt = deps.boardArt ?? null;
     const log = deps.log ?? (() => {});
     const now = deps.now ?? Date.now;
     const secure = config.site.publicUrl.startsWith('https://');
@@ -355,11 +359,17 @@ export function createSite(deps: SiteDeps): Site {
         }
     }
 
-    //  A BBS's splash screen, as the hub's admin chose it from the hub's art
-    //  (assets.splashes), until BBSes publish their own (F21)
-    function splashFor(bbs: Bbs): PublicItem | null {
+    //  A BBS's splash screen: its own, when it offers one and the hub takes
+    //  it (board_art.ts, F21), or else what the hub's admin chose from the
+    //  hub's art (assets.splashes); and the library it is drawn from
+    function splashOf(bbs: Bbs): { item: PublicItem; library: AssetLibrary } | null {
+        const own = boardArt?.splashFor(bbs);
+        if (own && boardArt?.library) {
+            return { item: own, library: boardArt.library };
+        }
         const name = config.assets.splashes[bbs.name];
-        return art && name ? art.find(name) : null;
+        const chosen = art && name ? art.find(name) : null;
+        return chosen && art ? { item: chosen, library: art } : null;
     }
 
     function redirect(res: ServerResponse, location: string, headers: Record<string, string> = {}): void {
@@ -1237,15 +1247,15 @@ it is your BBS's password on this hub. If you lose it, come back for a new token
             : '';
         const entry = deps.directory?.forBbs(bbs) ?? null;
         const title = entry ? entry.listing.name : `${bbs.name}.${config.domain}`;
-        const splash = splashFor(bbs);
+        const splash = splashOf(bbs);
         return page(
             title,
             `${entry ? `<p class="dim">${esc(bbs.name)}.${esc(config.domain)}</p>` : ''}
 ${
-    splash && art
+    splash
         ? `<style>${ArtStyle}</style>
-${artHtml(art, splash, view.art, 'full', config.site.publicUrl)}
-<p class="dim">${esc(splash.name)}, by ${esc(creditLine(splash))}.</p>`
+${artHtml(splash.library, splash.item, view.art, 'full', config.site.publicUrl)}
+<p class="dim">${esc(splash.item.name)}, by ${esc(creditLine(splash.item))}.</p>`
         : ''
 }
 ${lastSeen(bbs)}
@@ -1386,21 +1396,21 @@ scams, someone's private information, a copyright claim, or a security problem.$
                     Number(b.bbs.connected) - Number(a.bbs.connected) || a.bbs.name.localeCompare(b.bbs.name)
             );
         const card = ({ bbs, entry }: { bbs: Bbs; entry: DirectoryEntry | null }) => {
-            const splash = splashFor(bbs);
+            const splash = splashOf(bbs);
             const address = `${hubUrl(`${bbs.name}.${config.domain}`)}/`;
             return `<article>
 <h3><a href="${esc(address)}">${esc(entry?.listing.name ?? bbs.name)}</a> <span class="dim">${
                 bbs.connected ? 'online' : 'offline'
             }</span></h3>
 ${
-    splash && art
-        ? `<a class="splash" href="${esc(address)}" tabindex="-1">${artHtml(art, splash, view.art, 'card')}</a>`
+    splash
+        ? `<a class="splash" href="${esc(address)}" tabindex="-1">${artHtml(splash.library, splash.item, view.art, 'card')}</a>`
         : ''
 }
 ${entry ? listingDetails(entry, true) : ''}
 </article>`;
         };
-        const anySplash = ours.some(({ bbs }) => splashFor(bbs));
+        const anySplash = ours.some(({ bbs }) => splashOf(bbs));
         const others =
             directory && 'network' === config.directory.scope
                 ? directory
@@ -1796,8 +1806,8 @@ ${footer()}`,
         //  a file is named by its hash, so it never changes: kept for a year,
         //  and never run as a page
         const asset = /^\/assets\/([0-9a-f]{64})$/.exec(path);
-        if (art && asset) {
-            const file = art.file(asset[1]!);
+        if ((art || boardArt) && asset) {
+            const file = art?.file(asset[1]!) ?? boardArt?.file(asset[1]!) ?? null;
             if (!file) {
                 return send(res, 404, page('Not found', '<p>Nothing here.</p>'));
             }

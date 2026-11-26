@@ -169,8 +169,21 @@ The directory shows each BBS with its splash, small, and the BBS's own page
 shows it full size with its credit, each drawn as the viewer's view says:
 a picture, ANSI as coloured characters in the VGA font (drawn by the hub,
 so it needs no scripts), or a description. A splash naming art the hub
-doesn't have is logged at start and left out. Until BBSes publish their own
-(development plan F21), the hub's admin chooses them.
+doesn't have is logged at start and left out.
+
+**BBSes' own splash screens** (development plan F21). A BBS whose sysop lets
+the hub show it names its splash in its listing, by the file's SHA-256 and
+size, and serves the file as it is at `/assets/<sha256>` (forwarded through
+its tunnel; agent configs made before need `"/assets/"` in the web proxy's
+`locations`). The hub fetches it through the tunnel, checks its hash, and
+bakes it as it would any art: ENiGMA½'s menu codes blanked, so none of the
+board's live details show, cleaned, drawn, and credited from its SAUCE. The
+result is kept in `board-art/` beside the database, so a restart fetches
+nothing again, and new art is taken when the listing names it. A BBS's own
+splash comes before the one the admin chose. Until the hub's terms cover
+assets, the hub takes splashes only from the BBSes named in
+`assets.boardSplashes`. Art is drawn with the web terminal's VGA font
+(`fonts/pc/cp437-8x16.psf` in `webTerminal.root`), or `assets.font`.
 
 ### Views
 

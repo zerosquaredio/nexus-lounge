@@ -707,7 +707,7 @@ in.
 | Config | `atProto.publishing.assets` (to be drafted): the pieces, and which are the emblem and the splash |
 | Depends on | F9 (the BBS's AT account); hub H20 |
 | Done when | A test board's splash appears on the hub's directory, and its emblem on the hub's map, both from the board itself |
-| Status | Planned (2026-11-25); the test boards' own accounts are connected (F9), so it can start |
+| Status | **Splash screens built** (2026-11-26), with the hub's side (H20), not yet deployed. The board finds its splash (`atProto.publishing.splash.art`: its `CONNECT` art in the pre-login theme or the general art, else `MATRIX`; or files by path), names it in its listing (`splash`: SHA-256, size, media type) when the sysop agrees, and serves only that file at `/assets/<sha256>`. Agreeing: the first connection of the board account turns it on and says so on the `BA` screen; a new `splash` action there, and `oputil atproto splash on\|off`, change it; a board account connected before isn't assumed to agree. Kept in `board_account` (AT database version 5, with a migration), and kept across reconnecting. 9 new tests (35 in the related files); the full suite's other failures are timing tests that come and go, and one SSRF test that also fails on unchanged code. Emblems, other art and the board's view are still to do |
 
 **The splash: consent once, the login screen by default** (decided
 2026-11-26):

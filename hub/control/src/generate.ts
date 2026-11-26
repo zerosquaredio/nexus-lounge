@@ -27,8 +27,15 @@ export interface AgentOptions {
     wsPort?: number;
 }
 
-//  ENiGMA½'s routes that must be reachable through the hub (hub.md §4)
-export const EnigmaWebLocations = ['/_enig/atproto/', '/_enig/handoff/', '/_enig/signin', '/_enig/signout'];
+//  ENiGMA½'s routes that must be reachable through the hub (hub.md §4), and
+//  /assets/, where a BBS offers its splash screen (F21)
+export const EnigmaWebLocations = [
+    '/_enig/atproto/',
+    '/_enig/handoff/',
+    '/_enig/signin',
+    '/_enig/signout',
+    '/assets/',
+];
 
 //  The tunnel agent's config (frpc), given to the sysop at registration
 export function agentConfig(config: HubConfig, options: AgentOptions): string {

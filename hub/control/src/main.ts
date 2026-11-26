@@ -1,5 +1,6 @@
 //  Runs the control plane: node src/main.ts [config.json]
 
+import { dirname, join } from 'node:path';
 import { Chat, ChatSecretEnv, MinChatSecret } from './chat.ts';
 import { FrpsAdminPasswordEnv, loadConfig } from './config.ts';
 import { HubAccount } from './hub_account.ts';
@@ -11,6 +12,7 @@ import { isPublicClient, SignIn } from './signin.ts';
 import { createSite } from './site.ts';
 import { loadWebTerm } from './webterm.ts';
 import { AssetLibrary } from './assets.ts';
+import { BoardArt } from './board_art.ts';
 import { atClient } from './atproto.ts';
 import { Directory } from './directory.ts';
 import { followStream } from './jetstream.ts';
@@ -130,6 +132,26 @@ if (config.assets.library) {
         log(`assets: can't load ${config.assets.library}: ${(e as Error).message}`);
     }
 }
+//  BBSes' own splash screens, from those the hub takes them from (F21)
+let boardArt: BoardArt | null = null;
+if (config.assets.boardSplashes.length) {
+    try {
+        boardArt = new BoardArt(
+            {
+                config,
+                list: () => registry.list(),
+                splashOf: bbs => directory?.forBbs(bbs)?.listing.splash ?? null,
+                log,
+            },
+            join(dirname(config.database), 'board-art')
+        );
+        const take = () => void boardArt?.refresh().catch(e => log(`board art: ${(e as Error).message}`));
+        setTimeout(take, 5_000).unref();
+        setInterval(take, 60_000).unref();
+    } catch (e) {
+        log(`board art: off: ${(e as Error).message}`);
+    }
+}
 for (const [bbs, piece] of Object.entries(config.assets.splashes)) {
     if (!art?.find(piece)) {
         log(`assets: no art named ${piece} for ${bbs}'s splash; its pages go without`);
@@ -146,6 +168,7 @@ const site = createSite({
     at,
     chat,
     art,
+    boardArt,
     tunnels: () => tunnels,
     log,
 });

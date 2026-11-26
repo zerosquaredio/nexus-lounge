@@ -12,6 +12,7 @@ import { createSite } from '../src/site.ts';
 import { AssetLibrary } from '../src/assets.ts';
 import { bake } from '../src/bake.ts';
 import { ansiHtml } from '../src/art_html.ts';
+import type { BoardArt } from '../src/board_art.ts';
 import { OtherSysopDid, SysopDid, testFont } from './helpers.ts';
 
 //  a splash: bright green blocks, a red word on blue, and a blank last row
@@ -92,7 +93,21 @@ describe("a BBS's splash screen, and views on every page", () => {
         const registry = new Registry(':memory:', config.registration);
         registry.add('coolbbs', SysopDid);
         registry.add('otherbbs', OtherSysopDid);
-        server = createSite({ config, registry, signin: new SignIn(registry.db, config), art: library() });
+        //  otherbbs offers its own splash (board_art.ts), drawn from its own
+        //  library; the hub's admin chose none for it that the hub has
+        const own = library();
+        const boardArt = {
+            library: own,
+            splashFor: (b: { name: string }) => ('otherbbs' === b.name ? own.items[0]! : null),
+            file: (hash: string) => own.file(hash),
+        } as unknown as BoardArt;
+        server = createSite({
+            config,
+            registry,
+            signin: new SignIn(registry.db, config),
+            art: library(),
+            boardArt,
+        });
         await new Promise<void>(r => server.listen(0, '127.0.0.1', r));
         port = (server.address() as AddressInfo).port;
     });
@@ -115,7 +130,7 @@ describe("a BBS's splash screen, and views on every page", () => {
     it('shows each BBS with its splash on the directory, as the view draws art', async () => {
         const pictures = await call('GET', 'hub.test', '/');
         assert.match(pictures.body, /<a class="splash" href="https:\/\/coolbbs\.hub\.test\/"[^>]*><img class="splash card" src="\/assets\/[0-9a-f]{64}"/);
-        assert.equal(pictures.body.split('class="splash"').length, 2, 'otherbbs names no art the hub has');
+        assert.equal(pictures.body.split('class="splash"').length, 3, "otherbbs's own, and coolbbs's");
 
         const ansi = await call('GET', 'hub.test', '/', { Cookie: 'hub_view=bbs' });
         assert.match(ansi.body, /<pre class="ansi card" role="img"/);
@@ -137,8 +152,9 @@ describe("a BBS's splash screen, and views on every page", () => {
             page.body,
             /<form class="inline view-pick" method="post" action="https:\/\/hub\.test\/view"><input type="hidden" name="back" value="https:\/\/coolbbs\.hub\.test\/">/
         );
-        const plain = await call('GET', 'otherbbs.hub.test', '/');
-        assert.doesNotMatch(plain.body, /class="ansi|class="splash/);
+        //  otherbbs's own splash, though the admin named none the hub has
+        const own = await call('GET', 'otherbbs.hub.test', '/', { Cookie: 'hub_view=pink' });
+        assert.match(own.body, /<pre class="ansi" role="img"/);
         //  so that browsers name its origin when the menu posts to the hub
         assert.equal(page.headers['referrer-policy'], 'strict-origin-when-cross-origin');
         assert.equal((await call('GET', 'hub.test', '/')).headers['referrer-policy'], 'same-origin');

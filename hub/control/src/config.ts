@@ -20,8 +20,11 @@ export interface HubConfig {
     //  the baker ("npm run bake"), served at /assets and shown at /art and in
     //  the chat; "" for none. splashes: each BBS's splash screen, by its
     //  name, as a piece of that art (its name or short id), shown on the
-    //  directory and the BBS's page until BBSes publish their own (F21)
-    assets: { library: string; splashes: Record<string, string> };
+    //  directory and the BBS's page until BBSes publish their own (F21).
+    //  boardSplashes: the BBSes whose own splash screens the hub takes
+    //  (board_art.ts), by name, until its terms cover assets. font: the PSF
+    //  font art is drawn with; "" for the web terminal's own
+    assets: { library: string; splashes: Record<string, string>; boardSplashes: string[]; font: string };
     //  the control plane's own HTTP listener: frp's hooks, Caddy's
     //  certificate check, and handle verification (through the edge).
     //  Never public.
@@ -229,7 +232,7 @@ export const Defaults: HubConfig = {
     edge: { tls: 'internal', bindAddr: '127.0.0.1', httpPort: 7081, httpsPort: 7443 },
     contact: { abuse: '' },
     policy: { operator: '', minimumAge: 16, termsFile: '', privacyFile: '' },
-    assets: { library: '', splashes: {} },
+    assets: { library: '', splashes: {}, boardSplashes: [], font: '' },
     registration: {
         open: true,
         approval: true,
@@ -378,6 +381,10 @@ export function makeConfig(overrides: Partial<Record<keyof HubConfig, unknown>> 
         Object.values(splashes).some(v => 'string' !== typeof v)
     ) {
         throw new HubError('config', 'assets.splashes maps BBS names to pieces of art: { "coolbbs": "WELCOME" }');
+    }
+    const from = config.assets.boardSplashes;
+    if (!Array.isArray(from) || from.some(name => 'string' !== typeof name)) {
+        throw new HubError('config', 'assets.boardSplashes is a list of BBS names: [ "coolbbs" ]');
     }
     if (('' === config.tunnel.tlsCertFile) !== ('' === config.tunnel.tlsKeyFile)) {
         throw new HubError('config', 'tunnel.tlsCertFile and tunnel.tlsKeyFile go together: both or neither');

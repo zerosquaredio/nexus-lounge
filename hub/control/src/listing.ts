@@ -21,6 +21,8 @@ export interface Listing {
     hours: { timezone: string; weekly: { days: string[]; from: string; to: string }[]; note: string } | null;
     sysop: string | null;
     createdAt: string | null;
+    //  the BBS's splash screen, as it offers it at /assets/<sha256> (F21)
+    splash: { sha256: string; size: number } | null;
 }
 
 export interface Status {
@@ -190,7 +192,21 @@ export function sanitizeListing(value: unknown): Listing | null {
                 ? v.sysop
                 : null,
         createdAt: datetime(v.createdAt),
+        splash: splashOf(v.splash),
     };
+}
+
+//  A file named by its hash and size, up to what the hub takes as ANSI art
+function splashOf(value: unknown): { sha256: string; size: number } | null {
+    const v = obj(value);
+    const size = v.size;
+    return 'string' === typeof v.sha256 &&
+        /^[0-9a-f]{64}$/.test(v.sha256) &&
+        Number.isInteger(size) &&
+        (size as number) > 0 &&
+        (size as number) <= 64 * 1024
+        ? { sha256: v.sha256, size: size as number }
+        : null;
 }
 
 export function sanitizeStatus(value: unknown): Status | null {
