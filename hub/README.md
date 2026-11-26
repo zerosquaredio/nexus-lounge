@@ -289,8 +289,10 @@ space too, use `space block`.
 
 ## Connecting a BBS
 
-A sysop registers on the hub's site and runs the tunnel agent with the
-config it gives them. On the BBS (ENiGMA½), the settings for running behind
+The whole path for a sysop is in
+[Joining a Hub](../docs/admin/joining_a_hub.md). In short: a sysop
+registers on the hub's site and runs the tunnel agent with the config it
+gives them. On the BBS (ENiGMA½), the settings for running behind
 the hub are in its docs, under
 [Behind a Proxy, Tunnel or Hub](https://github.com/zerosquaredio/enigma-bbs/blob/atproto-login/website/src/content/docs/servers/contentservers/atproto-handler.md#behind-a-proxy-tunnel-or-hub):
 in short, `contentServers.web.overrideUrlPrefix` set to

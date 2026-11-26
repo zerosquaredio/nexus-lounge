@@ -829,15 +829,20 @@ are things far cheaper to settle while every board is ours.
    system's authorities before sending their token. Tested with real frp:
    refused for a self-made certificate, another name, or an unknown
    authority. Both public test boards' agents check it.
-3. **A sysop's guide to joining** (development plan F17, first part).
+3. ~~**A sysop's guide to joining**~~ **Done** (2026-11-26):
+   [Joining a Hub](../admin/joining_a_hub.md) (development plan F17, first
+   part).
 4. **The operator's list:** a lawyer's review of the terms, the abuse
    address (`contact.abuse`) and an uptime monitor.
 5. **Record names:** final names, or outside boards on the development
    names with a migration later (development plan §6).
-6. **The board account's permission list,** complete, so sysops connect it
-   once (development plan F21, first step).
-7. **The agent config's paths,** complete for what is coming (`/assets/`
-   at least), so sysops install it once.
+6. ~~**The board account's permission list,**~~ **Done** (2026-11-26, with
+   F21): listing, status, posts, the asset records (`asset.item`,
+   `asset.catalogue`, `asset.view`) and blobs. Final record names (item 5)
+   will still mean connecting again.
+7. ~~**The agent config's paths,**~~ **Done** (2026-11-26): `/assets/`
+   added. `/peer` and `/_enig/verify/` are allowed by the hub but not yet in
+   the config it makes; they join it with the features that use them.
 8. ~~**Chat beyond the one room**~~ **Done** (2026-11-26): the hub's relay
    passed every line but the sign-in on to freeq, so other rooms, private
    messages, topics, and edits and reactions by tags were all open. It now

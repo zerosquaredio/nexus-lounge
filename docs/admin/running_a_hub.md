@@ -219,8 +219,8 @@ reports presence to the hub, its copy of the token has to change too.
 
 ### Removing
 
-`hubctl remove coolbbs` deletes the BBS and frees its name. Its observed
-status record is taken down. To keep someone from coming back, ban them
+`hubctl remove coolbbs` deletes the BBS; its name is held for 90 days
+(below). Its observed status record is taken down. To keep someone from coming back, ban them
 first (below).
 
 ### Terms, age and ratings

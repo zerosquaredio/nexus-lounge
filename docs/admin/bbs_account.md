@@ -81,7 +81,7 @@ inbox, but counts as a different address.
 Tell the hub which account is the BBS's. Either:
 
 - **On the hub's site:** "Your BBS's own Bluesky account" when registering,
-  or the account form on the BBS's page afterwards. It takes a handle or a
+  or the account form on **Your BBSes** (`/bbs`) afterwards. It takes a handle or a
   DID; empty clears it.
 - **By the hub operator:** `hubctl set-did NAME DID` (or `clear`), or
   `hubctl add NAME --sysop DID --did BBS_DID` for a new BBS.

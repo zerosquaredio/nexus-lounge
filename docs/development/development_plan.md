@@ -663,7 +663,7 @@ in.
 | Config | The image's first-run settings; publishes the listing's `hours` if the sysop gives them |
 | Depends on | F10 (hosted), F11 (home-based, through the hub) |
 | Done when | Someone with no ENiGMA½ experience starts a board from the image, signs in as its sysop with Bluesky, and it appears on the hub, in both models |
-| Status | Not started. The public hub's test boards run from an image built from the fork by `scripts/deploy.sh`, set up by hand. **First part, needed before the hub opens to outside sysops** (hub plan §5.2): a written guide for a sysop joining a hub (the fork or its image, the hub's agent, the board's own account, presence), in `docs/admin/`. The first-run setup and the VM image follow |
+| Status | **First part done** (2026-11-26): [Joining a Hub](../admin/joining_a_hub.md), the guide for a sysop joining a hub (building the fork's image, registering, the tunnel agent, the board's settings and menus, its own account, members, leaving), checked against the hub's and the fork's code. Writing it showed what the first-run setup must take over: `config new` asks nothing about AT or the hub, so a sysop adds about twenty settings by hand; the login option and the AT, BA, HP and HS commands are commented out in the menu templates, and the stock main menu art doesn't name them; there is no published image or Compose file. The public hub's test boards run from an image built by `scripts/deploy.sh`, set up by a script of their own. The first-run setup and the VM image follow |
 
 ### F18. Presence reports to the hub
 
