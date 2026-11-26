@@ -41,13 +41,14 @@ in `user/`.
 | Doc | Covers |
 |---|---|
 | [development_plan.md](development/development_plan.md) | Features, delivery tracks (upstream / fork / mods / this repo), configuration model, milestones, PR sequence |
-| [hub_development_plan.md](development/hub_development_plan.md) | Hub features H0–H19, architecture (Caddy, frp, TypeScript control plane), milestones, testing, deployment |
+| [hub_development_plan.md](development/hub_development_plan.md) | Hub features H0–H21, architecture (Caddy, frp, TypeScript control plane), milestones, testing, deployment |
 | [hub.md](development/hub.md) | Optional central hub: tunnel relay, sysop registration, routing, directory |
 | [live_model.md](development/live_model.md) | The hub's common space as a live stream: who is there, where, and who is together, for its map and the BBS door |
 | [enigma_integration.md](development/enigma_integration.md) | How the specs map onto ENiGMA½: login type, routes, groups as attestations, transport, upstream strategy |
 | [attestation.md](development/attestation.md) | User authentication (AT OAuth), credential binding, attestations, access policies, verifier plugins |
 | [publishing.md](development/publishing.md) | The BBS's own AT account and public records: listing, events, status, announcements |
 | [assets.md](development/assets.md) | Art and models from leaves, their members and users: records, publishing, the hub's checks and cache, permissions and remixing, identity and impersonation |
+| [resource_node.md](development/resource_node.md) | Leaves with no front end: storage, compute and agents run by sysops or anyone, under firewall-style permissions |
 | [transport.md](development/transport.md) | HTTPS/WebSocket transport, tunnels and reachability, optional SSH, P2P backlog |
 | [networking.md](development/networking.md) | BBS-to-BBS peering: shared boards, files, and games; clusters of BBSes acting as one |
 | [overte_evaluation.md](development/overte_evaluation.md) | The 3D and VR choice: Overte worlds, a browser client from Vircadia's web SDK, and how identity and networking would fit |
@@ -69,7 +70,7 @@ in `user/`.
 |---|---|
 | **BBS** | **Bulletin Board Server**: this project's server, run by a sysop. (Traditionally "Bulletin Board System"; the server reading parallels AT's PDS.) |
 | **Hub** | The optional public server that relays inbound traffic to BBSes over tunnels and provides the directory and BBS handles ([hub.md](development/hub.md)) |
-| **Leaf** | Any endpoint people reach through a hub: a BBS today; later chats, games, VR worlds ([Cyberspace Framework vision](https://github.com/zerosquaredio/cyberspace-framework/blob/main/docs/vision.md)) |
+| **Leaf** | Any endpoint people reach through a hub: a BBS today; later chats, games, VR worlds, and resource nodes with no front end ([resource_node.md](development/resource_node.md)) ([Cyberspace Framework vision](https://github.com/zerosquaredio/cyberspace-framework/blob/main/docs/vision.md)) |
 | **Cyberspace Framework** | The long-range vision this project is the first piece of: a shared, cyberpunk-styled space across leaves and hubs ([Cyberspace Framework vision](https://github.com/zerosquaredio/cyberspace-framework/blob/main/docs/vision.md)) |
 | **Sysop** | A person who runs a BBS. In ENiGMA½: root plus members of the `sysops` group |
 | **Root** | User #1, permanently a sysop, with a few root-only powers (e.g. reading all private mail) |

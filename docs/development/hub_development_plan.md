@@ -710,6 +710,15 @@ control plane, behind the same edge. The BBS side is F18 and F19
 | Done when | A BBS publishes its ANSI logo and the hub's map draws its board with it; until then, art from a library can be shared in the chat |
 | Status | **Proof of concept working** (2026-11-25), on a scratch hub. Baked from ENiGMA½'s own art: the Mystery Skulls theme by Luciano Ayres of Blocktronics, and a welcome screen by dangermouse. SAUCE names almost nobody in these files, so credit comes from whoever bakes a pack; ENiGMA½'s theme screens hold its menu codes (`%TL1` and the like), which the baker blanks (`--mci`). All 157 of ENiGMA½'s ANSI files come out clean, with and without that. The hub's check caught a real fault on the first try (the parser and the writer disagreeing about blanks at the ends of rows), fixed with a test. **Tested in a real browser** with the real chat server: the gallery; two people sharing pieces by the picker and by `/art`, each seeing the other's drawn with its credit; text that only looks like a reference staying text; one person seeing art as ANSI and then as text while the other kept pictures, and the choice surviving a reload; a phone-sized page. The ANSI view draws in the IBM VGA web font, which the hub serves (VileR's, CC BY-SA 4.0, unchanged, as ENiGMA½'s own website uses it). Of ENiGMA½'s 157 ANSI files, 43 are clean as they ship and would be taken without baking at all. Views tried in a real browser too: each across the chat and the gallery, with the VGA font, and at phone size. 21 new tests in all. Not on the public hub: the art's licence isn't settled (it ships with ENiGMA½, but the artists haven't been asked), and nothing is published to AT yet |
 
+### H21. Resource nodes (later)
+
+| | |
+|---|---|
+| Implements | The hub's side of the [resource node spec](resource_node.md): leaves with no front end, run by sysops or anyone, offering storage, compute and agents to their owner and whoever they allow. Registration of kind `node`, with its token and tunnel and no session routing; its assets taken like any leaf's; object backends relayed through the live model; the admin's rules for what nodes may offer; reports, suspension and bans as for boards |
+| Depends on | H3, H8; H20 and assets spec step 2 for storage; objects and their WebAssembly rules for compute |
+| Done when | A node's owner sees files from their own machine in the space, served through the hub (spec §9, step 1) |
+| Status | Ideas (2026-11-25) |
+
 ## 5. Milestones
 
 | Milestone | Features | Outcome |
@@ -721,6 +730,7 @@ control plane, behind the same edge. The BBS side is F18 and F19
 | **HM4** Public launch | H8 | Operations and moderation in place; open to outside sysops. H8 and H9 done (2026-11-25); before opening, a lawyer's review of the terms |
 | **HM5** Common space, first slice | H13 to H19 | Sign-in, presence, one chat room, the live model, a 2D map and an ANSI view, with basic blocking. Built on the test hub; needs HM3, not HM4, but must be in place (with H18) before a public hub turns it on. **Working locally** (2026-11-19): H13 to H18 all done on the test hub. **Working on the public hub** (2026-11-24), H13 to H19, with two people and two boards with different sysops: each sysop sees only their own board; both people see each other in the room and at the board one is logged in to (shown in two places at once, from the hub's page and the board's report); boards open from the map; chat works both ways |
 | **HM6** Assets, first slice | H20 (with F21) | BBSes' ANSI art on the hub: emblems on the map, and art shared in the chat ([assets spec](assets.md)). **Proof of concept working** (2026-11-25): a baked library, checked and served, shared in the chat |
+| **HM7** Resource nodes | H21 (with F22) | Leaves with no front end: storage first, then the owner's accounts and sites, sharing, compute and agents ([resource node spec](resource_node.md) §9) |
 | Later | H9, H10, H11 | Sysop verification, end-to-end privacy, hosted accounts |
 
 ### 5.1 Dependencies on the BBS plan

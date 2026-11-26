@@ -690,6 +690,16 @@ in.
 | Done when | A test board's emblem appears on the hub's map |
 | Status | Planned (2026-11-25). Waits on F9's app passwords for the test boards (your to-do list) |
 
+### F22. Configuring a resource node
+
+| | |
+|---|---|
+| Implements | A sysop screen for a [resource node](resource_node.md) running on the same server (§3 there): ENiGMA½ finds the node's settings API on loopback, reads its token from a file only the BBS's user can read, and shows its roles, folders, drives and rules for the sysop to change. Without a node, the screen isn't shown. The node is a separate program; the BBS only configures it |
+| Track | **Fork-only** (hub integration) |
+| Depends on | F9; hub H21 |
+| Done when | A sysop turns on the node's storage and adds a drive from inside the BBS |
+| Status | Ideas (2026-11-25) |
+
 ## 4. Milestones
 
 | Milestone | Features | Outcome |
@@ -701,7 +711,7 @@ in.
 | **M4** Common space, first slice | F18, F19, F20 (with hub H13 to H19) | Members appear on the hub and can chat with people on other BBSes, from a browser or from inside the BBS (decided 2026-11-08, vision §3.2) |
 | **M5** Networking | F12 | Shared boards between BBSes |
 | **M6** Art on the hub | F21 (with hub H20) | The BBS's ANSI art and emblem on the hub ([assets spec](assets.md)) |
-| Later | F7, F8, F13, F15 | Paid verification, attestation table, clusters, in-BBS user manager |
+| Later | F7, F8, F13, F15, F22 | Paid verification, attestation table, clusters, in-BBS user manager |
 | After M4 | (not yet split into features) | Voice, then assets and avatars, then the 3D and VR social space: Overte worlds, AT login through a hub-run metaverse server, a browser client, an in-world BBS terminal. Decision and next steps in [overte_evaluation.md](overte_evaluation.md) |
 
 ## 5. Branches and PR sequence
