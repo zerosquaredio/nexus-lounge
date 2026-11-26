@@ -41,13 +41,14 @@ hub.
 | Doc | Covers |
 |---|---|
 | [development_plan.md](development/development_plan.md) | Features, delivery tracks (upstream / fork / mods / this repo), configuration model, milestones, PR sequence |
-| [hub_development_plan.md](development/hub_development_plan.md) | Hub features H0–H23, architecture (Caddy, frp, TypeScript control plane), milestones, testing, deployment |
+| [hub_development_plan.md](development/hub_development_plan.md) | Hub features H0–H24, architecture (Caddy, frp, TypeScript control plane), milestones, testing, deployment |
 | [hub.md](development/hub.md) | Optional central hub: tunnel relay, sysop registration, routing, directory |
 | [live_model.md](development/live_model.md) | The hub's common space as a live stream: who is there, where, and who is together, for its map and the BBS door |
 | [enigma_integration.md](development/enigma_integration.md) | How the specs map onto ENiGMA½: login type, routes, groups as attestations, transport, upstream strategy |
 | [attestation.md](development/attestation.md) | User authentication (AT OAuth), credential binding, attestations, access policies, verifier plugins |
 | [publishing.md](development/publishing.md) | The BBS's own AT account and public records: listing, events, status, announcements |
 | [assets.md](development/assets.md) | Art and models from leaves, their members and users: records, publishing, the hub's checks and cache, permissions and remixing, identity and impersonation |
+| [compute.md](development/compute.md) | Where live objects' work runs: portable WebAssembly programs with declared limits, places reporting capacity, the hub placing and moving programs (itself first, then people's own compute, groups, BBSes), driven 3D models, trust in results, people giving compute, storage, bandwidth and live data feeds and events (a weather station driving rain in a place, a bell that rings when a market opens) to everyone, with contributor awards |
 | [resource_node.md](development/resource_node.md) | Leaves with no front end: storage, compute and agents run by sysops or anyone, under firewall-style permissions |
 | [transport.md](development/transport.md) | HTTPS/WebSocket transport, tunnels and reachability, optional SSH, P2P backlog |
 | [networking.md](development/networking.md) | BBS-to-BBS peering: shared boards, files, and games; clusters of BBSes acting as one |

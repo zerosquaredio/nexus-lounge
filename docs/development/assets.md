@@ -47,7 +47,8 @@ or more **versions**, each one file:
 | `image` | PNG, WebP, JPEG | Emblems, backgrounds, textures, patterns |
 | `panorama` | PNG, WebP, JPEG (equirectangular) | Backgrounds on the map, skies in 3D |
 | `sprite` | A PNG sheet plus its frame data (Aseprite's JSON export) | Animated 2D, the Doom-style level |
-| `model` | glTF binary (`.glb`); VRM for humanoid avatars | 3D, at a budget class: `light`, `standard`, `full` |
+| `model` | glTF binary (`.glb`); VRM for humanoid avatars | 3D, at a budget class: `light`, `standard`, `full`. A model may declare **settings** a program can drive (a part's pose, a colour, a label), for live objects ([compute spec](compute.md) §5) |
+| `program` | WebAssembly, with a manifest of what it needs | An object's backend, or a model's motion program: placed and run as the [compute spec](compute.md) says; never a viewer's page code |
 | `voxel` | MagicaVoxel `.vox` | The grid style (world.md §8.1); later |
 | `splat` | `.spz`, `.ply` | Backdrops only; later |
 

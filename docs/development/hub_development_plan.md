@@ -814,6 +814,15 @@ serves a library baked by the admin):
 | Done when | Two people in different places don't hear each other, walk to the same one, and do; one of them in a terminal |
 | Status | Ideas (2026-11-25) |
 
+### H24. Compute (later)
+
+| | |
+|---|---|
+| Implements | The [compute spec](compute.md): driven models and object state in the live model; WebAssembly programs run by the hub within its admin's limits (`compute.*`), with fuel metering; capacity reports from BBSes and resource nodes; placement in a configurable order (the hub first, then the owner's own compute, their group, their BBS, a node) and moving programs between places; trust in shared results |
+| Depends on | H16 (live model), H20 and the first glTF slice of the assets spec; H21 for nodes; F18's reports for capacity |
+| Done when | A 3D object driven by a streaming feed moves for everyone looking at it, its program running on the hub until the hub's budget is full, then on its owner's node, without the viewers noticing the move |
+| Status | Ideas (2026-11-26), from looking at live 3D explainers (an animated mechanical watch) and real-time 3D infographics |
+
 ## 5. Milestones
 
 | Milestone | Features | Outcome |

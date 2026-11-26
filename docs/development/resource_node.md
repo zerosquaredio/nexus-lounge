@@ -39,6 +39,10 @@ computation (§8.8), and agents (§8.5). It hosts assets the way a leaf does
 - **The owner pays and answers for it.** It runs on their machine, uses
   their accounts, and they are responsible under the hub's terms for what
   it does, as a sysop is for their board.
+- **It can also be given to everyone:** compute, storage and bandwidth
+  offered to the hub's pool, counted and recognised with contributor
+  awards ([compute spec](compute.md) §9), and live data feeds, such as a
+  weather station, that show up in the world as objects (§10).
 
 ## 2. Identity and linking
 
@@ -145,6 +149,10 @@ space.
 ## 6. Compute and the internet
 
 ### 6.1 Programs
+
+*How programs are placed, between the hub, people's own compute, groups,
+BBSes and nodes, with their declared limits and capacity reports, is now
+the [compute spec](compute.md). What follows is the node's side.*
 
 - **Object backends:** the node is where an object's backend runs when
   its owner pays for it (vision §8.8, "the owner's own computer"). The hub

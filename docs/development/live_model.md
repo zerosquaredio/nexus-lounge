@@ -89,6 +89,14 @@ grows within a version.
 | `person` | `label`, `did`, `kind`, `picture` | `kind`: `account` (signed in to the hub, or a BBS they confirmed), `via` (a BBS's word, unconfirmed: `label` is "name via bbs", `did` is null), `vouched` (a BBS member with no AT account: "name@bbs"). `picture` is their Bluesky profile picture as the hub serves it (`url` on the hub, `width`, `height`), for `account` people who haven't turned it off, or null (added 2026-11-26, a field a version 1 viewer may ignore) |
 | `leaf` | `name`, `title`, `url`, `online`, `terminal`, `emblem` | A BBS on this hub. `title` comes from its listing, if it has one; `online` is whether its tunnel is up; `terminal` is the hub's web terminal for it, or null; `emblem` is its small picture for the map (`url` on the hub, `width`, `height`, `label`), or null (added 2026-11-26, F21; a field a version 1 viewer may ignore) |
 | `room` | `name` | The chat room |
+| `object` | (planned) | A live object: its model and its `state`, the settings its program sets ([compute spec](compute.md) §5.2). Not built yet |
+| `feed` | (planned) | A live data feed from a leaf, such as the weather in a town: its type, place and current values ([compute spec](compute.md) §10). Not built yet |
+
+*Planned too:* **live events** ([compute spec](compute.md) §11), such as a
+market opening, which a place makes from the feeds it listens to: sent
+once as their own message to the people in that place, with their type,
+the place and feed, the time and how long they stay news, never kept in
+the state.
 
 **presence:** `person`, `place` (a leaf or room id), `since`, and
 `source`: how the hub knows (`bbs`, the BBS's report; `hub`, a board opened
