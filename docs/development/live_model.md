@@ -90,7 +90,7 @@ grows within a version.
 | `leaf` | `name`, `title`, `url`, `online`, `terminal`, `emblem` | A BBS on this hub. `title` comes from its listing, if it has one; `online` is whether its tunnel is up; `terminal` is the hub's web terminal for it, or null; `emblem` is its small picture for the map (`url` on the hub, `width`, `height`, `label`), or null (added 2026-11-26, F21; a field a version 1 viewer may ignore) |
 | `room` | `name` | The chat room |
 | `object` | (planned) | A live object: its model and its `state`, the settings its program sets ([compute spec](compute.md) §5.2). Not built yet |
-| `feed` | (planned) | A live data feed from a leaf, such as the weather in a town: its type, place and current values ([compute spec](compute.md) §10). Not built yet |
+| `feed` | (planned) | A live data feed from a leaf, such as the weather in a town: its type, place and current values ([compute spec](compute.md) §10). Not built yet. In the compute spec's one model of a live object (§1.1) this is an `object` whose values come from the world, so it may be carried as one |
 
 *Planned too:* **live events** ([compute spec](compute.md) §11), such as a
 market opening, which a place makes from the feeds it listens to: sent

@@ -47,6 +47,56 @@ mechanical watch, whose parts and motion are computed rather than stored.
   and looks react to.
 - **Everything is off until turned on,** on the hub and on every place.
 
+### 1.1 One kind of object
+
+Everything in this spec is the same thing with different parts filled in:
+a **live object**. A driven model, a weather station, a streamer's
+screen, a game cabinet and a bell are not five features; each is one
+object, made of up to six parts, and people make new kinds by choosing
+and setting the parts, not by waiting for a new feature.
+
+| Part | What it is | Set by |
+|---|---|---|
+| **Values** | The object's state: named values, each with a type, units and limits, declared up front (a temperature in °C from -90 to 60; `live`: yes or no; `seats`: 0 to 4; a label of 40 characters). Everything else hangs on these | The object's record |
+| **Source** | Where the values come from: set by hand; a **program** (§2); the world, through a leaf (a sensor, a service the owner signed in to: a *feed*, §10); or other objects' values | The owner |
+| **Look** | How it shows the values at each level: a model whose parts follow them (§5), a simpler picture on the map, text in the door. A table from values to what's drawn; data, not code | The owner, from assets |
+| **Rules** | What follows from the values, as data: "when `status` becomes `open`, ring" (its own reactions, and a place's live events, §11); "when `rain` is above 0, open my umbrella" (others' looks following it) | The owner; a place's environment |
+| **Joins** | Things a person can connect to through it, directly: a stream's player, a game server's address, a file (§10.6). Each named, with who may, and how many | The owner |
+| **Permissions** | Who may see it, read its values, follow it, join it, change it, each as a sentence ([settings_ui.md](settings_ui.md)) | The owner |
+
+The kinds described later are **presets** of this, a starting point with
+parts filled in:
+
+| Preset | Values | Source | Look | Rules | Joins |
+|---|---|---|---|---|---|
+| Driven model (§5) | Its model's settings | A program, or by hand | The model | | |
+| Infographic | Its bars and labels | A program reading outside data (§7) | The model | | |
+| Feed: a weather station (§10) | A shared type (`weather`) | The world, through a leaf | A small model or badge | | |
+| Stream screen (§10.6) | `live`, `title` | The world (the service) | A screen | | The service's player |
+| Game cabinet (§10.6) | `game`, `seats`, `taken` | The server, through its leaf | A cabinet | | The server |
+| Bell | `ringing` | Another object's values | A bell with a `ring` animation | "when the market's `status` becomes `open`, ring" | |
+
+What this buys:
+
+- **One record, one stream, one set of checks.** An object's record
+  declares its values; the live model carries them as its state (§5.2);
+  the hub checks every update against the declaration (types, limits,
+  rate) whatever its source. Feeds, programs' state and servers' status
+  all travel and are moderated the same way.
+- **Shared value types make things fit together.** A type such as
+  `weather` is a named set of values; anything that reads weather works
+  with any object that has it, whoever made it and whatever its source.
+- **People customize by parts.** Change the look and keep the source; put
+  a program between two objects; give a feed a join. The settings pages
+  show the same six parts for every object.
+- **Places are objects too,** in this sense: a place has values (its
+  weather, its light), a source for each (a feed it follows), a look (its
+  scene), and rules (its live events, §11).
+
+The sections below keep their names (programs, driven models, feeds,
+things people connect to, live events), each now a part of this model or
+a preset of it.
+
 ## 2. Programs
 
 ### 2.1 What a program is
@@ -429,6 +479,52 @@ A reliable feed is a contribution like compute or storage (§9): the hub
 counts how long it stayed fresh and within its type's limits, and awards
 it the same way.
 
+### 10.6 Things people connect to: streams and servers
+
+A leaf can also offer something people **join**, not just read: a
+streamer's live stream shown as a screen in the world, or a game server
+(a hosted Doom match four people can play). In the world each is an
+object, with a feed for its state; what people join goes **straight
+between them and its source**, never through the hub.
+
+- **The object and its state.** The leaf publishes a record for it, as
+  for a feed (§10.1), and a small state the hub carries: for a stream,
+  whether it is live, its title, its source; for a server, the game, its
+  seats and how many are taken. The object's model shows it (a screen
+  that lights up, a cabinet with four seats), and the map and the ANSI
+  door show it as text ("Doom: 2 of 4 playing").
+- **Joining is each person's choice, and says what it shares.** The video
+  or the game's traffic goes directly between the person and the source,
+  so each sees the other's address (resource node §6.2). Before joining,
+  the client says so and names where it connects; nothing connects by
+  being near an object.
+- **A stream** is played by the streaming service's own player, from the
+  service, under its terms: the leaf only says which channel and whether
+  it is live (through the owner's sign-in to the service, kept on the
+  node, or the service's public data). Nobody's stream is copied or
+  passed on, and the hub's admin can limit streams to services it names.
+- **A server** runs on its owner's machine, as their own software and at
+  their own risk: it is not a sandboxed program (§2), and the node only
+  announces it, counts its seats, and decides who may join by its rules
+  (resource node §4: "up to 4 people here now", "members of my BBS").
+  Reaching it means the owner opening it to the internet, or to the
+  players alone through a relay; the hub's tunnel carries web pages, not
+  game traffic.
+- **What people play it with matters as much.** A game played in the
+  browser is someone's code in the viewer's browser, which the hub's
+  pages never run (§1). So it opens apart from the hub: its own window
+  on its own address, sandboxed, with no access to the hub's pages or
+  sign-in, from the server's owner, who answers for it; or it is a
+  client the person already has. On a BBS, the same thing already exists
+  as a **door**, and a board's door games can be offered this way.
+- **Rating and terms.** A live stream or a game can't be checked ahead of
+  time as a file can: its owner states its rating and answers for it,
+  people can report it, and the admin can block the object or its owner
+  (assets spec §9). Games and streams have their own licences and terms,
+  which the owner must be within.
+- **As a contribution** (§9, §10.5): a server that is up and used, or a
+  stream people watch, can be counted and recognised like a feed.
+
 ## 11. Live events
 
 A feed is a **state**: a value that is always there, which someone
@@ -574,7 +670,9 @@ hub's privacy notice ([settings_ui.md](settings_ui.md) §6).
    storage and bandwidth, then contributor awards.
 8. **Data feeds** (§10): a first type (weather), feed objects in the
    world, then places and looks that follow them.
-9. **Live events** (§11): places' rules that turn feed changes into
+9. **Things people connect to** (§10.6): stream objects first (state
+   only, the service's own player), then hosted servers.
+10. **Live events** (§11): places' rules that turn feed changes into
    events, with the environment role and feed owners' consent, set by
    hand first, then automatically from who is present; and models and
    looks that react by rule.
@@ -589,12 +687,19 @@ hub's privacy notice ([settings_ui.md](settings_ui.md) §6).
 - Whether an object's owner can pay a hub for more than its quota, and
   how, given that payment is a later feature (H9).
 - The record shapes: `program` assets, model settings, and `object`
-  entities in the live model.
+  entities in the live model: one object record with the six parts of
+  §1.1, of which a feed record (§10.1) is the case with a shared type and
+  a source in the world.
 - What awards there are, and how they're shaped as attestations; whether
   giving earns more than recognition (a larger quota of one's own, say).
 - Whether a pool can span hubs, so one giver helps several.
 - Which feed types come first, who agrees new ones, and whether a feed's
   history belongs on the hub at all.
+- How players reach a home-hosted server without its owner opening a
+  port: a relay of the hub's (and who pays for it), or peer-to-peer
+  connections the hub only introduces.
+- How a hub with a "general" rating treats live streams, which can't be
+  rated ahead of time.
 - How a place's environment role relates to roles a BBS already has
   (sysops, groups), and to places with no single owner (the common
   space, under the hub's admin).
