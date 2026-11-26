@@ -60,7 +60,10 @@ ${b.items.map(itemHtml).join('\n')}`
 
 //  What the chat needs, for /art.json
 export function artJson(art: AssetLibrary | null, fromBoards: BoardPieces[] = []): unknown {
-    const all = [...(art?.items ?? []), ...fromBoards.flatMap(b => b.items)];
+    //  the same art once, the hub's own first
+    const all = [...(art?.items ?? []), ...fromBoards.flatMap(b => b.items)].filter(
+        (item, i, list) => list.findIndex(other => other.id === item.id) === i
+    );
     return {
         name: art?.name ?? 'Art',
         items: all.map(item => ({

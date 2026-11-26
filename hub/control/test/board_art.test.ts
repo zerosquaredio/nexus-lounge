@@ -319,6 +319,30 @@ describe('the art BBSes publish from their accounts', () => {
         assert.deepEqual(hub.piecesFor(board()), []);
     });
 
+    it("takes a piece's record over a splash of the same art", async () => {
+        const body = art('LOGO');
+        const hub = new BoardArt(
+            {
+                config: makeConfig({ assets: { boardArt: ['coolbbs'], font: testFont(dir) } }),
+                list: () => [board({ connected: true })],
+                artOf: (_b, kind) => ('splash' === kind ? { sha256: sha(body), size: body.length } : null),
+                fetch: async () => body,
+                at: at as never,
+                linked: () => true,
+            },
+            join(dir, 'board-art')
+        );
+        await hub.refresh();
+        assert.match(hub.splashFor(board())!.licence.text!, /consent/);
+        //  the same name as the splash took (its file's), so the same art
+        records = [record(body, { name: 'coolbbs', credit: {} })];
+        await hub.refreshPieces();
+        const [piece] = hub.piecesFor(board());
+        assert.equal(piece!.id, hub.splashFor(board())!.id, 'one copy of the art');
+        assert.equal(piece!.licence.id, 'CC-BY-4.0');
+        assert.equal(hub.splashFor(board())!.licence.id, 'CC-BY-4.0', 'one copy, as its record says');
+    });
+
     it('reads only records that are ANSI art keyed by their file, small enough, with a blob', () => {
         const ok = record(art('SKULL'));
         assert.ok(pieceOf(ok.rkey, ok.value));
@@ -354,7 +378,10 @@ describe("the gallery and the chat's list, with BBSes' art", () => {
         assert.match(page, /<h2>From Cool BBS<\/h2>/);
         assert.match(page, /<h3>Skull<\/h3>/);
         assert.doesNotMatch(page, /Nothing here yet/);
-        const list = artJson(null, [{ bbs: 'coolbbs', title: 'Cool BBS', items: [item] }]) as { items: { name: string }[] };
-        assert.deepEqual(list.items.map(i => i.name), ['Skull']);
+        const list = artJson(null, [
+            { bbs: 'coolbbs', title: 'Cool BBS', items: [item] },
+            { bbs: 'otherbbs', title: 'Other', items: [item] },
+        ]) as { items: { name: string }[] };
+        assert.deepEqual(list.items.map(i => i.name), ['Skull'], 'the same art once');
     });
 });

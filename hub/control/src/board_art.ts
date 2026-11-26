@@ -324,8 +324,13 @@ export class BoardArt {
             writeFileSync(join(this.dir, 'files', hash), bytes);
         }
         const library = this.readLibrary();
-        if (!library.items.some(i => i.id === item.id)) {
+        const same = library.items.findIndex(i => i.id === item.id);
+        if (same < 0) {
             library.items.push(item);
+        } else if (key.startsWith('piece:')) {
+            //  the same art as a splash or emblem: what its own record says
+            //  (name, licence, credit) is better than what the hub assumed
+            library.items[same] = item;
         }
         this.save(join(this.dir, 'library.json'), library);
         this.load();
