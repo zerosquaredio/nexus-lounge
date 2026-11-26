@@ -134,29 +134,54 @@ byte comes from outside.
 - **Model files** are served as art is: by hash, never run as a page,
   only to the hub's own pages.
 
-## 6. Work, and who can do it at once
+## 6. Stages, with a trial after each
 
-First, alone: **A. the shapes into the specs** (this file's §3 and §4
-into `assets.md`, a feature in the hub plan), once §2 is settled.
+Built in stages, each ending in something that can be tried, so that a
+wrong guess (a limit, a rule of the checker) is found before more is
+built on it. The trials are in [trials.md](trials.md) §2, by stage.
 
-Then four tracks side by side:
+**Stage 0, done (2026-11-26): can it work at all?** Bluesky's hosts
+accept model files as blobs, up to the 8 MB tried.
+
+**Stage 1: the parts that stand alone.** First, alone: **A.** the shapes
+of §3 and §4 into `assets.md`, and a feature in the hub plan. Then four
+tracks side by side, each in files of its own:
 
 | Track | Work | Touches |
 |---|---|---|
-| **B. Checker** | `gltf.ts`: §4, with tests on good and hostile files | New files only |
-| **C. Fixtures** | A few small models of our own (still, animated, skinned), CC BY 4.0 like the project's art, and generated hostile ones (an outside address, wrong lengths, too large, a required extension, trailing bytes) | New files only |
-| **D. Viewer** | The copied library, the hub's viewer script, tested against the fixtures in a real browser | New files only |
+| **B. Checker** | `gltf.ts`: §4, with tests on good and hostile files | New files in the hub |
+| **C. Fixtures** | A few small models of our own (still, animated, skinned), CC BY 4.0 like the project's art, and generated hostile ones (an outside address, wrong lengths, too large, a required extension, trailing bytes) | New files in the hub |
+| **D. Viewer** | The copied library, the hub's viewer script, a bare test page, tried against the fixtures in a real browser | New files in the hub |
 | **E. Fork** | Config entries, finding the files, the size check, upload, the two-version record, tests | The fork only |
 
-Then, in order, by one agent (they share files): **F.** the hub's record
-reader and library take models (`assets.ts`, `board_art.ts`: read every
-version; items without ANSI; large files served from disk, not held in
-memory; quotas; withdrawal, blocking and refusal as for art); **G.** the
-gallery and the model page (`art_page.ts`, `site.ts`), with their
-permissions; **H.** end to end on a scratch hub: a board publishes a
-model, the hub takes it, the page plays its animation in a real browser,
-a blocked hash disappears, a deleted record withdraws it; **I.** docs,
-the terms draft naming models, and the question for the lawyer.
+*Trials after stage 1:* the checker over freely licensed models from
+elsewhere, beside Khronos's validator; how many of them need a compressed
+format.
+
+**Stage 2: on the hub, on a scratch hub.** In order, by one agent (they
+share files): **F.** the hub's record reader and library take models
+(`assets.ts`, `board_art.ts`: read every version; items without ANSI;
+large files served from disk, not held in memory; quotas; withdrawal,
+blocking and refusal as for art); **G.** the gallery and the model page
+(`art_page.ts`, `site.ts`), with their permissions and the page's own
+report of frame rate and load time.
+
+*Trials after stage 2:* the `light` budget and the file cap, on a
+desktop and on phones; how the viewer handles. The limits are changed
+here, before boards publish anything.
+
+**Stage 3: end to end.** **H.** a board publishes a model from its own
+account, the hub takes it, the page plays its animation in a real
+browser, a blocked hash disappears, a deleted record withdraws it; first
+on a scratch hub, then test2 on the public hub with a model of our own
+(`assets.models.enabled` for it alone). **I.** docs, the terms draft
+naming models, and the question for the lawyer.
+
+*Trials after stage 3:* quotas against the hub's disk and memory;
+stripping of textures' metadata.
+
+Other boards' models stay off the public hub until the terms cover them
+(decision 8).
 
 ## 7. How it's verified
 
@@ -168,9 +193,9 @@ the terms draft naming models, and the question for the lawyer.
   loading the model page on a scratch hub: no errors, nothing fetched
   from any other address, the animation's buttons work, the page works
   with scripts off.
-- **With a real account host,** early: whether Bluesky's hosts accept a
-  `model/gltf-binary` upload, and how large. If they don't, this slice
-  stops there until files outside the repo are designed (assets §4.2).
+- **With a real account host:** done first (stage 0). Bluesky's host
+  accepted `model/gltf-binary` uploads from a test board's own account at
+  440 bytes, 1 MB and 8 MB (2026-11-26).
 - **By a person:** how it looks and handles, on a desktop and a phone.
 
 ## 8. Unchanged, and to change
@@ -183,18 +208,7 @@ the terms draft naming models, and the question for the lawyer.
 
 ## 9. To try out and revisit
 
-Set without data, so each is a setting or a constant in one place, and
-the build records what it sees so they can be changed with evidence:
-
-- **The `light` budget** (decision 4): triangles, draw calls, texture
-  bytes and sizes, bones, animations. Try real models on a desktop, a
-  mid-range phone and an old phone; note the frame rate and load time the
-  viewer page reports.
-- **The 8 MB file cap,** against what account hosts actually accept as
-  an upload, and how long a phone takes to fetch it.
-- **`perBoard` (5) and `totalBytes` (200 MB),** against the hub's disk
-  and memory with a few boards publishing.
-- **Stripping textures' metadata without re-encoding** (decision 5):
-  whether anything gets through that re-encoding would have caught.
-- **No compressed formats** (decision 3): how much larger real models are
-  without them, and whether that makes 8 MB too tight.
+The numbers here were set without data. They, and when each is tried, are
+in [trials.md](trials.md) §2, with every other provisional number in the
+project. Each is one setting or constant, and the viewer page reports
+what it measures, so they can be changed on evidence.
