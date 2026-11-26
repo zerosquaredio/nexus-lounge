@@ -20,7 +20,12 @@ export interface DirectoryEntry {
 
 export function collections(config: HubConfig) {
     const prefix = config.directory.nsidPrefix;
-    return { listing: `${prefix}.leaf.listing`, status: `${prefix}.leaf.status` };
+    return {
+        listing: `${prefix}.leaf.listing`,
+        status: `${prefix}.leaf.status`,
+        //  the art BBSes publish (board_art.ts), followed by the stream too
+        asset: `${prefix}.asset.item`,
+    };
 }
 
 export class Directory {

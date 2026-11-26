@@ -37,6 +37,9 @@ if (webterm) {
 const at = atClient(fetchPublicJson, config.directory.relay);
 const directory = config.directory.enabled ? new Directory(registry, config) : null;
 let stream: { stop(): void } | null = null;
+//  an account's published art changed (the stream says so); set once the
+//  BBSes' art is set up below
+let artChanged: (did: string) => void = () => {};
 if (directory) {
     //  sweep at first start, after a long time away (longer than the stream
     //  keeps), and daily; the stream brings changes in between
@@ -50,7 +53,7 @@ if (directory) {
         void sweep();
     }
     setInterval(sweep, dayMs).unref();
-    stream = followStream(directory, log);
+    stream = followStream(directory, log, did => artChanged(did));
 }
 
 //  observed status (H6): check the tunnels, then publish what changed
@@ -155,17 +158,20 @@ if (config.assets.boardArt.length) {
                 at: atClient(fetchPublicJson, config.directory.relay),
                 linked: bbs => !!directory?.forBbs(bbs),
                 blocked,
+                refused: did => assetBlocks.refuses(did),
             },
             join(dirname(config.database), 'board-art')
         );
         const take = () => void boardArt?.refresh().catch(e => log(`board art: ${(e as Error).message}`));
         setTimeout(take, 5_000).unref();
         setInterval(take, 60_000).unref();
-        //  the art they publish from their accounts, less often
+        //  the art they publish from their accounts: as the stream says it
+        //  changes, and hourly in case the stream missed something
         const read = () =>
             void boardArt?.refreshPieces().catch(e => log(`board art: ${(e as Error).message}`));
         setTimeout(read, 20_000).unref();
-        setInterval(read, 10 * 60_000).unref();
+        setInterval(read, 60 * 60_000).unref();
+        artChanged = did => boardArt?.piecesChanged(did);
     } catch (e) {
         log(`board art: off: ${(e as Error).message}`);
     }

@@ -1,7 +1,9 @@
 //  Following the AT network's changes to listings and status, live, through
 //  a Jetstream (a JSON form of the network's event stream, filtered to our
 //  record types). Resumes from where it stopped after a restart; if it was
-//  away longer than the stream keeps, main.ts runs a sweep.
+//  away longer than the stream keeps, main.ts runs a sweep. Changes to the
+//  art accounts publish (asset records) are passed on to |onAsset|, which
+//  reads that account's art again (board_art.ts).
 
 import { collections, type Directory } from './directory.ts';
 
@@ -46,6 +48,7 @@ export function streamUrl(directory: Directory, cursor: string | null): string |
     const url = new URL(directory.config.directory.jetstream);
     url.searchParams.append('wantedCollections', names.listing);
     url.searchParams.append('wantedCollections', names.status);
+    url.searchParams.append('wantedCollections', names.asset);
     if ('hub' === directory.config.directory.scope) {
         const dids = directory.registry
             .list()
@@ -67,7 +70,20 @@ export function streamUrl(directory: Directory, cursor: string | null): string |
     return url.toString();
 }
 
-export function followStream(directory: Directory, log: (line: string) => void): { stop(): void } {
+//  The account whose art an event changes, if it is one
+export function assetChange(directory: Directory, event: JetstreamEvent): string | null {
+    return 'commit' === event.kind &&
+        'string' === typeof event.did &&
+        collections(directory.config).asset === event.commit?.collection
+        ? event.did
+        : null;
+}
+
+export function followStream(
+    directory: Directory,
+    log: (line: string) => void,
+    onAsset: (did: string) => void = () => {}
+): { stop(): void } {
     let socket: WebSocket | null = null;
     let stopped = false;
     let delay = 1_000;
@@ -99,6 +115,10 @@ export function followStream(directory: Directory, log: (line: string) => void):
                 log(
                     `directory: ${String(event.commit?.operation)} ${String(event.commit?.collection)} from ${String(event.did)}`
                 );
+            }
+            const artFrom = assetChange(directory, event);
+            if (artFrom) {
+                onAsset(artFrom);
             }
             if ('number' === typeof event.time_us && Date.now() - lastSaved > 5_000) {
                 directory.setState('cursor', String(event.time_us));

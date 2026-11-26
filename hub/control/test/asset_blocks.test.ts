@@ -85,6 +85,25 @@ describe('blocked art', () => {
         assert.throws(() => blocks.block('abc', ''), /64 hex digits/);
     });
 
+    it('refuses and accepts an account, in the moderation log, read again by refresh()', () => {
+        const blocks = new AssetBlocks(registry.db);
+        const other = new AssetBlocks(registry.db);
+        const did = 'did:plc:abcdefghijklmnopqrstuvwx';
+        blocks.refuse(did, 'copies others');
+        assert.equal(blocks.refuses(did), true);
+        assert.equal(other.refuses(did), false);
+        assert.equal(other.refresh(), true);
+        assert.equal(other.refuses(did), true);
+        assert.deepEqual(blocks.refusedPublishers().map(r => [r.did, r.reason]), [[did, 'copies others']]);
+        assert.equal(blocks.accept(did), true);
+        assert.equal(blocks.accept(did), false);
+        assert.throws(() => blocks.refuse('alice', ''), /Not a DID/);
+        assert.deepEqual(
+            new Moderation(registry.db).history().map(e => e.action),
+            ['asset-refuse', 'asset-accept']
+        );
+    });
+
     it("hides a library's piece, and stops serving all its files, while any of them is blocked", () => {
         const items = library(join(dir, 'lib'));
         const blocked = new Set<string>();

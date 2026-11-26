@@ -42,7 +42,7 @@ interface BbsRow {
     open_proxies: number;
 }
 
-const SchemaVersion = 13;
+const SchemaVersion = 14;
 
 const Schema = `
 CREATE TABLE IF NOT EXISTS bbs (
@@ -270,6 +270,12 @@ CREATE TABLE IF NOT EXISTS asset_block (
     sha256     TEXT PRIMARY KEY,
     reason     TEXT NOT NULL DEFAULT '',
     blocked_at TEXT NOT NULL
+);
+--  accounts whose art the hub refuses, all of it (schema 14)
+CREATE TABLE IF NOT EXISTS asset_publisher_block (
+    did        TEXT PRIMARY KEY,
+    reason     TEXT NOT NULL DEFAULT '',
+    refused_at TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS web_session (
     token_hash TEXT PRIMARY KEY,

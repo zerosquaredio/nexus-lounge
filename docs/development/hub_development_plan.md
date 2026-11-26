@@ -740,9 +740,12 @@ record how each part was first built and tested.
 **What remains for boards' own art** (2026-11-25; the proof of concept
 serves a library baked by the admin):
 
-- Following asset records as the directory follows listings (H7): the
+- ~~Following asset records as the directory follows listings (H7): the
   sweep and the stream gain the asset types, kept only for accounts whose
-  listings the hub shows.
+  listings the hub shows.~~ **Done** (2026-11-26): the stream asks for
+  `asset.item` records too, and a change from a BBS the hub takes art from
+  has that BBS's art read again a few seconds later (once for a burst of
+  changes); the reading every ten minutes becomes hourly, a fallback.
 - Fetching blobs from account servers and files from boards
   (`/assets/<sha256>` through the tunnel, a path to add, §5.2), with the
   directory's guarded fetcher, then the checks the library already gets.
@@ -762,8 +765,8 @@ serves a library baked by the admin):
   every file of it everywhere, and refusing the same bytes again; the
   report form gains "Art on the hub" and "Art copied without permission",
   with a **Report** link on each piece in the gallery that names it by
-  hash (registry schema 13). Refusing every asset from one publisher is
-  still to do (a ban covers their BBSes).
+  hash (registry schema 13). `hubctl asset refuse|accept DID` takes no art
+  at all from an account, and lets go of what it took (schema 14).
 - The live model's `look` for an entity (spec §12), and the map drawing a
   board with its emblem and a person with their Bluesky picture.
 - The terms of service need their section on assets before the public hub

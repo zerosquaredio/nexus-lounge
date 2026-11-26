@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import type { AtClient } from '../src/atproto.ts';
 import { makeConfig, type HubConfig } from '../src/config.ts';
 import { Directory } from '../src/directory.ts';
-import { applyEvent, streamUrl } from '../src/jetstream.ts';
+import { applyEvent, assetChange, streamUrl } from '../src/jetstream.ts';
 import { pointsAtHub, sanitizeListing, sanitizeStatus } from '../src/listing.ts';
 import { fetchPublicJson, isPublicAddress } from '../src/net.ts';
 import { Registry } from '../src/registry.ts';
@@ -288,9 +288,21 @@ describe('following the network', () => {
         assert.equal(directory.entry(Third), null);
     });
 
+    it("passes on changes to an account's art, and nothing else", () => {
+        const art = 'nexus.cyberspace.dev.asset.item';
+        assert.equal(assetChange(directory, { ...commit(Other, art, 'create', {}), commit: { collection: art, rkey: 'a'.repeat(64) } }), Other);
+        assert.equal(assetChange(directory, commit(Other, art, 'delete')), Other);
+        assert.equal(assetChange(directory, commit(Other, ListingNsid, 'create', listing())), null);
+        assert.equal(assetChange(directory, { did: Other, kind: 'identity' }), null);
+    });
+
     it('asks for our record types, from a little before where it stopped', () => {
         const url = new URL(streamUrl(directory, '1000000000')!);
-        assert.deepEqual(url.searchParams.getAll('wantedCollections'), [ListingNsid, StatusNsid]);
+        assert.deepEqual(url.searchParams.getAll('wantedCollections'), [
+            ListingNsid,
+            StatusNsid,
+            'nexus.cyberspace.dev.asset.item',
+        ]);
         assert.equal(url.searchParams.get('cursor'), String(1_000_000_000 - 5_000_000));
         assert.equal(new URL(streamUrl(directory, null)!).searchParams.has('cursor'), false);
     });

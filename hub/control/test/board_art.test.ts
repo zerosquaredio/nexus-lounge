@@ -326,7 +326,12 @@ describe('the art BBSes publish from their accounts', () => {
     const make = (
         linked = true,
         ratings = ['general'],
-        more: { blocked?: (sha256: string) => boolean; boardPieces?: number; boardArt?: string[] } = {}
+        more: {
+            blocked?: (sha256: string) => boolean;
+            refused?: (did: string) => boolean;
+            boardPieces?: number;
+            boardArt?: string[];
+        } = {}
     ) =>
         new BoardArt(
             {
@@ -343,6 +348,7 @@ describe('the art BBSes publish from their accounts', () => {
                 at: at as never,
                 linked: () => linked,
                 blocked: more.blocked,
+                refused: more.refused,
             },
             join(dir, 'board-art')
         );
@@ -431,6 +437,34 @@ describe('the art BBSes publish from their accounts', () => {
         }
         blocked.clear();
         assert.equal(hub.piecesFor(board()).length, 2, 'back once unblocked');
+    });
+
+    it('takes nothing from an account the hub refuses, and lets go of what it took', async () => {
+        records = [record(art('SKULL'))];
+        const refused = new Set<string>();
+        const hub = make(true, ['general'], { refused: did => refused.has(did) });
+        await hub.refreshPieces();
+        const [piece] = hub.piecesFor(board());
+        refused.add('did:plc:cool');
+        await hub.refreshPieces();
+        assert.deepEqual(hub.piecesFor(board()), []);
+        assert.equal(hub.file(filesOf(piece!)[0]!), null, 'let go of');
+        records = [record(art('NEW'))];
+        await hub.refreshPieces();
+        assert.equal(fetched.length, 1, 'nothing new fetched');
+    });
+
+    it('reads one account again soon after the stream says its art changed, once for many changes', async () => {
+        const hub = make();
+        hub.settleMs = 10;
+        records = [record(art('SKULL'))];
+        hub.piecesChanged('did:plc:cool');
+        hub.piecesChanged('did:plc:cool');
+        hub.piecesChanged('did:plc:someone-else');
+        await new Promise(resolve => setTimeout(resolve, 50));
+        await hub.refreshPieces([]);
+        assert.equal(hub.piecesFor(board()).length, 1);
+        assert.equal(fetched.length, 1);
     });
 
     it('takes no more pieces from a BBS than assets.boardPieces', async () => {

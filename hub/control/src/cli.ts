@@ -92,6 +92,10 @@ Art (takes effect within half a minute)
                          offered again; SHA256 may be its first 12 or more
                          digits, as the gallery and reports show them
   asset unblock SHA256
+  asset refuse DID [--reason TEXT]
+                         take no art from that account at all, and let go
+                         of what was taken (its BBS's splash, emblem and art)
+  asset accept DID       take its art again
 
 Abuse reports (from the report form on the hub's site, by anyone)
   abuse reports [--all]  open reports (--all: closed ones too)
@@ -565,11 +569,30 @@ export async function run(argv: string[]): Promise<void> {
                 for (const b of others) {
                     console.log(`${b.sha256}  ${b.blockedAt.slice(0, 10)}${b.reason ? `  ${plain(b.reason)}` : ''}`);
                 }
+                const refused = blocks.refusedPublishers();
+                if (refused.length) {
+                    console.log('\nAccounts whose art is refused:');
+                }
+                for (const r of refused) {
+                    console.log(`${r.did}  ${r.refusedAt.slice(0, 10)}${r.reason ? `  ${plain(r.reason)}` : ''}`);
+                }
                 return;
             }
             case 'asset': {
                 const blocks = new AssetBlocks(registry.db);
-                const what = need(positional, 1, 'block or unblock');
+                const what = need(positional, 1, 'block, unblock, refuse or accept');
+                if ('refuse' === what) {
+                    const r = blocks.refuse(need(positional, 2, 'DID'), options.reason ?? '');
+                    console.log(
+                        `Refusing all art from ${r.did}${r.reason ? ` (${r.reason})` : ''}. What the hub took from its BBS goes at its next reading (within an hour, or a minute for splash screens and emblems).`
+                    );
+                    return;
+                }
+                if ('accept' === what) {
+                    const did = need(positional, 2, 'DID');
+                    console.log(blocks.accept(did) ? `Taking art from ${did} again.` : `${did} wasn't refused.`);
+                    return;
+                }
                 const hash = resolveHash(need(positional, 2, 'SHA256'), artOnHub(artDirs(config)));
                 if ('block' === what) {
                     const b = blocks.block(hash, options.reason ?? '');

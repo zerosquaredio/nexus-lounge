@@ -47,6 +47,8 @@ export interface BoardArtDeps {
     //  whether a file is blocked on this hub (asset_blocks.ts): not taken,
     //  and what was taken of it is neither shown nor served
     blocked?: (sha256: string) => boolean;
+    //  whether the hub refuses all art from an account (hubctl asset refuse)
+    refused?: (did: string) => boolean;
 }
 
 //  A piece a BBS publishes (its asset.item record), as the hub reads it
@@ -133,6 +135,11 @@ export class BoardArt {
     failed = new Map<string, number>();
     busy = false;
     font: Font | null = null;
+    //  readings of pieces one after another, never two at once
+    private piecesQueue: Promise<void> = Promise.resolve();
+    //  BBSes whose art is read again soon (piecesChanged())
+    private soon = new Map<string, ReturnType<typeof setTimeout>>();
+    settleMs = 5_000;
 
     constructor(deps: BoardArtDeps, dir: string) {
         this.deps = deps;
@@ -165,9 +172,16 @@ export class BoardArt {
             .filter((item): item is PublicItem => !!item);
     }
 
-    //  Read what each BBS publishes from its account, and take what is new.
-    //  Pieces with a rating this hub's directory doesn't show are left out
-    async refreshPieces(): Promise<void> {
+    //  Read what each BBS publishes from its account (or only those named),
+    //  and take what is new. Pieces with a rating this hub's directory
+    //  doesn't show are left out. One reading at a time.
+    refreshPieces(only?: string[]): Promise<void> {
+        const run = this.piecesQueue.then(() => this.readPieces(only));
+        this.piecesQueue = run.catch(() => {});
+        return run;
+    }
+
+    private async readPieces(only?: string[]): Promise<void> {
         const at = this.deps.at;
         if (!at) {
             return;
@@ -175,7 +189,7 @@ export class BoardArt {
         const collection = `${this.deps.config.directory.nsidPrefix}.asset.item`;
         const ratings = this.deps.config.directory.ratings;
         const cap = this.deps.config.assets.boardPieces;
-        for (const bbs of this.deps.list()) {
+        for (const bbs of this.deps.list().filter(b => !only || only.includes(b.name))) {
             if (!this.allowed(bbs)) {
                 //  no longer taken from: what was taken goes (see prune())
                 this.pieces.delete(bbs.name);
@@ -283,7 +297,26 @@ export class BoardArt {
     }
 
     allowed(bbs: Bbs): boolean {
-        return 'active' === bbs.state && this.deps.config.assets.boardArt.includes(bbs.name);
+        return (
+            'active' === bbs.state &&
+            this.deps.config.assets.boardArt.includes(bbs.name) &&
+            !(bbs.bbsDid && (this.deps.refused?.(bbs.bbsDid) ?? false))
+        );
+    }
+
+    //  The art one account publishes changed (the network's stream says
+    //  so): read that BBS's again, soon, once however many changes come
+    piecesChanged(did: string): void {
+        const bbs = this.deps.list().find(b => b.bbsDid === did);
+        if (!bbs || this.soon.has(bbs.name)) {
+            return;
+        }
+        const timer = setTimeout(() => {
+            this.soon.delete(bbs.name);
+            void this.refreshPieces([bbs.name]).catch(e => this.log(`board art: ${(e as Error).message}`));
+        }, this.settleMs);
+        timer.unref?.();
+        this.soon.set(bbs.name, timer);
     }
 
     //  Fetch and bake what BBSes offer that isn't baked yet. Each BBS's

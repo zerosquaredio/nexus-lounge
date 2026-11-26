@@ -333,6 +333,14 @@ sudo hubctl asset block 1c300dbb83be --reason "not theirs to share"
 sudo hubctl asset unblock 1c300dbb83be
 ```
 
+To take no art at all from an account (a BBS's own account), and let go of
+everything taken from it, its splash screen and emblem too:
+
+```sh
+sudo hubctl asset refuse did:plc:... --reason "keeps posting others' art"
+sudo hubctl asset accept did:plc:...
+```
+
 Anyone can report a piece from the gallery (its **Report** link), as "Art
 on the hub" or "Art copied without permission"; `hubctl abuse report ID`
 then shows its hash. Art a BBS withdraws (stops publishing or offering, or

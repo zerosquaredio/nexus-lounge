@@ -195,7 +195,8 @@ terms cover assets, the hub takes them only from the BBSes named in
 **Art BBSes publish.** A BBS can publish ANSI art from its own account, as
 asset records with the files attached as blobs (development plan F21). For
 the BBSes in `assets.boardArt` whose accounts are linked here, the hub reads
-those records every ten minutes, fetches each new file from the account's
+those records as soon as the network's stream says they changed (and
+hourly, in case it missed something), fetches each new file from the account's
 host (public `https://` only, size-limited), checks it against the hash its
 record names, and bakes it, named, credited and licensed as the record says
 (SAUCE credit first). The gallery shows each BBS's pieces under its name,
@@ -211,7 +212,8 @@ baked item, and every file no other art still uses (assets spec §6.5).
 **Blocked art.** `hubctl asset block SHA256` stops the hub showing or
 serving a file, and the piece it belongs to, anywhere (gallery, chat,
 splash, map), and refuses it if any BBS offers the same bytes again; the
-running hub notices within half a minute. See the admin guide
+running hub notices within half a minute. `hubctl asset refuse DID` takes
+no art from an account at all, and lets go of what it took. See the admin guide
 ([running_a_hub.md](../docs/admin/running_a_hub.md) §4, Art).
 
 ### Views

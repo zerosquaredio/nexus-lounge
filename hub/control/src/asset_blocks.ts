@@ -10,6 +10,7 @@ import type { DatabaseSync } from 'node:sqlite';
 import type { Library, LibraryItem } from './bake.ts';
 import { HubError } from './errors.ts';
 import { Moderation } from './moderation.ts';
+import { isDid } from './rules.ts';
 
 export const MaxBlockReason = 300;
 
@@ -95,11 +96,19 @@ export function resolveHash(typed: string, art: ArtOnHub[]): string {
     return matches[0]!;
 }
 
+//  An account whose art the hub refuses, all of it (assets spec §9)
+export interface RefusedPublisher {
+    did: string;
+    reason: string;
+    refusedAt: string;
+}
+
 export class AssetBlocks {
     db: DatabaseSync;
     now: () => number;
     moderation: Moderation;
     private blocked = new Set<string>();
+    private refused = new Set<string>();
     private seen = '';
 
     constructor(db: DatabaseSync, now: () => number = Date.now) {
@@ -114,18 +123,61 @@ export class AssetBlocks {
         const rows = this.db.prepare('SELECT sha256 FROM asset_block ORDER BY sha256').all() as {
             sha256: string;
         }[];
-        const now = rows.map(r => r.sha256).join(',');
+        const dids = this.db.prepare('SELECT did FROM asset_publisher_block ORDER BY did').all() as {
+            did: string;
+        }[];
+        const now = `${rows.map(r => r.sha256).join(',')};${dids.map(r => r.did).join(',')}`;
         if (now === this.seen) {
             return false;
         }
         this.seen = now;
         this.blocked = new Set(rows.map(r => r.sha256));
+        this.refused = new Set(dids.map(r => r.did));
         return true;
     }
 
     //  As of the last refresh()
     has(sha256: string): boolean {
         return this.blocked.has(sha256);
+    }
+
+    //  Whether the hub refuses this account's art, as of the last refresh()
+    refuses(did: string): boolean {
+        return this.refused.has(did);
+    }
+
+    refuse(did: string, reason: string): RefusedPublisher {
+        if (!isDid(did)) {
+            throw new HubError('usage', `Not a DID: ${did}`);
+        }
+        const why = reason.replace(/[\u0000-\u001f\u007f]/g, ' ').trim();
+        if (why.length > MaxBlockReason) {
+            throw new HubError('usage', `A reason can be up to ${MaxBlockReason} characters`);
+        }
+        const at = new Date(this.now()).toISOString();
+        this.db
+            .prepare('INSERT OR REPLACE INTO asset_publisher_block (did, reason, refused_at) VALUES (?, ?, ?)')
+            .run(did, why, at);
+        this.moderation.log('asset-refuse', did, why);
+        this.refresh();
+        return { did, reason: why, refusedAt: at };
+    }
+
+    accept(did: string): boolean {
+        const changed = this.db.prepare('DELETE FROM asset_publisher_block WHERE did = ?').run(did).changes > 0;
+        if (changed) {
+            this.moderation.log('asset-accept', did, '');
+            this.refresh();
+        }
+        return changed;
+    }
+
+    refusedPublishers(): RefusedPublisher[] {
+        return (
+            this.db
+                .prepare('SELECT did, reason, refused_at FROM asset_publisher_block ORDER BY refused_at')
+                .all() as { did: string; reason: string; refused_at: string }[]
+        ).map(r => ({ did: r.did, reason: r.reason, refusedAt: r.refused_at }));
     }
 
     block(sha256: string, reason: string): AssetBlock {
