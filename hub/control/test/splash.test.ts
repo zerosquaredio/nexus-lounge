@@ -139,6 +139,9 @@ describe("a BBS's splash screen, and views on every page", () => {
         );
         const plain = await call('GET', 'otherbbs.hub.test', '/');
         assert.doesNotMatch(plain.body, /class="ansi|class="splash/);
+        //  so that browsers name its origin when the menu posts to the hub
+        assert.equal(page.headers['referrer-policy'], 'strict-origin-when-cross-origin');
+        assert.equal((await call('GET', 'hub.test', '/')).headers['referrer-policy'], 'same-origin');
     });
 
     it("draws from the hub's own address on a BBS's page, where /assets/ is the BBS's", async () => {

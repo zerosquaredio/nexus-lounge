@@ -271,7 +271,12 @@ export function createSite(deps: SiteDeps): Site {
             'Content-Type': 'text/html; charset=utf-8',
             'Cache-Control': 'no-store',
             'X-Content-Type-Options': 'nosniff',
-            'Referrer-Policy': 'same-origin',
+            //  a BBS's page at its own address posts its view menu to the
+            //  hub's site, which must see where it came from; under
+            //  "same-origin", browsers send that form "Origin: null"
+            'Referrer-Policy': labelForHost(res.req?.headers.host, config.domain)
+                ? 'strict-origin-when-cross-origin'
+                : 'same-origin',
             //  forms post here, and sign-in then redirects to the account host
             'Content-Security-Policy':
                 `default-src 'none'; style-src 'unsafe-inline'; img-src 'self' ${config.site.publicUrl}; font-src 'self'; form-action 'self' https:; frame-ancestors 'none'; base-uri 'none'`,
