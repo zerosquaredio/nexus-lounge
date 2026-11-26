@@ -87,7 +87,7 @@ grows within a version.
 | `type` | Fields | Notes |
 |---|---|---|
 | `person` | `label`, `did`, `kind` | `kind`: `account` (signed in to the hub, or a BBS they confirmed), `via` (a BBS's word, unconfirmed: `label` is "name via bbs", `did` is null), `vouched` (a BBS member with no AT account: "name@bbs") |
-| `leaf` | `name`, `title`, `url`, `online`, `terminal` | A BBS on this hub. `title` comes from its listing, if it has one; `online` is whether its tunnel is up; `terminal` is the hub's web terminal for it, or null |
+| `leaf` | `name`, `title`, `url`, `online`, `terminal`, `emblem` | A BBS on this hub. `title` comes from its listing, if it has one; `online` is whether its tunnel is up; `terminal` is the hub's web terminal for it, or null; `emblem` is its small picture for the map (`url` on the hub, `width`, `height`, `label`), or null (added 2026-11-26, F21; a field a version 1 viewer may ignore) |
 | `room` | `name` | The chat room |
 
 **presence:** `person`, `place` (a leaf or room id), `since`, and

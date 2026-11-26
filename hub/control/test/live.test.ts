@@ -76,6 +76,29 @@ describe('the live model', () => {
         );
     });
 
+    it("carries each board's emblem for the map, when it has one", () => {
+        const { config, registry, profiles, presence } = setup();
+        const emblem = { url: `/assets/${'ab'.repeat(32)}`, width: 56, height: 32, label: 'a pink diamond' };
+        const state = buildState({
+            config,
+            registry,
+            presence,
+            profiles,
+            emblemOf: bbs => ('coolbbs' === bbs.name ? emblem : null),
+        });
+        const leaves = state.entities.filter(e => 'leaf' === e.type);
+        assert.deepEqual(
+            leaves.map(e => [e.id, 'leaf' === e.type && e.emblem]),
+            [
+                ['leaf:coolbbs', emblem],
+                ['leaf:quietbbs', null],
+            ]
+        );
+        //  and none, without a source for them
+        const plain = buildState({ config, registry, presence, profiles });
+        assert.ok(plain.entities.every(e => 'leaf' !== e.type || null === e.emblem));
+    });
+
     it('leaves out people who turned presence off, and suspended BBSes', () => {
         const { config, registry, profiles, presence } = setup();
         profiles.signedIn({ did: Alice, handle: 'alice.example' });

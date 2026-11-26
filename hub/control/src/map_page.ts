@@ -25,6 +25,8 @@ export function mapPane(listHtml: string): string {
 .map circle.dot { fill: var(--accent); }
 .map circle.dot.you { stroke: var(--fg); stroke-width: 2; }
 .map line.link { stroke: var(--accent); stroke-opacity: .35; stroke-dasharray: 3 4; }
+.map image.emblem { image-rendering: pixelated; }
+.map .place.off image.emblem { opacity: .5; }
 .space-list h3 { margin: .2rem 0; font-size: 1rem; }
 .space-list h3 button { margin: 0 0 0 .5rem; padding: .1rem .6rem; font-size: .85rem; }
 .space-list p { margin: .2rem 0 .6rem; }
@@ -135,6 +137,16 @@ export const MapScript = String.raw`(function () {
         return out;
     }
     function nameOf(place) { return 'leaf' === place.type ? place.title || place.name : place.name; }
+    //  a board's emblem (F21), as the hub drew it, unless the view shows art
+    //  as text; only a picture the hub serves itself
+    var EmblemMax = { width: 64, height: 32 };
+    function emblemOf(place) {
+        var e = 'leaf' === place.type && place.emblem;
+        if (!e || 'text' === document.documentElement.getAttribute('data-art') ||
+            !/^\/assets\/[0-9a-f]{64}$/.test(e.url) || !(e.width > 0 && e.height > 0)) { return null; }
+        var s = Math.min(1, EmblemMax.width / e.width, EmblemMax.height / e.height);
+        return { url: e.url, width: Math.round(e.width * s), height: Math.round(e.height * s), label: e.label };
+    }
     function canOpen(place) { return 'leaf' === place.type && place.online && place.terminal; }
 
     function draw() {
@@ -164,20 +176,32 @@ export const MapScript = String.raw`(function () {
         all.forEach(function (place) {
             var c = at[place.id], people = peopleAt(place.id), room = 'room' === place.type;
             var g = el('g', { class: 'place' + ('leaf' === place.type && !place.online ? ' off' : '') + (canOpen(place) ? ' go' : '') });
-            var label = clip(nameOf(place), 16);
+            var emblem = emblemOf(place), half = emblem ? 90 : 70;
+            var label = clip(nameOf(place), emblem ? 13 : 16);
             var title = nameOf(place) + ('leaf' === place.type ? (place.online ? ', online' : ', offline') : ', chat') +
                 ', ' + people.length + (1 === people.length ? ' person' : ' people');
             g.appendChild(el('title', {}, title));
             if (room) {
                 g.appendChild(el('circle', { class: 'hub', cx: c.x, cy: c.y, r: 46 }));
             } else {
-                g.appendChild(el('rect', { x: c.x - 70, y: c.y - 20, width: 140, height: 40, rx: 6 }));
+                g.appendChild(el('rect', { x: c.x - half, y: c.y - 20, width: 2 * half, height: 40, rx: 6 }));
             }
-            g.appendChild(el('text', { x: c.x, y: c.y + 5, 'text-anchor': 'middle' }, label));
+            var textX = c.x;
+            if (emblem) {
+                //  the emblem at the left of the box, the name in the rest
+                var left = c.x - half + 6, image = el('image', {
+                    class: 'emblem', href: emblem.url, x: left, y: c.y - emblem.height / 2,
+                    width: emblem.width, height: emblem.height, preserveAspectRatio: 'xMidYMid meet'
+                });
+                image.appendChild(el('title', {}, emblem.label));
+                g.appendChild(image);
+                textX = (left + emblem.width + 4 + c.x + half) / 2;
+            }
+            g.appendChild(el('text', { x: textX, y: c.y + 5, 'text-anchor': 'middle' }, label));
             //  a dot for each person, around the place
             people.forEach(function (person, i) {
                 var a = -Math.PI / 2 + (2 * Math.PI * i) / Math.max(people.length, 6);
-                var rx = room ? 58 : 86, ry = room ? 58 : 32;
+                var rx = room ? 58 : half + 16, ry = room ? 58 : 32;
                 var dot = el('circle', { class: 'dot' + (person.id === you ? ' you' : ''), cx: c.x + rx * Math.cos(a), cy: c.y + ry * Math.sin(a), r: 5 });
                 dot.appendChild(el('title', {}, person.label));
                 g.appendChild(dot);

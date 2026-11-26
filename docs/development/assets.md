@@ -228,8 +228,11 @@ account (publishing spec §2). It gains:
   rating, licence, permissions and credit (SAUCE fills credit in for ANSI);
 - publishing them the way it publishes the listing: blobs uploaded, records
   written, changed records updated, removed ones deleted;
-- a listing field, **`emblem`**: a strongRef to the asset that represents
-  the BBS in the space (its logo; an `ansi` version at least);
+- a listing field, **`emblem`**: the small logo that stands for the BBS on
+  the hub's map. The sysop names it (`atProto.publishing.emblem.art`), which
+  is their consent to offering it; there is none by default. Named and
+  served like the splash below, and baked by the hub the same way (a
+  strongRef to an asset record later, once boards publish those);
 - a listing field, **`splash`**: its splash screen, the screen it greets
   callers with, which the hub shows on its directory and the BBS's page.
   With the sysop's consent, given once at setup, the fork offers by

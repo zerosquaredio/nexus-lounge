@@ -29,7 +29,7 @@ import type { HubConfig } from './config.ts';
 import type { Directory } from './directory.ts';
 import type { DoorAccess, Presence } from './presence.ts';
 import type { Profiles } from './profiles.ts';
-import type { Registry } from './registry.ts';
+import type { Bbs, Registry } from './registry.ts';
 import { WebTermPath } from './webterm.ts';
 import { acceptWebSocket, isUpgrade, type WsPeer } from './websocket.ts';
 
@@ -68,6 +68,8 @@ export interface LeafEntity {
     online: boolean;
     //  the hub's web terminal for it, if the hub serves one
     terminal: string | null;
+    //  its emblem, a small picture for the map (F21), if it has one
+    emblem: { url: string; width: number; height: number; label: string } | null;
 }
 
 export interface RoomEntity {
@@ -121,6 +123,8 @@ export interface LiveSources {
     chat?: Chat | null;
     //  whether the hub serves the web terminal
     webterm?: boolean;
+    //  a BBS's emblem, if it has one
+    emblemOf?: (bbs: Bbs) => LeafEntity['emblem'];
 }
 
 //  Someone the hub's page says has a board open
@@ -175,6 +179,7 @@ export function buildState(s: LiveSources, visits: Visit[] = []): LiveState {
             url,
             online: bbs.connected,
             terminal: s.webterm ? `${url}${WebTermPath}?connect=1` : null,
+            emblem: s.emblemOf?.(bbs) ?? null,
         });
     }
 

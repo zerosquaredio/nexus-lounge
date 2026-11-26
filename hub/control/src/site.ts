@@ -65,7 +65,7 @@ import { artJson, ArtJsonPath, artPageBody, ArtPath, creditLine } from './art_pa
 import { artHtml, ArtStyle } from './art_html.ts';
 import { type View, viewById, viewCss, ViewCookie, ViewPath, viewPicker, Views } from './views.ts';
 import type { AssetLibrary, PublicItem } from './assets.ts';
-import type { BoardArt } from './board_art.ts';
+import type { ArtKind, BoardArt } from './board_art.ts';
 import { agentConfig } from './generate.ts';
 import { esc, page } from './html.ts';
 import { MaxApplicationNote, type Application, type Bbs, type Registry } from './registry.ts';
@@ -244,7 +244,26 @@ export function createSite(deps: SiteDeps): Site {
     const live =
         presence && profiles && config.space.live.enabled
             ? new Live(
-                  { config, registry, presence, profiles, directory: deps.directory ?? null, chat, webterm: !!deps.webterm },
+                  {
+                      config,
+                      registry,
+                      presence,
+                      profiles,
+                      directory: deps.directory ?? null,
+                      chat,
+                      webterm: !!deps.webterm,
+                      emblemOf: bbs => {
+                          const emblem = emblemOf(bbs);
+                          return emblem
+                              ? {
+                                    url: emblem.item.thumb.url,
+                                    width: emblem.item.thumb.width,
+                                    height: emblem.item.thumb.height,
+                                    label: emblem.item.description.short || emblem.item.name,
+                                }
+                              : null;
+                      },
+                  },
                   { sessionValid: session => !!signin.session(session) },
                   log,
                   now
@@ -363,11 +382,24 @@ export function createSite(deps: SiteDeps): Site {
     //  it (board_art.ts, F21), or else what the hub's admin chose from the
     //  hub's art (assets.splashes); and the library it is drawn from
     function splashOf(bbs: Bbs): { item: PublicItem; library: AssetLibrary } | null {
-        const own = boardArt?.splashFor(bbs);
+        return boardArtOf(bbs, 'splash', config.assets.splashes);
+    }
+
+    //  Its emblem, for the map, likewise (assets.emblems)
+    function emblemOf(bbs: Bbs): { item: PublicItem; library: AssetLibrary } | null {
+        return boardArtOf(bbs, 'emblem', config.assets.emblems);
+    }
+
+    function boardArtOf(
+        bbs: Bbs,
+        kind: ArtKind,
+        chosenBy: Record<string, string>
+    ): { item: PublicItem; library: AssetLibrary } | null {
+        const own = boardArt?.artFor(bbs, kind);
         if (own && boardArt?.library) {
             return { item: own, library: boardArt.library };
         }
-        const name = config.assets.splashes[bbs.name];
+        const name = chosenBy[bbs.name];
         const chosen = art && name ? art.find(name) : null;
         return chosen && art ? { item: chosen, library: art } : null;
     }

@@ -134,13 +134,13 @@ if (config.assets.library) {
 }
 //  BBSes' own splash screens, from those the hub takes them from (F21)
 let boardArt: BoardArt | null = null;
-if (config.assets.boardSplashes.length) {
+if (config.assets.boardArt.length) {
     try {
         boardArt = new BoardArt(
             {
                 config,
                 list: () => registry.list(),
-                splashOf: bbs => directory?.forBbs(bbs)?.listing.splash ?? null,
+                artOf: (bbs, kind) => directory?.forBbs(bbs)?.listing[kind] ?? null,
                 log,
             },
             join(dirname(config.database), 'board-art')

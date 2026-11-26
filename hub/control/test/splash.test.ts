@@ -98,7 +98,8 @@ describe("a BBS's splash screen, and views on every page", () => {
         const own = library();
         const boardArt = {
             library: own,
-            splashFor: (b: { name: string }) => ('otherbbs' === b.name ? own.items[0]! : null),
+            artFor: (b: { name: string }, kind: string) =>
+                'splash' === kind && 'otherbbs' === b.name ? own.items[0]! : null,
             file: (hash: string) => own.file(hash),
         } as unknown as BoardArt;
         server = createSite({

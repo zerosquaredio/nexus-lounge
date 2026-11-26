@@ -1,6 +1,6 @@
-//  BBSes' own splash screens (assets spec §4.3, development plan F21). A
-//  BBS whose sysop lets the hub show it names its splash in its listing, by
-//  the SHA-256 and size of the file as it is, and serves that file at
+//  BBSes' own splash screens and emblems (assets spec §4.3, development plan
+//  F21). A BBS whose sysop lets the hub show them names each in its listing,
+//  by the SHA-256 and size of the file as it is, and serves that file at
 //  /assets/<sha256>. The hub fetches it through the BBS's tunnel, checks its
 //  hash, and bakes it as it would any art: ENiGMA½'s menu codes blanked, so
 //  none of the board's live details show, cleaned to characters and
@@ -8,7 +8,7 @@
 //  its data directory, so a restart fetches nothing again.
 //
 //  Until the hub's terms cover assets (hub plan §5.2), only the BBSes in
-//  assets.boardSplashes are taken.
+//  assets.boardArt are taken.
 
 import { request } from 'node:http';
 import { createHash } from 'node:crypto';
@@ -25,12 +25,17 @@ import type { Bbs } from './registry.ts';
 export const FontInRelease = 'fonts/pc/cp437-8x16.psf';
 const FetchMs = 10_000;
 
+//  what a BBS may offer: its splash screen, and its emblem for the map
+export type ArtKind = 'splash' | 'emblem';
+export const ArtKinds: ArtKind[] = ['splash', 'emblem'];
+const KindName: Record<ArtKind, string> = { splash: 'splash screen', emblem: 'emblem' };
+
 export interface BoardArtDeps {
     config: HubConfig;
     //  the BBSes registered here
     list: () => Bbs[];
-    //  the splash a BBS's (linked) listing names, if any
-    splashOf: (bbs: Bbs) => { sha256: string; size: number } | null;
+    //  the file of this kind a BBS's (linked) listing names, if any
+    artOf: (bbs: Bbs, kind: ArtKind) => { sha256: string; size: number } | null;
     log?: (line: string) => void;
     //  for tests: fetch a BBS's file through its tunnel
     fetch?: (bbs: Bbs, sha256: string) => Promise<Buffer>;
@@ -42,11 +47,15 @@ interface Kept {
     id: string;
 }
 
+//  where what was taken is kept: "<kind>:<name>" (a bare name, from before
+//  emblems, is a splash)
+const keyOf = (kind: ArtKind, name: string) => `${kind}:${name}`;
+
 export class BoardArt {
     deps: BoardArtDeps;
     dir: string;
     log: (line: string) => void;
-    //  by BBS name
+    //  by keyOf()
     kept = new Map<string, Kept>();
     library: AssetLibrary | null = null;
     //  files that failed, so they aren't fetched again each time
@@ -61,21 +70,30 @@ export class BoardArt {
         mkdirSync(join(dir, 'files'), { recursive: true });
         const index = join(dir, 'boards.json');
         if (existsSync(index)) {
-            for (const [name, kept] of Object.entries(JSON.parse(readFileSync(index, 'utf8')) as Record<string, Kept>)) {
-                this.kept.set(name, kept);
+            for (const [key, kept] of Object.entries(JSON.parse(readFileSync(index, 'utf8')) as Record<string, Kept>)) {
+                this.kept.set(key.includes(':') ? key : keyOf('splash', key), kept);
             }
         }
         this.load();
     }
 
-    //  The splash to show for a BBS, if it still offers the one baked
-    splashFor(bbs: Bbs): PublicItem | null {
-        const kept = this.kept.get(bbs.name);
-        const named = this.allowed(bbs) ? this.deps.splashOf(bbs) : null;
+    //  The art of this kind to show for a BBS, if it still offers the one
+    //  baked
+    artFor(bbs: Bbs, kind: ArtKind): PublicItem | null {
+        const kept = this.kept.get(keyOf(kind, bbs.name));
+        const named = this.allowed(bbs) ? this.deps.artOf(bbs, kind) : null;
         if (!kept || !named || named.sha256 !== kept.raw || !this.library) {
             return null;
         }
         return this.library.items.find(item => item.id === kept.id) ?? null;
+    }
+
+    splashFor(bbs: Bbs): PublicItem | null {
+        return this.artFor(bbs, 'splash');
+    }
+
+    emblemFor(bbs: Bbs): PublicItem | null {
+        return this.artFor(bbs, 'emblem');
     }
 
     file(sha256: string) {
@@ -83,7 +101,7 @@ export class BoardArt {
     }
 
     allowed(bbs: Bbs): boolean {
-        return 'active' === bbs.state && this.deps.config.assets.boardSplashes.includes(bbs.name);
+        return 'active' === bbs.state && this.deps.config.assets.boardArt.includes(bbs.name);
     }
 
     //  Fetch and bake what BBSes offer that isn't baked yet. Each BBS's
@@ -95,19 +113,21 @@ export class BoardArt {
         this.busy = true;
         try {
             for (const bbs of this.deps.list()) {
-                const named = this.allowed(bbs) && bbs.connected ? this.deps.splashOf(bbs) : null;
-                if (!named || this.kept.get(bbs.name)?.raw === named.sha256) {
-                    continue;
-                }
-                const key = `${bbs.name}:${named.sha256}`;
-                if (Date.now() - (this.failed.get(key) ?? 0) < 60 * 60 * 1000) {
-                    continue;
-                }
-                try {
-                    await this.take(bbs, named);
-                } catch (e) {
-                    this.failed.set(key, Date.now());
-                    this.log(`board art: ${bbs.name}'s splash not taken: ${(e as Error).message}`);
+                for (const kind of ArtKinds) {
+                    const named = this.allowed(bbs) && bbs.connected ? this.deps.artOf(bbs, kind) : null;
+                    if (!named || this.kept.get(keyOf(kind, bbs.name))?.raw === named.sha256) {
+                        continue;
+                    }
+                    const key = `${bbs.name}:${named.sha256}`;
+                    if (Date.now() - (this.failed.get(key) ?? 0) < 60 * 60 * 1000) {
+                        continue;
+                    }
+                    try {
+                        await this.take(bbs, kind, named);
+                    } catch (e) {
+                        this.failed.set(key, Date.now());
+                        this.log(`board art: ${bbs.name}'s ${KindName[kind]} not taken: ${(e as Error).message}`);
+                    }
                 }
             }
         } finally {
@@ -115,7 +135,7 @@ export class BoardArt {
         }
     }
 
-    async take(bbs: Bbs, named: { sha256: string; size: number }): Promise<void> {
+    async take(bbs: Bbs, kind: ArtKind, named: { sha256: string; size: number }): Promise<void> {
         if (named.size > MaxAnsiBytes) {
             throw new Error('larger than ANSI art may be');
         }
@@ -132,7 +152,7 @@ export class BoardArt {
             themes: [],
             author: '',
             group: '',
-            note: `${bbs.name}'s splash screen`,
+            note: `${bbs.name}'s ${KindName[kind]}`,
         }, this.font);
         for (const [hash, bytes] of files) {
             writeFileSync(join(this.dir, 'files', hash), bytes);
@@ -142,13 +162,13 @@ export class BoardArt {
             library.items.push(item);
         }
         this.save(join(this.dir, 'library.json'), library);
-        this.kept.set(bbs.name, { raw: named.sha256, id: item.id });
+        this.kept.set(keyOf(kind, bbs.name), { raw: named.sha256, id: item.id });
         this.save(join(this.dir, 'boards.json'), Object.fromEntries(this.kept));
         this.load();
         if (!this.library?.items.some(i => i.id === item.id)) {
             throw new Error("its art didn't pass the hub's checks");
         }
-        this.log(`board art: took ${bbs.name}'s splash, ${item.record.name} (${item.id.slice(0, 12)})`);
+        this.log(`board art: took ${bbs.name}'s ${KindName[kind]}, ${item.record.name} (${item.id.slice(0, 12)})`);
     }
 
     readLibrary(): Library {
@@ -157,8 +177,8 @@ export class BoardArt {
             ? (JSON.parse(readFileSync(path, 'utf8')) as Library)
             : {
                   $type: `${Prefix}.asset.catalogue`,
-                  name: "BBSes' splash screens",
-                  description: 'Splash screens BBSes on this hub offer, with their consent.',
+                  name: "BBSes' splash screens and emblems",
+                  description: 'Splash screens and emblems BBSes on this hub offer, with their consent.',
                   createdAt: new Date().toISOString(),
                   items: [] as LibraryItem[],
               };

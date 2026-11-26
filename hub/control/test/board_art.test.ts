@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { BoardArt, fontPath } from '../src/board_art.ts';
@@ -38,14 +38,15 @@ describe("BBSes' own splash screens", () => {
     let dir: string;
     let fetched: string[];
     let offers: Map<string, { sha256: string; size: number }>;
+    let emblems: Map<string, { sha256: string; size: number }>;
     let files: Map<string, Buffer>;
 
-    const make = (boardSplashes = ['coolbbs'], list = [bbs('coolbbs'), bbs('other')]) =>
+    const make = (boardArt = ['coolbbs'], list = [bbs('coolbbs'), bbs('other')]) =>
         new BoardArt(
             {
-                config: makeConfig({ assets: { boardSplashes, font: testFont(dir) } }),
+                config: makeConfig({ assets: { boardArt, font: testFont(dir) } }),
                 list: () => list,
-                splashOf: b => offers.get(b.name) ?? null,
+                artOf: (b, kind) => ('splash' === kind ? offers : emblems).get(b.name) ?? null,
                 fetch: async (b, hash) => {
                     fetched.push(`${b.name}:${hash.slice(0, 8)}`);
                     const body = files.get(hash);
@@ -66,6 +67,7 @@ describe("BBSes' own splash screens", () => {
         dir = mkdtempSync(join(tmpdir(), 'hub-board-art-'));
         fetched = [];
         offers = new Map();
+        emblems = new Map();
         files = new Map();
     });
     afterEach(() => rmSync(dir, { recursive: true, force: true }));
@@ -133,6 +135,28 @@ describe("BBSes' own splash screens", () => {
         assert.equal(fetched.length, 1, 'too large to fetch at all');
     });
 
+    it('takes an emblem too, kept apart from the splash, and the splash kept from before emblems', async () => {
+        offer('coolbbs', splash());
+        const mark = Buffer.from('\x1b[1;35m<>\x1b[0m\r\n', 'latin1');
+        files.set(sha(mark), mark);
+        emblems.set('coolbbs', { sha256: sha(mark), size: mark.length });
+        const art = make();
+        await art.refresh();
+        assert.match(art.emblemFor(bbs('coolbbs'))!.credit.note!, /coolbbs's emblem/);
+        assert.match(art.splashFor(bbs('coolbbs'))!.credit.note!, /coolbbs's splash screen/);
+        assert.notEqual(art.emblemFor(bbs('coolbbs'))!.id, art.splashFor(bbs('coolbbs'))!.id);
+
+        //  a hub from before emblems kept its splashes by the BBS's name alone
+        const index = join(dir, 'board-art', 'boards.json');
+        const kept = JSON.parse(readFileSync(index, 'utf8'));
+        writeFileSync(index, JSON.stringify({ coolbbs: kept['splash:coolbbs'] }));
+        const fetchedBefore = fetched.length;
+        const again = make();
+        assert.ok(again.splashFor(bbs('coolbbs')), 'still known');
+        await again.refresh();
+        assert.equal(fetched.length, fetchedBefore + 1, 'only the emblem is fetched again');
+    });
+
     it('draws with the web terminal\'s own font unless told another', () => {
         assert.equal(
             fontPath(makeConfig({ webTerminal: { root: '/opt/enig-term' } })).replaceAll('\\', '/'),
@@ -144,6 +168,14 @@ describe("BBSes' own splash screens", () => {
 });
 
 describe('a listing naming its splash, and the tunnel that serves it', () => {
+    it('keeps an emblem as it keeps a splash', () => {
+        const emblem = { sha256: 'cd'.repeat(32), size: 40 };
+        const kept = sanitizeListing({ name: 'Cool', emblem: { ...emblem, mediaType: 'text/x-ansi' } });
+        assert.deepEqual(kept?.emblem, emblem);
+        assert.equal(kept?.splash, null);
+        assert.equal(sanitizeListing({ name: 'Cool', emblem: { sha256: 'x', size: 40 } })?.emblem, null);
+    });
+
     it('keeps a splash named by hash and size, and nothing else', () => {
         const listing = (splash: unknown) => sanitizeListing({ name: 'Cool', splash })?.splash;
         assert.deepEqual(listing({ sha256: 'ab'.repeat(32), size: 120, mediaType: 'text/x-ansi', x: 1 }), {
