@@ -57,6 +57,9 @@ export interface PersonEntity {
     //  account: signed in to the hub, or a BBS they confirmed; via: a BBS's
     //  word, unconfirmed; vouched: a BBS member with no AT account
     kind: 'account' | 'via' | 'vouched';
+    //  their Bluesky picture, as the hub serves it, for an account whose
+    //  owner hasn't turned it off (pictures.ts), or null
+    picture: { url: string; width: number; height: number } | null;
 }
 
 export interface LeafEntity {
@@ -125,6 +128,8 @@ export interface LiveSources {
     webterm?: boolean;
     //  a BBS's emblem, if it has one
     emblemOf?: (bbs: Bbs) => LeafEntity['emblem'];
+    //  someone's Bluesky picture, if the hub has it and they allow it
+    pictureOf?: (did: string) => PersonEntity['picture'];
 }
 
 //  Someone the hub's page says has a board open
@@ -160,7 +165,14 @@ export function buildState(s: LiveSources, visits: Visit[] = []): LiveState {
         const id = `person:${did}`;
         if (!people.has(id)) {
             const handle = s.profiles.get(did)?.handle;
-            people.set(id, { id, type: 'person', label: handle ? `@${handle}` : did, did, kind: 'account' });
+            people.set(id, {
+                id,
+                type: 'person',
+                label: handle ? `@${handle}` : did,
+                did,
+                kind: 'account',
+                picture: s.pictureOf?.(did) ?? null,
+            });
         }
         return id;
     };
@@ -186,7 +198,14 @@ export function buildState(s: LiveSources, visits: Visit[] = []): LiveState {
     for (const p of s.presence.around()) {
         const id = personId(p);
         if (!people.has(id)) {
-            people.set(id, { id, type: 'person', label: p.label, did: p.did, kind: p.kind });
+            people.set(id, {
+                id,
+                type: 'person',
+                label: p.label,
+                did: p.did,
+                kind: p.kind,
+                picture: 'account' === p.kind && p.did ? (s.pictureOf?.(p.did) ?? null) : null,
+            });
         }
         presence.push({
             id: `${id}@leaf:${p.bbs}`,

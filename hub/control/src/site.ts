@@ -65,6 +65,7 @@ import { artJson, ArtJsonPath, artPageBody, ArtPath, type BoardPieces, creditLin
 import { artHtml, ArtStyle } from './art_html.ts';
 import { type View, viewById, viewCss, ViewCookie, ViewPath, viewPicker, Views } from './views.ts';
 import type { AssetLibrary, PublicItem } from './assets.ts';
+import type { Pictures } from './pictures.ts';
 import type { ArtKind, BoardArt } from './board_art.ts';
 import { agentConfig } from './generate.ts';
 import { esc, page } from './html.ts';
@@ -119,6 +120,8 @@ export interface SiteDeps {
     art?: AssetLibrary | null;
     //  BBSes' own splash screens (board_art.ts), if any are taken
     boardArt?: BoardArt | null;
+    //  people's Bluesky pictures, for the map (pictures.ts)
+    pictures?: Pictures | null;
     //  what the control plane last heard from the tunnel server, for
     //  /status.json: "ok", "down", "error", or "unchecked"
     tunnels?: () => string;
@@ -263,6 +266,8 @@ export function createSite(deps: SiteDeps): Site {
                                 }
                               : null;
                       },
+                      pictureOf: did =>
+                          deps.pictures && profiles?.get(did)?.picture ? deps.pictures.pictureOf(did) : null,
                   },
                   { sessionValid: session => !!signin.session(session) },
                   log,
@@ -271,6 +276,9 @@ export function createSite(deps: SiteDeps): Site {
             : null;
     if (chat && live) {
         chat.onChange = () => live.poke();
+    }
+    if (deps.pictures && live) {
+        deps.pictures.onChange = () => live.poke();
     }
     const moderation = presence?.moderation ?? null;
     //  reports, and mutes, one person may make in an hour
@@ -657,6 +665,17 @@ BBS you are on.</p>
 <form method="post" action="/me/presence"><input type="hidden" name="presence" value="off"><button>Stop showing me</button></form>`
             : `<p><strong>Off:</strong> nobody in the common space sees you, whatever BBS you are on.</p>
 <form method="post" action="/me/presence"><input type="hidden" name="presence" value="on"><button>Show me</button></form>`;
+        const picture = deps.pictures
+            ? `<h2>Your picture on the map</h2>
+${
+    profile.picture
+        ? `<p><strong>On:</strong> while you are shown, the map draws you with your Bluesky profile picture,
+a copy the hub keeps.</p>
+<form method="post" action="/me/picture"><input type="hidden" name="picture" value="off"><button>Use a dot instead</button></form>`
+        : `<p><strong>Off:</strong> the map draws you as a dot.</p>
+<form method="post" action="/me/picture"><input type="hidden" name="picture" value="on"><button>Use my picture</button></form>`
+}`
+            : '';
         const bbses = registry.listForSysop(who.did).length
             ? '<a href="/bbs">Your BBSes</a>'
             : 'Run a BBS? <a href="/bbs">Register it here</a>';
@@ -672,6 +691,7 @@ ${blockNotice(who.did)}
 ${shown}
 <p class="hint">Off unless you turn it on. A BBS that reports who is on it has its own setting for you
 too, and the stricter one wins.</p>
+${picture}
 ${membershipsSection(who)}
 ${mutesSection(who)}
 <p>${bbses} · <a href="/space">Who's around</a> · <a href="/">The directory</a></p>
@@ -1721,9 +1741,27 @@ ${footer()}`,
                 return redirect(res, '/me');
             }
 
+            if (profiles && '/me/picture' === path) {
+                const value = form.get('picture');
+                if ('on' !== value && 'off' !== value) {
+                    return send(res, 400, page('Not understood', '<p>That form was not understood.</p>', who));
+                }
+                if (!changeLimit.allow(who.did)) {
+                    return send(res, 429, page('Too many changes', '<p>Try again later.</p>', who));
+                }
+                profiles.get(who.did) ?? profiles.signedIn(who);
+                profiles.setPicture(who.did, 'on' === value);
+                if ('off' === value) {
+                    deps.pictures?.forget(who.did);
+                }
+                live?.tick();
+                return redirect(res, '/me');
+            }
+
             if (profiles && ('/me/presence' === path || '/me/forget' === path)) {
                 if ('/me/forget' === path) {
                     profiles.remove(who.did);
+                    deps.pictures?.forget(who.did);
                     moderation?.forget(who.did);
                     chat?.sweep();
                     live?.tick();
@@ -1894,6 +1932,25 @@ ${footer()}`,
                 'Content-Security-Policy': "default-src 'none'; sandbox",
                 //  the hub's pages, and its BBSes' pages at their addresses (name.domain,
                 //  the same site), may show it; other sites may not
+                'Cross-Origin-Resource-Policy': 'same-site',
+            });
+            return void res.end('HEAD' === req.method ? undefined : file.body);
+        }
+
+        //  people's Bluesky pictures, as the hub keeps them (pictures.ts); not
+        //  kept as long as art, since their owners may turn them off
+        const picture = /^\/pictures\/([0-9a-f]{64})$/.exec(path);
+        if (deps.pictures && picture) {
+            const file = deps.pictures.file(picture[1]!);
+            if (!file) {
+                return send(res, 404, page('Not found', '<p>Nothing here.</p>'));
+            }
+            res.writeHead(200, {
+                'Content-Type': file.type,
+                'Content-Length': String(file.body.length),
+                'Cache-Control': 'public, max-age=86400',
+                'X-Content-Type-Options': 'nosniff',
+                'Content-Security-Policy': "default-src 'none'; sandbox",
                 'Cross-Origin-Resource-Policy': 'same-site',
             });
             return void res.end('HEAD' === req.method ? undefined : file.body);

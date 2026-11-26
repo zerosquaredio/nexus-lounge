@@ -592,6 +592,17 @@ describe('profiles, with the common space on', () => {
         assert.equal(new Profiles(registry.db).get(SysopDid)?.presence, false);
     });
 
+    it('turn their picture on the map off and on', async () => {
+        const cookie = await signedIn(undefined, '/me');
+        assert.equal(new Profiles(registry.db).get(SysopDid)?.picture, true, 'on unless turned off');
+        assert.equal((await call('POST', '/me/picture', { cookie, form: { picture: 'off' } })).location, '/me');
+        assert.equal(new Profiles(registry.db).get(SysopDid)?.picture, false);
+        await call('POST', '/me/picture', { cookie, form: { picture: 'on' } });
+        assert.equal(new Profiles(registry.db).get(SysopDid)?.picture, true);
+        assert.equal((await call('POST', '/me/picture', { cookie, form: { picture: 'maybe' } })).status, 400);
+        assert.equal((await call('GET', '/pictures/' + 'ab'.repeat(32))).status, 404, 'none kept here');
+    });
+
     it('need a session', async () => {
         assert.equal((await call('GET', '/me')).location, '/signin');
         assert.equal((await call('POST', '/me/presence', { form: { presence: 'on' } })).location, '/signin');

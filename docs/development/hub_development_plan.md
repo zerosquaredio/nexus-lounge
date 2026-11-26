@@ -22,6 +22,11 @@ BBS-side work is in [development_plan.md](development_plan.md).
   its own tunnel or another hub. The hub software is runnable by anyone.
 - **Honest about trust.** TLS terminates at the hub in v1, so the hub operator
   can read traffic. This is stated plainly to sysops and users.
+- **AT, not Bluesky.** The hub depends on the AT Protocol, not on Bluesky's
+  services: a network without Bluesky should be able to run it, with
+  anything Bluesky-specific behind a setting. What still assumes Bluesky,
+  and making it optional later: [development plan](development_plan.md)
+  §1.5.
 
 ## 2. Architecture
 
@@ -767,8 +772,17 @@ serves a library baked by the admin):
   with a **Report** link on each piece in the gallery that names it by
   hash (registry schema 13). `hubctl asset refuse|accept DID` takes no art
   at all from an account, and lets go of what it took (schema 14).
-- The live model's `look` for an entity (spec §12), and the map drawing a
-  board with its emblem and a person with their Bluesky picture.
+- ~~The live model's `look` for an entity (spec §12), and the map drawing a
+  board with its emblem and a person with their Bluesky picture.~~
+  **Done** (2026-11-26) as far as the first slice goes: boards carry their
+  `emblem`, and people shown as their own account their `picture`: the
+  avatar of their public Bluesky profile, fetched from their account's
+  host, checked (JPEG or PNG, up to 1 MB and 2048 px) and served by the
+  hub at `/pictures/<sha256>` (`pictures.ts`), read again every few hours,
+  deleted when they turn it off on `/me` (on by default), remove their
+  profile, or haven't been shown for a week (registry schema 15). The map
+  draws them as a small round picture. The full `look` (versions,
+  classes, the identity marks of §8.2) waits for people's own looks.
 - The terms of service need their section on assets before the public hub
   shows boards' art (spec §10). The project's own art (`art/`, CC BY 4.0)
   can be shown there before that.

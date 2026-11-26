@@ -62,6 +62,30 @@ Every PR we send upstream must:
 If an upstream PR is declined, the feature moves to the fork-only track
 unchanged; its module boundaries are designed so that this costs nothing.
 
+### 1.5 AT, not Bluesky
+
+Boards and hubs depend on the AT Protocol, not on Bluesky. A community
+may leave Bluesky and run its own AT network (its own account hosts,
+relay, and DID directory, or `did:web` only), and everything should keep
+working there, with whatever is Bluesky's own made optional. New work uses
+generic AT where it can, and keeps anything Bluesky-specific behind a
+setting. *Making the existing Bluesky-specific parts optional is a later
+project* (noted 2026-11-26). What it covers, as of that date:
+
+| Bluesky-specific | Where | What it would take |
+|---|---|---|
+| Bluesky's relay and Jetstream as defaults | hub `directory.relay`, `directory.jetstream` | Already settings; a network without a Jetstream needs the hub to read a relay's firehose instead |
+| The PLC directory (`plc.directory`), for `did:plc` documents and account age | hub `atproto.ts` (`PlcDirectory`), H9's minimum account age | A setting; with `did:web` only, account age has no source (H9 already treats it as unknown) |
+| Profile pictures from `app.bsky.actor.profile` | hub `pictures.ts` (H20) | `space.pictures` turns it off (done); naming another record type later. Without it, people are dots |
+| Announcements as `app.bsky.feed.post` (with link facets) | fork `core/atproto/publishing.js`, `const.js`; the board scope asks for it | Off when the network has no such app; the scope then leaves it out |
+| Ratings as Bluesky's self-label values (`graphic-media`, `sexual`, ...) | fork `publishing.js` | The listing's own `rating` is ours already; the labels could follow the network's moderation vocabulary |
+| "Bluesky" in screens and docs, `*.bsky.social` examples | hub site, fork login screens and help, guides | Wording from a setting (the network's name), as the hub's own name is |
+| Handle lookups through `bsky.social` in docs and help | fork `oputil_help.js`, guides | Point at the network's own account host, or resolve locally |
+
+Everything else (OAuth sign-in, records in a person's own repo, blobs,
+handle verification, the hub's own records) is plain AT and works with any
+account host.
+
 ## 2. Configuration model
 
 The `config.hjson` settings, modeled on the existing top-level

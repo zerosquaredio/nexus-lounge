@@ -7,6 +7,10 @@ The terms of service and privacy notice of the public hub at
 so a change shows without a restart. They're HTML fragments: the hub puts
 its own page around them.
 
+`drafts/` holds sections not yet in force, for the lawyer's review first:
+`terms-art.html`, on the art the hub shows (with the questions for the
+lawyer in a comment at its end). The hub doesn't serve them.
+
 Another hub should write its own, since these name this hub's operator, its
 age limit, its content rules and how long it keeps things. They're a
 starting point, not legal advice, and they haven't yet been reviewed by a

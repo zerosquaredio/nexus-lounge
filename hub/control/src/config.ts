@@ -135,6 +135,9 @@ export interface HubConfig {
         //  a BBS that has sent no report for this long counts as having
         //  nobody on (it reports every minute)
         reportTimeoutSeconds: number;
+        //  people's pictures on the map, from their Bluesky profiles
+        //  (pictures.ts); off for a network without Bluesky's app records
+        pictures: boolean;
         //  chat (H15), on a freeq server only the hub can reach: see chat.ts.
         //  Needs HUB_CHAT_SECRET, shared with freeq
         chat: {
@@ -227,6 +230,7 @@ export const Defaults: HubConfig = {
         excludeOpenBbses: false,
         vouchedFrom: [],
         reportTimeoutSeconds: 180,
+        pictures: true,
         chat: {
             enabled: false,
             ircPort: 16667,
@@ -291,6 +295,9 @@ export function makeConfig(overrides: Partial<Record<keyof HubConfig, unknown>> 
     }
     if ('boolean' !== typeof config.space.enabled || 'boolean' !== typeof config.space.excludeOpenBbses) {
         throw new HubError('config', 'space.enabled and space.excludeOpenBbses are true or false');
+    }
+    if ('boolean' !== typeof config.space.pictures) {
+        throw new HubError('config', 'space.pictures is true or false');
     }
     if (!['members', 'anyone'].includes(config.space.join)) {
         throw new HubError('config', 'space.join is "members" or "anyone"');

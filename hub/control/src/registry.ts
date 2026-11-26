@@ -42,7 +42,7 @@ interface BbsRow {
     open_proxies: number;
 }
 
-const SchemaVersion = 14;
+const SchemaVersion = 15;
 
 const Schema = `
 CREATE TABLE IF NOT EXISTS bbs (
@@ -398,6 +398,11 @@ export class Registry {
         const columns = this.db.prepare('PRAGMA table_info(bbs)').all() as { name: string }[];
         if (!columns.some(c => 'state_reason' === c.name)) {
             this.db.exec('ALTER TABLE bbs ADD COLUMN state_reason TEXT');
+        }
+        //  whether the map shows a person's Bluesky picture (schema 15)
+        const profileColumns = this.db.prepare('PRAGMA table_info(profile)').all() as { name: string }[];
+        if (!profileColumns.some(c => 'picture' === c.name)) {
+            this.db.exec('ALTER TABLE profile ADD COLUMN picture INTEGER NOT NULL DEFAULT 1');
         }
         //  the art a report is about, by hash (schema 13)
         const reportColumns = this.db.prepare('PRAGMA table_info(abuse_report)').all() as { name: string }[];

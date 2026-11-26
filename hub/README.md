@@ -177,6 +177,16 @@ from the hub's art. The map draws it in the BBS's box, at most 64 by 32
 pixels, faded while the BBS is offline, and not at all in a view that shows
 art as text. The live model carries it as the leaf's `emblem`.
 
+**People's pictures on the map.** With the live model on, someone shown as
+their own account is drawn with the avatar of their public Bluesky profile:
+the hub fetches it from their account's host, checks it (a JPEG or PNG, up
+to 1 MB and 2048 pixels a side), and serves its own copy at
+`/pictures/<sha256>`, kept in `pictures/` beside the database. It looks for
+a new one every few hours, and deletes one when its owner turns it off on
+`/me` (on by default), removes their profile, or hasn't been shown for a
+week. The live model carries it as the person's `picture`. `space.pictures:
+false` turns this off (for a network without Bluesky's profile records).
+
 **BBSes' own splash screens and emblems** (development plan F21). A BBS
 whose sysop lets the hub show them names its splash (and its emblem, if the
 sysop named one) in its listing, by the file's SHA-256 and

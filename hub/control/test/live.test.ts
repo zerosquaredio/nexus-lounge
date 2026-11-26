@@ -99,6 +99,35 @@ describe('the live model', () => {
         assert.ok(plain.entities.every(e => 'leaf' !== e.type || null === e.emblem));
     });
 
+    it("carries the picture of people shown as their own account, and nobody else's", () => {
+        const { config, registry, profiles, presence } = setup();
+        profiles.signedIn({ did: Alice, handle: 'alice.example' });
+        profiles.setPresence(Alice, true);
+        presence.answer(Alice, 'coolbbs', 'confirmed');
+        presence.report(registry.mustGet('coolbbs'), [member(Alice, 'Alice'), member(Bob, 'Bob')]);
+        const asked: string[] = [];
+        const picture = { url: `/pictures/${'cd'.repeat(32)}`, width: 400, height: 400 };
+        const state = buildState({
+            config,
+            registry,
+            presence,
+            profiles,
+            pictureOf: did => {
+                asked.push(did);
+                return picture;
+            },
+        });
+        const people = state.entities.filter(e => 'person' === e.type);
+        assert.deepEqual(
+            people.map(p => ['person' === p.type && p.kind, 'person' === p.type && p.picture]).sort(),
+            [
+                ['account', picture],
+                ['via', null],
+            ]
+        );
+        assert.deepEqual(asked, [Alice], "an unconfirmed member's DID is never looked up");
+    });
+
     it('leaves out people who turned presence off, and suspended BBSes', () => {
         const { config, registry, profiles, presence } = setup();
         profiles.signedIn({ did: Alice, handle: 'alice.example' });
@@ -279,8 +308,8 @@ describe('the live model', () => {
     it('hides only the people a viewer muted', () => {
         const state: LiveState = {
             entities: [
-                { id: 'person:a', type: 'person', label: 'a', did: null, kind: 'via' },
-                { id: 'person:b', type: 'person', label: 'b', did: null, kind: 'via' },
+                { id: 'person:a', type: 'person', label: 'a', did: null, kind: 'via', picture: null },
+                { id: 'person:b', type: 'person', label: 'b', did: null, kind: 'via', picture: null },
             ],
             presence: [
                 { id: 'person:a@room:x', person: 'person:a', place: 'room:x', since: null, source: 'chat' },

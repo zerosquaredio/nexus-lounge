@@ -24,6 +24,9 @@ export function mapPane(listHtml: string): string {
 .map .names text.you { fill: var(--accent); font-weight: bold; }
 .map circle.dot { fill: var(--accent); }
 .map circle.dot.you { stroke: var(--fg); stroke-width: 2; }
+.map image.face { clip-path: circle(50%); }
+.map circle.ring { fill: none; stroke: var(--accent); stroke-width: 1.5; }
+.map circle.ring.you { stroke: var(--fg); stroke-width: 2.5; }
 .map line.link { stroke: var(--accent); stroke-opacity: .35; stroke-dasharray: 3 4; }
 .map image.emblem { image-rendering: pixelated; }
 .map .place.off image.emblem { opacity: .5; }
@@ -202,9 +205,19 @@ export const MapScript = String.raw`(function () {
             people.forEach(function (person, i) {
                 var a = -Math.PI / 2 + (2 * Math.PI * i) / Math.max(people.length, 6);
                 var rx = room ? 58 : half + 16, ry = room ? 58 : 32;
-                var dot = el('circle', { class: 'dot' + (person.id === you ? ' you' : ''), cx: c.x + rx * Math.cos(a), cy: c.y + ry * Math.sin(a), r: 5 });
-                dot.appendChild(el('title', {}, person.label));
-                g.appendChild(dot);
+                var px = c.x + rx * Math.cos(a), py = c.y + ry * Math.sin(a);
+                var mine = person.id === you ? ' you' : '';
+                //  their Bluesky picture (pictures.ts), round, else a dot
+                if (person.picture && /^\/pictures\/[0-9a-f]{64}$/.test(person.picture.url)) {
+                    var face = el('image', { class: 'face', href: person.picture.url, x: px - 9, y: py - 9, width: 18, height: 18, preserveAspectRatio: 'xMidYMid slice' });
+                    face.appendChild(el('title', {}, person.label));
+                    g.appendChild(face);
+                    g.appendChild(el('circle', { class: 'ring' + mine, cx: px, cy: py, r: 9 }));
+                } else {
+                    var dot = el('circle', { class: 'dot' + mine, cx: px, cy: py, r: 5 });
+                    dot.appendChild(el('title', {}, person.label));
+                    g.appendChild(dot);
+                }
             });
             var names = el('g', { class: 'names' });
             people.slice(0, MaxNames).forEach(function (person, i) {

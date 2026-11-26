@@ -12,6 +12,7 @@ import { isPublicClient, SignIn } from './signin.ts';
 import { createSite } from './site.ts';
 import { loadWebTerm } from './webterm.ts';
 import { AssetBlocks } from './asset_blocks.ts';
+import { Pictures } from './pictures.ts';
 import { AssetLibrary } from './assets.ts';
 import { BoardArt } from './board_art.ts';
 import { atClient } from './atproto.ts';
@@ -181,6 +182,15 @@ for (const [bbs, piece] of Object.entries(config.assets.splashes)) {
         log(`assets: no art named ${piece} for ${bbs}'s splash; its pages go without`);
     }
 }
+//  people's Bluesky pictures for the map, kept beside the database; with
+//  the live model only, which is what shows them
+const pictures =
+    config.space.enabled && config.space.live.enabled && config.space.pictures
+        ? new Pictures(join(dirname(config.database), 'pictures'), at, log)
+        : null;
+if (pictures) {
+    setInterval(() => pictures.prune(), 60 * 60_000).unref();
+}
 const site = createSite({
     config,
     registry,
@@ -193,6 +203,7 @@ const site = createSite({
     chat,
     art,
     boardArt,
+    pictures,
     tunnels: () => tunnels,
     log,
 });

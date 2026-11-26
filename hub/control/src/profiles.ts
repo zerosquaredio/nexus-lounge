@@ -11,6 +11,8 @@ export interface Profile {
     createdAt: string;
     signedInAt: string;
     presence: boolean;
+    //  whether the map shows their Bluesky picture (pictures.ts)
+    picture: boolean;
 }
 
 interface ProfileRow {
@@ -19,6 +21,7 @@ interface ProfileRow {
     created_at: string;
     signed_in_at: string;
     presence: number;
+    picture: number;
 }
 
 function toProfile(row: ProfileRow): Profile {
@@ -28,6 +31,7 @@ function toProfile(row: ProfileRow): Profile {
         createdAt: row.created_at,
         signedInAt: row.signed_in_at,
         presence: 1 === row.presence,
+        picture: 0 !== row.picture,
     };
 }
 
@@ -60,6 +64,11 @@ export class Profiles {
 
     setPresence(did: string, on: boolean): Profile | null {
         this.db.prepare('UPDATE profile SET presence = ? WHERE did = ?').run(on ? 1 : 0, did);
+        return this.get(did);
+    }
+
+    setPicture(did: string, on: boolean): Profile | null {
+        this.db.prepare('UPDATE profile SET picture = ? WHERE did = ?').run(on ? 1 : 0, did);
         return this.get(did);
     }
 
