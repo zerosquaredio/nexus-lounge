@@ -41,7 +41,8 @@ own address as usual.
   machine all work, with about 1 GB of memory free. It needn't be up all
   the time: give your hours (§6.3) and the hub shows them while you're
   off.
-- **Docker**, or Node.js 22 or later to run it without Docker.
+- **Docker** with Compose (`docker compose`), or Node.js 22 or later to
+  run it without Docker.
 - **The tunnel agent:** [frp](https://github.com/fatedier/frp/releases)'s
   `frpc`. The hub is tested with **0.72.0**; use that or later. Only the
   `frpc` binary is needed.
@@ -71,24 +72,25 @@ cd enigma-bbs
 docker build -t enigma-bbs:hub -f docker/Dockerfile .
 ```
 
-The build takes several minutes. Then make the folders the board keeps
-outside the container, and run it once, interactively, to write a starter
-config:
+The build takes several minutes. The board and the hub's tunnel agent then
+run side by side from one Compose file, which comes with the fork. Give the
+board a folder of its own, with the Compose file in it, and run the board
+once, interactively, to write a starter config:
 
 ```sh
-sudo mkdir -p /srv/coolbbs/{config,db,logs}
-docker run -it --rm \
-  -v /srv/coolbbs/config:/enigma-bbs/config \
-  -v /srv/coolbbs/db:/enigma-bbs/db \
-  -v /srv/coolbbs/logs:/enigma-bbs/logs \
-  enigma-bbs:hub
+sudo mkdir -p /srv/coolbbs && sudo chown "$USER" /srv/coolbbs
+cp docker/hub/compose.yml /srv/coolbbs/
+cd /srv/coolbbs
+docker compose run --rm bbs
 ```
 
 It asks for the board's name, its first message area and a few other
 basics (`oputil.js config new`), writes `config/config.hjson` and the menu
 files under `config/menus/`, and starts the board. Stop it (Ctrl-C) once
 it says it's up: the next sections change the config before the board goes
-on the hub.
+on the hub. The board keeps its `config`, `db` and `logs` folders beside
+the Compose file; they belong to the container's user, so use `sudo` to
+edit files in them.
 
 Without Docker, follow ENiGMA½'s
 [installation docs](https://github.com/zerosquaredio/enigma-bbs/tree/atproto-login/website/src/content/docs/installation)
@@ -127,7 +129,7 @@ with the fork's repository in place of upstream's.
 
 > **The agent config is shown once.** It holds your board's token, which is
 > its password on the hub. Copy it straight away into a file on the
-> board's machine, `coolbbs-agent.toml`, readable only by you. If you lose
+> board's machine, `/srv/coolbbs/agent.toml` (§5), readable only by you. If you lose
 > it, press **New token** again: the old token stops working at once.
 
 A sysop may register up to 3 boards on a hub, counting applications still
@@ -141,7 +143,14 @@ closes a tunnel without one), and forwards only the paths the hub carries:
 `/ws` to the board's WebSocket port, and the sign-in pages and `/assets/`
 to its web port. You don't need to change anything in it.
 
-Try it by hand first:
+**With the Compose file** (§3), the agent is the `agent` service, frp's
+own image (`fatedier/frpc`, the version the hub is tested with). Save the
+agent config beside the Compose file, as `/srv/coolbbs/agent.toml`, readable
+only by you (`chmod 600 agent.toml`). It shares the board's network, so
+the config works as the hub made it, and the board publishes no ports at
+all. It starts with the board in §6.4.
+
+**Without Docker,** run `frpc` yourself. Try it by hand first:
 
 ```sh
 frpc -c coolbbs-agent.toml
@@ -184,14 +193,13 @@ agent is in.
 
 ## 6. Set the board up for the hub
 
-One command does this, from the agent config the hub gave you. Put the
-agent config where the board can read it (`/srv/coolbbs/config/` will do),
-and run, with your own Bluesky handle:
+One command does this, from the agent config the hub gave you (saved as
+`agent.toml`, §5). In `/srv/coolbbs`, with your own Bluesky handle:
 
 ```sh
-docker run --rm -it -v /srv/coolbbs/config:/enigma-bbs/config \
-  --entrypoint ./oputil.js enigma-bbs:hub \
-  config hub --agent config/coolbbs-agent.toml --sysop you.bsky.social
+docker compose run --rm -v ./agent.toml:/agent.toml:ro \
+  --entrypoint ./oputil.js bbs \
+  config hub --agent /agent.toml --sysop you.bsky.social
 ```
 
 (Without Docker: `./oputil.js config hub --agent coolbbs-agent.toml --sysop
@@ -336,8 +344,10 @@ board). By hand:
   - `HS`: the **hub's space** as a door: who is around on the hub, and its
     chat room.
 
-  The stock main menu art doesn't name these commands; add them to your
-  art, or tell your members.
+  The stock main menu art doesn't name them, so the main menu's prompt
+  gains a hint line, "HS around  HP be shown  AT Bluesky", placed over the
+  prompt by configuration (the theme's art is unchanged); `config hub`
+  turns it on with the commands, in menu files from the current fork.
 
 ### 6.3 Describe the board
 
@@ -370,20 +380,17 @@ public hub that's `general`. The board's name is its `general.boardName`.
 
 ### 6.4 Start the board
 
-Run the container for good, publishing its ports **to this machine only**
-(the agent is the only thing that should reach them):
+Start the board and its agent, for good (they come back after a restart):
 
 ```sh
-docker run -d --name coolbbs --restart unless-stopped --memory 1g \
-  -p 127.0.0.1:8080:8080 -p 127.0.0.1:8810:8810 \
-  -v /srv/coolbbs/config:/enigma-bbs/config \
-  -v /srv/coolbbs/db:/enigma-bbs/db \
-  -v /srv/coolbbs/logs:/enigma-bbs/logs \
-  enigma-bbs:hub
+docker compose up -d
+docker compose logs agent     # "login to server success", two proxies started
 ```
 
-Check its log (`/srv/coolbbs/logs/enigma-bbs.log`, one JSON line per event)
-for warnings about the config or the token file.
+Check the board's log (`/srv/coolbbs/logs/enigma-bbs.log`, one JSON line per
+event) for warnings about the config or the token file. (Without Docker:
+start the board as ENiGMA½'s docs say, with its web server on 8080 and
+WebSocket on 8810, on this machine only, and the agent as in §5.)
 
 Then open `https://coolbbs.hub.example`: your board's page, marked online.
 Press **Connect in your browser**, choose **bluesky login**, enter your
@@ -461,10 +468,10 @@ then it shows a splash of its own choosing.
 
 ## 9. Keeping it running
 
-- **Updating** the board: pull the branch, build a new image, then stop and
-  remove the container and run it again from the new image, with the same
-  `docker run` line (§6.4). Your config, database and logs are in the
-  folders you gave it.
+- **Updating** the board: pull the branch and build a new image (§3), then
+  `docker compose up -d` in `/srv/coolbbs`, which replaces the board's
+  container with one from the new image. Your config, database and logs
+  stay in their folders.
 - **Back up** `/srv/coolbbs/config` and `/srv/coolbbs/db`. They hold the
   board's signing key (`config/security/atproto_oauth_key.json`), the hub
   token, and the members' sessions: keep them private.
