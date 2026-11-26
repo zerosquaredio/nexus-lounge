@@ -142,7 +142,10 @@ With `registration.open` on, two settings decide who gets in from the site:
   An approved BBS is registered at once; its sysop gets the agent config from
   their page on the site (**New token**). A rejected one shows the sysop
   your reason for 30 days, and they may apply again. Applications count
-  toward the per-sysop limit, and sysops can withdraw their own.
+  toward the per-sysop limit, and sysops can withdraw their own. The hub
+  sends no email, so the sysop finds out only by looking: `approve` and
+  `reject` end with a reminder to tell them, with the handle their account
+  names.
 - **`registration.minAccountAgeDays`** (30 by default): a sysop's AT account
   must be this old, from when the PLC directory first recorded its DID. A
   `did:web` account records no such date: with approval on, it may still

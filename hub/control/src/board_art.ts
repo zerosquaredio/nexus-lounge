@@ -12,7 +12,7 @@
 
 import { request } from 'node:http';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { MaxAnsiBytes } from './ansi.ts';
 import { readPsf, type Font } from './ansi_image.ts';
@@ -271,6 +271,7 @@ export class BoardArt {
         }
         this.busy = true;
         try {
+            this.forgetRemoved();
             for (const bbs of this.deps.list()) {
                 for (const kind of ArtKinds) {
                     const named = this.allowed(bbs) && bbs.connected ? this.deps.artOf(bbs, kind) : null;
@@ -339,6 +340,45 @@ export class BoardArt {
         }
         this.kept.set(key, { raw, id: item.id });
         this.save(join(this.dir, 'boards.json'), Object.fromEntries(this.kept));
+    }
+
+    //  A BBS removed from the hub leaves nothing of its art behind: what was
+    //  kept for it goes, with the baked items and files no other BBS's art
+    //  still uses. Found by name, so a BBS removed by the admin's command
+    //  line (another process) goes too, at the next refresh.
+    forgetRemoved(): void {
+        const registered = new Set(this.deps.list().map(b => b.name));
+        //  "<kind>:<name>" or "piece:<name>:<sha256>"
+        const nameOf = (key: string) => key.split(':')[1] ?? '';
+        const gone = [...this.kept.keys()].filter(key => !registered.has(nameOf(key)));
+        const goneNames = [...this.pieces.keys()].filter(name => !registered.has(name));
+        if (!gone.length && !goneNames.length) {
+            return;
+        }
+        for (const key of gone) {
+            this.kept.delete(key);
+        }
+        for (const name of goneNames) {
+            this.pieces.delete(name);
+        }
+        this.save(join(this.dir, 'boards.json'), Object.fromEntries(this.kept));
+        this.save(join(this.dir, 'pieces.json'), Object.fromEntries(this.pieces));
+
+        const named = new Set([...this.kept.values()].map(k => k.id));
+        const library = this.readLibrary();
+        const filesOf = (items: LibraryItem[]) =>
+            new Set(items.flatMap(item => item.record.versions.map(v => v.file.sha256)));
+        const keep = library.items.filter(item => named.has(item.id));
+        const used = filesOf(keep);
+        for (const hash of filesOf(library.items)) {
+            if (!used.has(hash)) {
+                rmSync(join(this.dir, 'files', hash), { force: true });
+            }
+        }
+        library.items = keep;
+        this.save(join(this.dir, 'library.json'), library);
+        this.load();
+        this.log(`board art: forgot the art of ${[...new Set([...gone.map(nameOf), ...goneNames])].join(', ')}, removed`);
     }
 
     readLibrary(): Library {

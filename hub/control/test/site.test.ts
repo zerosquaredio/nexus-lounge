@@ -760,9 +760,11 @@ describe('registering with approval and an account age (H9)', () => {
         assert.equal(registry.application('coolbbs')?.note, 'Retro games');
         const waiting = await call('GET', '/bbs', { cookie });
         assert.match(waiting.body, /coolbbs<\/strong>[^<]*<\/td><td>waiting for the hub's admin/);
+        assert.match(waiting.body, /The answer appears here: the hub sends no email/);
 
         registry.approve('coolbbs');
         const approved = await call('GET', '/bbs', { cookie });
+        assert.doesNotMatch(approved.body, /the hub sends no email/, 'nothing is waiting now');
         assert.match(approved.body, /press <strong>New token<\/strong> to get its agent config/);
         const token = await call('POST', '/bbs/rotate', { cookie, form: { name: 'coolbbs' } });
         assert.match(token.body, /metadatas\.token = /);

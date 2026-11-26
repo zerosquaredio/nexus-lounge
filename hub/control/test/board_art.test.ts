@@ -110,6 +110,38 @@ describe("BBSes' own splash screens", () => {
         assert.equal(art.splashFor(bbs('coolbbs')), null);
     });
 
+    it("forgets a removed BBS's art, files and all, keeping what another BBS still uses", async () => {
+        const list = [bbs('coolbbs'), bbs('other')];
+        const art = make(['coolbbs', 'other'], list);
+        offer('coolbbs', splash());
+        offer('other', splash('OTHER BOARD'));
+        emblems.set('coolbbs', offers.get('other')!);
+        await art.refresh();
+        const mine = art.splashFor(bbs('coolbbs'))!;
+        const theirs = art.splashFor(bbs('other'))!;
+        assert.ok(art.emblemFor(bbs('coolbbs')), "coolbbs's emblem is the other board's splash");
+        const mineFiles = [mine.ansi, mine.thumb.url].map(u => u.replace('/assets/', ''));
+        const theirFiles = [theirs.ansi, theirs.thumb.url].map(u => u.replace('/assets/', ''));
+
+        list.splice(0, 1);
+        await art.refresh();
+        assert.equal(art.splashFor(bbs('coolbbs')), null);
+        assert.equal(art.emblemFor(bbs('coolbbs')), null);
+        for (const hash of mineFiles) {
+            assert.equal(art.file(hash), null, 'its files are gone');
+        }
+        for (const hash of theirFiles) {
+            assert.ok(art.file(hash), "the other board's are kept");
+        }
+        assert.ok(art.splashFor(bbs('other')));
+
+        //  and stays gone after a restart
+        const again = make(['coolbbs', 'other'], list);
+        assert.equal(again.splashFor(bbs('coolbbs')), null);
+        assert.ok(again.splashFor(bbs('other')));
+        assert.doesNotMatch(readFileSync(join(dir, 'board-art', 'boards.json'), 'utf8'), /coolbbs/);
+    });
+
     it('takes nothing from BBSes it was not told to, offline, or suspended', async () => {
         offer('other', splash());
         offer('coolbbs', splash('X'));

@@ -30,20 +30,37 @@ export interface AtClient {
     accountCreated(did: string): Promise<string | null>;
 }
 
-export function atClient(fetchJson: JsonFetcher, relay: string): AtClient {
-    async function didDocument(did: string): Promise<Json> {
-        if (!isDid(did)) {
-            throw new HubError('did', `Not a DID: ${did}`);
-        }
-        if (did.startsWith('did:plc:')) {
-            return obj(await fetchJson(`${PlcDirectory}/${did}`));
-        }
-        const host = decodeURIComponent(did.slice('did:web:'.length));
-        if (host.includes(':') || host.includes('/')) {
-            throw new HubError('did', `did:web with a port or path isn't supported: ${did}`);
-        }
-        return obj(await fetchJson(`https://${host}/.well-known/did.json`));
+//  An account's DID document, from the PLC directory or its did:web host
+async function didDocumentOf(fetchJson: JsonFetcher, did: string): Promise<Json> {
+    if (!isDid(did)) {
+        throw new HubError('did', `Not a DID: ${did}`);
     }
+    if (did.startsWith('did:plc:')) {
+        return obj(await fetchJson(`${PlcDirectory}/${did}`));
+    }
+    const host = decodeURIComponent(did.slice('did:web:'.length));
+    if (host.includes(':') || host.includes('/')) {
+        throw new HubError('did', `did:web with a port or path isn't supported: ${did}`);
+    }
+    return obj(await fetchJson(`https://${host}/.well-known/did.json`));
+}
+
+//  The handle an account's DID document names, unchecked: for showing whom
+//  a DID is (the admin's command line), never to trust it. null if it names
+//  none, or the document can't be read.
+export async function claimedHandle(fetchJson: JsonFetcher, did: string): Promise<string | null> {
+    try {
+        const doc = await didDocumentOf(fetchJson, did);
+        const aka = Array.isArray(doc.alsoKnownAs) ? doc.alsoKnownAs : [];
+        const first = aka.find((a): a is string => 'string' === typeof a && a.startsWith('at://'));
+        return first ? first.slice('at://'.length) : null;
+    } catch {
+        return null;
+    }
+}
+
+export function atClient(fetchJson: JsonFetcher, relay: string): AtClient {
+    const didDocument = (did: string) => didDocumentOf(fetchJson, did);
 
     return {
         async resolvePds(did) {

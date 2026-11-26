@@ -13,7 +13,7 @@ import { HubError } from './errors.ts';
 import { agentConfig, caddyfile, chatCommand, frpsConfig, heartbeatTimeout } from './generate.ts';
 import { Registry, type Bbs } from './registry.ts';
 import { loadWebTerm } from './webterm.ts';
-import { atClient } from './atproto.ts';
+import { atClient, claimedHandle } from './atproto.ts';
 import { Directory } from './directory.ts';
 import { fetchPublicJson } from './net.ts';
 import { isDid } from './rules.ts';
@@ -214,6 +214,19 @@ function need(positional: string[], index: number, what: string): string {
     return value;
 }
 
+//  The hub sends sysops no email: after approving or turning down an
+//  application, the admin is reminded to tell them, by the handle their
+//  account names (unchecked, and only shown here)
+export async function tellSysop(
+    sysopDid: string,
+    outcome: 'approved' | 'turned down',
+    lookup: (did: string) => Promise<string | null> = did => claimedHandle(fetchPublicJson, did)
+): Promise<string> {
+    const handle = await lookup(sysopDid);
+    const who = handle ? `@${handle} (${sysopDid})` : sysopDid;
+    return `The hub doesn't tell them: let ${who} know it was ${outcome}. They'll also see it under "Your BBSes" on the hub's site.`;
+}
+
 export async function run(argv: string[]): Promise<void> {
     const { positional, options } = parse(argv);
     const command = positional[0];
@@ -358,6 +371,7 @@ export async function run(argv: string[]): Promise<void> {
                 new Moderation(registry.db).log('approve', bbs.name, `for ${bbs.sysopDid}`);
                 console.log(describe(bbs, config));
                 console.log('\nApproved. Its sysop gets its agent config on the hub\'s site ("New token").');
+                console.log(await tellSysop(bbs.sysopDid, 'approved'));
                 return;
             }
             case 'reject': {
@@ -366,6 +380,7 @@ export async function run(argv: string[]): Promise<void> {
                 console.log(
                     `Rejected the application for ${app.name}${app.reason ? ` (${app.reason})` : ''}.`
                 );
+                console.log(await tellSysop(app.sysopDid, 'turned down'));
                 return;
             }
             case 'release': {

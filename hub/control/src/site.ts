@@ -552,8 +552,12 @@ and it keeps no access to it afterwards.</p>
                 : `<tr><td><strong>${esc(a.name)}</strong>.${esc(config.domain)}</td><td>not approved${
                       a.reason ? `: ${esc(a.reason)}` : ''
                   }</td><td></td></tr>`;
+        const waiting = apps.some(a => 'pending' === a.status)
+            ? `<p class="hint">The answer appears here: the hub sends no email. Once a BBS is approved it moves to the
+list above, with a <strong>New token</strong> button for its agent config.</p>`
+            : '';
         return `<h2>Your applications</h2>
-<table><tr><th>BBS</th><th>Status</th><th></th></tr>${apps.map(row).join('')}</table>`;
+<table><tr><th>BBS</th><th>Status</th><th></th></tr>${apps.map(row).join('')}</table>${waiting}`;
     }
 
     //  What a sysop confirms of their BBS's content, from the ratings this
@@ -587,8 +591,10 @@ and it keeps no access to it afterwards.</p>
 <input type="text" id="rname" name="name" autocomplete="off">
 <button>Remove it</button>
 </form>
-<p class="hint">Its tunnel stops working and everything the hub holds about it is deleted. Its name is held
-for 90 days, so nobody else takes it straight away.</p>`
+<p class="hint">Its tunnel stops working, and the hub stops showing it and answering for its handle. What the
+hub holds about it is deleted, its art among it, except: its name, held for 90 days so nobody else takes it
+straight away; its daily usage totals; and any abuse reports or moderation records about it. See the
+<a href="/privacy">privacy notice</a>.</p>`
             : '';
         const approval = config.registration.approval;
         const age = config.registration.minAccountAgeDays;
