@@ -748,10 +748,22 @@ serves a library baked by the admin):
   directory's guarded fetcher, then the checks the library already gets.
   A board's splash comes raw, as its login menu shows it, and the hub
   bakes it on arrival (development plan F21).
-- Caps and quotas for each publisher, and withdrawal when a record goes
-  ([assets spec](assets.md) §6.3, §6.5).
-- Moderation before any of it is public: `hubctl asset block`, `hubctl
-  assets`, and the report kinds for an asset and for a copy (spec §9).
+- ~~Caps and quotas for each publisher, and withdrawal when a record goes
+  ([assets spec](assets.md) §6.3, §6.5).~~ **Done** (2026-11-26): up to
+  `assets.boardPieces` pieces from each BBS (50; each piece is already
+  capped at 64 KB of ANSI), and art withdrawn (a record gone, a splash or
+  emblem no longer offered or replaced, a BBS no longer taken from or
+  removed) is let go of, with the files nothing else uses.
+- ~~Moderation before any of it is public: `hubctl asset block`, `hubctl
+  assets`, and the report kinds for an asset and for a copy (spec §9).~~
+  **Done** (2026-11-26): `hubctl assets` lists the art by whose it is;
+  `hubctl asset block|unblock` by hash (or its first 12 digits), in the
+  moderation log and in force within half a minute, hiding the piece and
+  every file of it everywhere, and refusing the same bytes again; the
+  report form gains "Art on the hub" and "Art copied without permission",
+  with a **Report** link on each piece in the gallery that names it by
+  hash (registry schema 13). Refusing every asset from one publisher is
+  still to do (a ban covers their BBSes).
 - The live model's `look` for an entity (spec §12), and the map drawing a
   board with its emblem and a person with their Bluesky picture.
 - The terms of service need their section on assets before the public hub

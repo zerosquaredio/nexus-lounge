@@ -201,7 +201,18 @@ record names, and bakes it, named, credited and licensed as the record says
 (SAUCE credit first). The gallery shows each BBS's pieces under its name,
 and the chat's **Art** picker lists them; pieces with a rating the directory
 doesn't show are left out. Kept in `board-art/`, so nothing is fetched
-twice, and a piece the BBS stops publishing goes with the next reading.
+twice. The hub takes up to `assets.boardPieces` pieces from each BBS (50).
+
+**Withdrawn art goes.** When a BBS stops publishing a piece, stops
+offering its splash or emblem, replaces one, is no longer in
+`assets.boardArt`, or is removed, the hub lets go of what it took: the
+baked item, and every file no other art still uses (assets spec §6.5).
+
+**Blocked art.** `hubctl asset block SHA256` stops the hub showing or
+serving a file, and the piece it belongs to, anywhere (gallery, chat,
+splash, map), and refuses it if any BBS offers the same bytes again; the
+running hub notices within half a minute. See the admin guide
+([running_a_hub.md](../docs/admin/running_a_hub.md) §4, Art).
 
 ### Views
 

@@ -960,6 +960,25 @@ describe('abuse reports', () => {
         }
     });
 
+    it("takes a report about a piece of art, by its hash, from the gallery's link", async () => {
+        const hash = 'a'.repeat(64);
+        const page = await call('GET', `/report?kind=art&asset=${hash}`);
+        assert.match(page.body, /About the art <strong>aaaaaaaaaaaa<\/strong>/);
+        assert.match(page.body, new RegExp(`<input type="hidden" name="asset" value="${hash}">`));
+        assert.match(page.body, /<option value="art" selected>/);
+        assert.match(page.body, /<option value="copied">Art copied without permission/);
+        assert.doesNotMatch((await call('GET', '/report?asset=nothex')).body, /About the art/);
+        assert.equal((await report({ kind: 'copied', asset: hash, details: 'My piece' })).status, 200);
+        assert.equal((await report({ kind: 'art', asset: 'junk', details: 'x' })).status, 200);
+        assert.deepEqual(
+            new AbuseReports(registry.db).list().map(r => [r.kind, r.asset]),
+            [
+                ['copied', hash],
+                ['art', null],
+            ]
+        );
+    });
+
     it('says who sent it when they are signed in', async () => {
         registry.add('coolbbs', SysopDid);
         const cookie = await signedIn({ did: OtherSysopDid, handle: 'other.example' });

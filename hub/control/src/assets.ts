@@ -88,9 +88,16 @@ function check(form: Version['form'], body: Buffer): void {
 export class AssetLibrary {
     readonly name: string;
     readonly description: string;
-    readonly items: PublicItem[] = [];
+    //  Whether a file is blocked (hubctl asset block, assets spec §9): an
+    //  item with a blocked file, or blocked by its id, is neither shown nor
+    //  served, and is back as soon as it's unblocked
+    blocked: (sha256: string) => boolean = () => false;
+    private readonly all: PublicItem[] = [];
     private readonly files = new Map<string, ServedFile>();
     private readonly byShort = new Map<string, PublicItem>();
+    //  each file's item, and each item's files
+    private readonly ownerOf = new Map<string, PublicItem>();
+    private readonly hashesOf = new Map<string, string[]>();
 
     constructor(library: Library, read: (sha256: string) => Buffer, log: (line: string) => void = () => {}) {
         this.name = String(library.name ?? 'Art');
@@ -104,9 +111,16 @@ export class AssetLibrary {
         }
     }
 
-    static load(dir: string, log: (line: string) => void = () => {}): AssetLibrary {
+    static load(
+        dir: string,
+        log: (line: string) => void = () => {},
+        blocked?: (sha256: string) => boolean
+    ): AssetLibrary {
         const library = JSON.parse(readFileSync(join(dir, 'library.json'), 'utf8')) as Library;
         const art = new AssetLibrary(library, sha256 => readFileSync(join(dir, 'files', sha256)), log);
+        if (blocked) {
+            art.blocked = blocked;
+        }
         log(`assets: ${art.items.length} items from ${dir}`);
         return art;
     }
@@ -160,26 +174,38 @@ export class AssetLibrary {
         };
         for (const [hash, file] of checked) {
             this.files.set(hash, file);
+            this.ownerOf.set(hash, out);
         }
-        this.items.push(out);
+        this.all.push(out);
         this.byShort.set(short, out);
+        this.hashesOf.set(out.id, [...checked.keys()]);
+    }
+
+    isBlocked(item: PublicItem): boolean {
+        return this.blocked(item.id) || (this.hashesOf.get(item.id) ?? []).some(hash => this.blocked(hash));
+    }
+
+    //  the items shown: all but the blocked
+    get items(): PublicItem[] {
+        return this.all.filter(item => !this.isBlocked(item));
     }
 
     file(sha256: string): ServedFile | null {
+        const owner = this.ownerOf.get(sha256);
+        if (!owner || this.isBlocked(owner)) {
+            return null;
+        }
         return this.files.get(sha256) ?? null;
     }
 
     byShortId(short: string): PublicItem | null {
-        return this.byShort.get(short) ?? null;
+        const item = this.byShort.get(short);
+        return item && !this.isBlocked(item) ? item : null;
     }
 
     //  A piece by its name (any case) or short id, as a config names it
     find(nameOrId: string): PublicItem | null {
         const wanted = nameOrId.trim().toLowerCase();
-        return (
-            this.byShort.get(wanted) ??
-            this.items.find(item => item.name.toLowerCase() === wanted) ??
-            null
-        );
+        return this.byShortId(wanted) ?? this.items.find(item => item.name.toLowerCase() === wanted) ?? null;
     }
 }

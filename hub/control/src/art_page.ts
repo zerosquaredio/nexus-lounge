@@ -27,7 +27,9 @@ function itemHtml(item: PublicItem): string {
 <p class="dim">Licence: ${licence}</p>
 <p class="dim"><a href="${esc(item.image.url)}">Full size</a> · <a href="${esc(item.ansi)}" download="${esc(
         item.name
-    )}.ans">ANSI</a>${item.text ? ` · <a href="${esc(item.text)}">Text</a>` : ''}</p>
+    )}.ans">ANSI</a>${item.text ? ` · <a href="${esc(item.text)}">Text</a>` : ''} · <a href="/report?kind=art&amp;asset=${esc(
+        item.id
+    )}">Report</a></p>
 </article>`;
 }
 

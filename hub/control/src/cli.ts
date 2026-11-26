@@ -5,6 +5,7 @@
 
 import { writeFileSync } from 'node:fs';
 import { createServer } from 'node:http';
+import { dirname, join } from 'node:path';
 import { HubAccount, HubAccountCallbackPath } from './hub_account.ts';
 import { isPublicClient } from './signin.ts';
 import { ObservedStatus } from './observed.ts';
@@ -21,6 +22,7 @@ import { describeSubject, Moderation, parseDuration, parseSubject, type Block } 
 import { Profiles } from './profiles.ts';
 import { AbuseKinds, AbuseReports, type AbuseReport } from './abuse.ts';
 import { sizeText, Usage as UsageTrends } from './usage.ts';
+import { artOnHub, AssetBlocks, resolveHash } from './asset_blocks.ts';
 
 const Usage = `Usage: node src/cli.ts [--config FILE] COMMAND
 
@@ -80,6 +82,16 @@ The hub's own AT account (it publishes observed status)
   hub-account show
   hub-account disconnect gives the session back and forgets the account
   observed               each BBS: what the hub sees, and what it published
+
+Art (takes effect within half a minute)
+  assets                 the art on the hub: the hub's library, and what it
+                         took from BBSes, by whose it is; and what is blocked
+  asset block SHA256 [--reason TEXT]
+                         stop showing and serving a file, and the piece it
+                         belongs to, anywhere on the hub, and refuse it if
+                         offered again; SHA256 may be its first 12 or more
+                         digits, as the gallery and reports show them
+  asset unblock SHA256
 
 Abuse reports (from the report form on the hub's site, by anyone)
   abuse reports [--all]  open reports (--all: closed ones too)
@@ -225,6 +237,12 @@ export async function tellSysop(
     const handle = await lookup(sysopDid);
     const who = handle ? `@${handle} (${sysopDid})` : sysopDid;
     return `The hub doesn't tell them: let ${who} know it was ${outcome}. They'll also see it under "Your BBSes" on the hub's site.`;
+}
+
+//  where the hub keeps art: its own library, and what it took from BBSes
+//  (beside its database, as main.ts puts it)
+function artDirs(config: HubConfig): { library: string; boardArt: string } {
+    return { library: config.assets.library, boardArt: join(dirname(config.database), 'board-art') };
 }
 
 export async function run(argv: string[]): Promise<void> {
@@ -525,10 +543,54 @@ export async function run(argv: string[]): Promise<void> {
                 }
                 throw new HubError('usage', `Unknown hub-account command "${what}"\n\n${Usage}`);
             }
+            case 'assets': {
+                const blocks = new AssetBlocks(registry.db);
+                const art = artOnHub(artDirs(config));
+                if (!art.length) {
+                    console.log('No art on the hub.');
+                }
+                for (const a of art) {
+                    const blockedBy = a.files.filter(hash => blocks.has(hash));
+                    console.log(
+                        `${a.id}  ${plain(a.name)}\n  ${plain(a.owner)}${
+                            blockedBy.length ? `\n  BLOCKED (${blockedBy.map(h => h.slice(0, 12)).join(', ')})` : ''
+                        }`
+                    );
+                }
+                const listed = new Set(art.flatMap(a => a.files));
+                const others = blocks.list().filter(b => !listed.has(b.sha256));
+                if (others.length) {
+                    console.log('\nAlso blocked (not on the hub now; refused if offered):');
+                }
+                for (const b of others) {
+                    console.log(`${b.sha256}  ${b.blockedAt.slice(0, 10)}${b.reason ? `  ${plain(b.reason)}` : ''}`);
+                }
+                return;
+            }
+            case 'asset': {
+                const blocks = new AssetBlocks(registry.db);
+                const what = need(positional, 1, 'block or unblock');
+                const hash = resolveHash(need(positional, 2, 'SHA256'), artOnHub(artDirs(config)));
+                if ('block' === what) {
+                    const b = blocks.block(hash, options.reason ?? '');
+                    console.log(
+                        `Blocked ${b.sha256}${b.reason ? ` (${b.reason})` : ''}. The hub stops showing and serving it, and the piece it belongs to, within half a minute, and refuses it if offered again.`
+                    );
+                    return;
+                }
+                if ('unblock' === what) {
+                    console.log(blocks.unblock(hash) ? `Unblocked ${hash}.` : `${hash} wasn't blocked.`);
+                    return;
+                }
+                throw new HubError('usage', `Unknown asset command "${what}"\n\n${Usage}`);
+            }
             case 'abuse': {
                 const reports = new AbuseReports(registry.db);
                 const what = need(positional, 1, 'reports, report or close');
-                const about = (r: AbuseReport) => (r.bbs ? `${r.bbs}.${config.domain}` : 'the hub');
+                const about = (r: AbuseReport) =>
+                    [r.bbs ? `${r.bbs}.${config.domain}` : '', r.asset ? `art ${r.asset.slice(0, 12)}` : '']
+                        .filter(Boolean)
+                        .join(', ') || 'the hub';
                 const line = (r: AbuseReport) =>
                     `${String(r.id).padEnd(5)} ${r.createdAt.slice(0, 16).replace('T', ' ')}  ${about(r).padEnd(30)} ` +
                     `${AbuseKinds[r.kind]}${r.closedAt ? `  (closed: ${plain(r.outcome ?? '')})` : ''}`;
@@ -552,6 +614,7 @@ export async function run(argv: string[]): Promise<void> {
                     console.log(
                         [
                             line(r),
+                            ...(r.asset ? [`  art      ${r.asset} (hubctl asset block, to block it)`] : []),
                             `  from     ${r.reporter ?? (r.closedAt ? '(deleted)' : '(not signed in)')}`,
                             `  reply to ${r.contact ? plain(r.contact) : r.closedAt ? '(deleted)' : '(none given)'}`,
                             '',

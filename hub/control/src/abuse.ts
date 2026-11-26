@@ -12,6 +12,8 @@ export const AbuseKinds = {
     harassment: 'Harassment or threats',
     spam: 'Spam, scams or malware',
     copyright: 'Copyright',
+    art: 'Art on the hub (what it shows)',
+    copied: 'Art copied without permission',
     privacy: "Someone's private information",
     security: 'A security problem',
     other: 'Something else',
@@ -28,6 +30,8 @@ export interface AbuseReport {
     //  the BBS's name, or null for the hub itself
     bbs: string | null;
     kind: AbuseKind;
+    //  the art it is about, by its hash (assets spec §9), if any
+    asset: string | null;
     //  null once closed
     details: string | null;
     contact: string | null;
@@ -42,6 +46,7 @@ interface Row {
     id: number;
     bbs: string | null;
     kind: AbuseKind;
+    asset: string | null;
     details: string | null;
     contact: string | null;
     reporter: string | null;
@@ -54,6 +59,7 @@ const toReport = (r: Row): AbuseReport => ({
     id: r.id,
     bbs: r.bbs,
     kind: r.kind,
+    asset: r.asset ?? null,
     details: r.details,
     contact: r.contact,
     reporter: r.reporter,
@@ -92,6 +98,7 @@ export class AbuseReports {
         details: string;
         contact: string;
         reporter: string | null;
+        asset?: string | null;
     }): AbuseReport {
         if (!isAbuseKind(r.kind)) {
             throw new HubError('bad-report', 'Choose what kind of problem it is.');
@@ -104,13 +111,19 @@ export class AbuseReports {
         if (contact.length > MaxContact) {
             throw new HubError('bad-report', `A way to reach you can be up to ${MaxContact} characters.`);
         }
+        //  a hash only, from the gallery's report link
+        const asset = r.asset && /^[0-9a-f]{64}$/.test(r.asset) ? r.asset : null;
         const { lastInsertRowid } = this.db
             .prepare(
-                'INSERT INTO abuse_report (bbs, kind, details, contact, reporter, created_at) VALUES (?, ?, ?, ?, ?, ?)'
+                'INSERT INTO abuse_report (bbs, kind, details, contact, reporter, created_at, asset) VALUES (?, ?, ?, ?, ?, ?, ?)'
             )
-            .run(r.bbs, r.kind, details, contact || null, r.reporter, new Date(this.now()).toISOString());
+            .run(r.bbs, r.kind, details, contact || null, r.reporter, new Date(this.now()).toISOString(), asset);
         const report = this.mustGet(Number(lastInsertRowid));
-        this.moderation.log('abuse-report', r.bbs ?? '(the hub)', `abuse report ${report.id}: ${r.kind}`);
+        this.moderation.log(
+            'abuse-report',
+            r.bbs ?? asset ?? '(the hub)',
+            `abuse report ${report.id}: ${r.kind}`
+        );
         return report;
     }
 

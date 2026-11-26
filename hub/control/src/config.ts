@@ -25,13 +25,15 @@ export interface HubConfig {
     //  and emblems (board_art.ts), by name, until its terms cover assets.
     //  emblems: like splashes, each BBS's emblem for the map, from the hub's
     //  art. font: the PSF font art is drawn with; "" for the web terminal's
-    //  own
+    //  own. boardPieces: how many pieces of the art each BBS publishes the
+    //  hub takes (assets spec §6.3)
     assets: {
         library: string;
         splashes: Record<string, string>;
         emblems: Record<string, string>;
         boardArt: string[];
         font: string;
+        boardPieces: number;
     };
     //  the control plane's own HTTP listener: frp's hooks, Caddy's
     //  certificate check, and handle verification (through the edge).
@@ -240,7 +242,7 @@ export const Defaults: HubConfig = {
     edge: { tls: 'internal', bindAddr: '127.0.0.1', httpPort: 7081, httpsPort: 7443 },
     contact: { abuse: '' },
     policy: { operator: '', minimumAge: 16, termsFile: '', privacyFile: '' },
-    assets: { library: '', splashes: {}, emblems: {}, boardArt: [], font: '' },
+    assets: { library: '', splashes: {}, emblems: {}, boardArt: [], font: '', boardPieces: 50 },
     registration: {
         open: true,
         approval: true,
@@ -395,6 +397,10 @@ export function makeConfig(overrides: Partial<Record<keyof HubConfig, unknown>> 
     const from = config.assets.boardArt;
     if (!Array.isArray(from) || from.some(name => 'string' !== typeof name)) {
         throw new HubError('config', 'assets.boardArt is a list of BBS names: [ "coolbbs" ]');
+    }
+    const pieces = config.assets.boardPieces;
+    if (!Number.isInteger(pieces) || pieces < 0 || pieces > 1000) {
+        throw new HubError('config', 'assets.boardPieces is a whole number from 0 to 1000');
     }
     if (('' === config.tunnel.tlsCertFile) !== ('' === config.tunnel.tlsKeyFile)) {
         throw new HubError('config', 'tunnel.tlsCertFile and tunnel.tlsKeyFile go together: both or neither');

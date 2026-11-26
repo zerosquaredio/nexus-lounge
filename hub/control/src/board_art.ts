@@ -44,6 +44,9 @@ export interface BoardArtDeps {
     //  whether a BBS's account is linked to it here (its listing names it)
     at?: AtClient | null;
     linked?: (bbs: Bbs) => boolean;
+    //  whether a file is blocked on this hub (asset_blocks.ts): not taken,
+    //  and what was taken of it is neither shown nor served
+    blocked?: (sha256: string) => boolean;
 }
 
 //  A piece a BBS publishes (its asset.item record), as the hub reads it
@@ -171,8 +174,15 @@ export class BoardArt {
         }
         const collection = `${this.deps.config.directory.nsidPrefix}.asset.item`;
         const ratings = this.deps.config.directory.ratings;
+        const cap = this.deps.config.assets.boardPieces;
         for (const bbs of this.deps.list()) {
-            if (!this.allowed(bbs) || !bbs.bbsDid || !(this.deps.linked?.(bbs) ?? false)) {
+            if (!this.allowed(bbs)) {
+                //  no longer taken from: what was taken goes (see prune())
+                this.pieces.delete(bbs.name);
+                this.dropKept(key => key.startsWith(`piece:${bbs.name}:`));
+                continue;
+            }
+            if (!bbs.bbsDid || !(this.deps.linked?.(bbs) ?? false)) {
                 this.pieces.delete(bbs.name);
                 continue;
             }
@@ -184,12 +194,18 @@ export class BoardArt {
                 continue;
             }
             const ids: string[] = [];
+            const published = new Set<string>();
             for (const record of records) {
                 const piece = pieceOf(record.rkey, record.value);
-                if (!piece || !ratings.includes(piece.rating)) {
+                if (!piece || !ratings.includes(piece.rating) || this.isBlocked(piece.sha256)) {
                     continue;
                 }
+                if (ids.length >= cap) {
+                    this.log(`board art: ${bbs.name} publishes more than ${cap} pieces; the rest are left out`);
+                    break;
+                }
                 const key = `piece:${bbs.name}:${piece.sha256}`;
+                published.add(key);
                 if (!this.kept.has(key)) {
                     if (Date.now() - (this.failed.get(key) ?? 0) < 60 * 60 * 1000) {
                         continue;
@@ -208,8 +224,11 @@ export class BoardArt {
                 }
             }
             this.pieces.set(bbs.name, ids);
+            //  a piece whose record is gone is withdrawn (assets spec §6.5)
+            this.dropKept(key => key.startsWith(`piece:${bbs.name}:`) && !published.has(key));
         }
         this.save(join(this.dir, 'pieces.json'), Object.fromEntries(this.pieces));
+        this.prune();
     }
 
     async takePiece(bbs: Bbs, piece: Piece, key: string): Promise<void> {
@@ -241,7 +260,7 @@ export class BoardArt {
     artFor(bbs: Bbs, kind: ArtKind): PublicItem | null {
         const kept = this.kept.get(keyOf(kind, bbs.name));
         const named = this.allowed(bbs) ? this.deps.artOf(bbs, kind) : null;
-        if (!kept || !named || named.sha256 !== kept.raw || !this.library) {
+        if (!kept || !named || named.sha256 !== kept.raw || !this.library || this.isBlocked(kept.raw)) {
             return null;
         }
         return this.library.items.find(item => item.id === kept.id) ?? null;
@@ -259,6 +278,10 @@ export class BoardArt {
         return this.library?.file(sha256) ?? null;
     }
 
+    isBlocked(sha256: string): boolean {
+        return this.deps.blocked?.(sha256) ?? false;
+    }
+
     allowed(bbs: Bbs): boolean {
         return 'active' === bbs.state && this.deps.config.assets.boardArt.includes(bbs.name);
     }
@@ -274,7 +297,13 @@ export class BoardArt {
             this.forgetRemoved();
             for (const bbs of this.deps.list()) {
                 for (const kind of ArtKinds) {
-                    const named = this.allowed(bbs) && bbs.connected ? this.deps.artOf(bbs, kind) : null;
+                    const offered = this.allowed(bbs) ? this.deps.artOf(bbs, kind) : null;
+                    if (!offered) {
+                        //  not offered any more (or not taken from): withdrawn
+                        this.dropKept(key => key === keyOf(kind, bbs.name));
+                        continue;
+                    }
+                    const named = bbs.connected && !this.isBlocked(offered.sha256) ? offered : null;
                     if (!named || this.kept.get(keyOf(kind, bbs.name))?.raw === named.sha256) {
                         continue;
                     }
@@ -290,6 +319,7 @@ export class BoardArt {
                     }
                 }
             }
+            this.prune();
         } finally {
             this.busy = false;
         }
@@ -363,22 +393,45 @@ export class BoardArt {
         }
         this.save(join(this.dir, 'boards.json'), Object.fromEntries(this.kept));
         this.save(join(this.dir, 'pieces.json'), Object.fromEntries(this.pieces));
+        this.prune();
+        this.log(`board art: forgot the art of ${[...new Set([...gone.map(nameOf), ...goneNames])].join(', ')}, removed`);
+    }
 
+    //  Forget what was kept under the keys |which| picks; prune() then lets
+    //  go of what nothing names any more
+    dropKept(which: (key: string) => boolean): void {
+        const gone = [...this.kept.keys()].filter(which);
+        if (!gone.length) {
+            return;
+        }
+        for (const key of gone) {
+            this.kept.delete(key);
+        }
+        this.save(join(this.dir, 'boards.json'), Object.fromEntries(this.kept));
+    }
+
+    //  The baked items nothing kept names (a splash replaced, a piece
+    //  withdrawn, a BBS gone), and the files only they used, deleted
+    prune(): void {
         const named = new Set([...this.kept.values()].map(k => k.id));
         const library = this.readLibrary();
+        const keep = library.items.filter(item => named.has(item.id));
+        if (keep.length === library.items.length) {
+            return;
+        }
         const filesOf = (items: LibraryItem[]) =>
             new Set(items.flatMap(item => item.record.versions.map(v => v.file.sha256)));
-        const keep = library.items.filter(item => named.has(item.id));
         const used = filesOf(keep);
         for (const hash of filesOf(library.items)) {
             if (!used.has(hash)) {
                 rmSync(join(this.dir, 'files', hash), { force: true });
             }
         }
+        const dropped = library.items.filter(item => !named.has(item.id)).map(item => item.record.name);
         library.items = keep;
         this.save(join(this.dir, 'library.json'), library);
         this.load();
-        this.log(`board art: forgot the art of ${[...new Set([...gone.map(nameOf), ...goneNames])].join(', ')}, removed`);
+        this.log(`board art: let go of ${dropped.join(', ')}`);
     }
 
     readLibrary(): Library {
@@ -405,7 +458,7 @@ export class BoardArt {
             return;
         }
         try {
-            this.library = AssetLibrary.load(this.dir, this.log);
+            this.library = AssetLibrary.load(this.dir, this.log, this.deps.blocked);
         } catch (e) {
             this.log(`board art: can't load ${this.dir}: ${(e as Error).message}`);
         }

@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { BoardArt, fontPath, pieceOf } from '../src/board_art.ts';
@@ -142,6 +142,50 @@ describe("BBSes' own splash screens", () => {
         assert.doesNotMatch(readFileSync(join(dir, 'board-art', 'boards.json'), 'utf8'), /coolbbs/);
     });
 
+    it('lets go of a splash replaced or no longer offered, files and all', async () => {
+        const art = make();
+        offer('coolbbs', splash());
+        await art.refresh();
+        const first = art.splashFor(bbs('coolbbs'))!;
+        const firstFiles = [first.ansi, first.thumb.url].map(u => u.replace('/assets/', ''));
+        offer('coolbbs', splash('A NEW LOOK'));
+        await art.refresh();
+        for (const hash of firstFiles) {
+            assert.equal(existsSync(join(dir, 'board-art', 'files', hash)), false, 'the old one is gone');
+        }
+        const second = art.splashFor(bbs('coolbbs'))!;
+        offers.delete('coolbbs');
+        await art.refresh();
+        assert.equal(art.file(second.ansi.replace('/assets/', '')), null);
+        assert.deepEqual(JSON.parse(readFileSync(join(dir, 'board-art', 'library.json'), 'utf8')).items, []);
+    });
+
+    it('neither fetches a blocked splash nor shows one blocked after it was taken', async () => {
+        const blocked = new Set<string>();
+        const art = new BoardArt(
+            {
+                config: makeConfig({ assets: { boardArt: ['coolbbs'], font: testFont(dir) } }),
+                list: () => [bbs('coolbbs')],
+                artOf: (b, kind) => ('splash' === kind ? offers.get(b.name) ?? null : null),
+                fetch: async (_b, hash) => {
+                    fetched.push(hash);
+                    return files.get(hash)!;
+                },
+                blocked: hash => blocked.has(hash),
+            },
+            join(dir, 'board-art')
+        );
+        offer('coolbbs', splash());
+        blocked.add(offers.get('coolbbs')!.sha256);
+        await art.refresh();
+        assert.deepEqual(fetched, []);
+        blocked.clear();
+        await art.refresh();
+        assert.ok(art.splashFor(bbs('coolbbs')));
+        blocked.add(offers.get('coolbbs')!.sha256);
+        assert.equal(art.splashFor(bbs('coolbbs')), null, 'blocked by the file it offered');
+    });
+
     it('takes nothing from BBSes it was not told to, offline, or suspended', async () => {
         offer('other', splash());
         offer('coolbbs', splash('X'));
@@ -279,20 +323,30 @@ describe('the art BBSes publish from their accounts', () => {
     };
     const board = (extra: Partial<Bbs> = {}) =>
         ({ name: 'coolbbs', state: 'active', connected: false, bbsDid: 'did:plc:cool', ...extra }) as Bbs;
-    const make = (linked = true, ratings = ['general']) =>
+    const make = (
+        linked = true,
+        ratings = ['general'],
+        more: { blocked?: (sha256: string) => boolean; boardPieces?: number; boardArt?: string[] } = {}
+    ) =>
         new BoardArt(
             {
                 config: makeConfig({
-                    assets: { boardArt: ['coolbbs'], font: testFont(dir) },
+                    assets: {
+                        boardArt: more.boardArt ?? ['coolbbs'],
+                        font: testFont(dir),
+                        ...(undefined === more.boardPieces ? {} : { boardPieces: more.boardPieces }),
+                    },
                     directory: { ratings },
                 }),
                 list: () => [board()],
                 artOf: () => null,
                 at: at as never,
                 linked: () => linked,
+                blocked: more.blocked,
             },
             join(dir, 'board-art')
         );
+    const filesOf = (item: PublicItem) => [item.ansi, item.image.url, item.thumb.url].map(u => u.replace('/assets/', ''));
 
     beforeEach(() => {
         dir = mkdtempSync(join(tmpdir(), 'hub-pieces-'));
@@ -327,6 +381,64 @@ describe('the art BBSes publish from their accounts', () => {
         await again.refreshPieces();
         assert.equal(fetched.length, 2, 'nothing fetched again');
         assert.deepEqual(again.piecesFor(board()).map(p => p.name), ['Logo']);
+    });
+
+    it('lets go of a piece, files and all, once its record is gone (withdrawn)', async () => {
+        const skull = record(art('SKULL'));
+        const logo = record(art('LOGO'), { name: 'Logo' });
+        records = [skull, logo];
+        const hub = make();
+        await hub.refreshPieces();
+        const gone = hub.piecesFor(board()).find(p => 'Skull' === p.name)!;
+        records = [logo];
+        await hub.refreshPieces();
+        for (const hash of filesOf(gone)) {
+            assert.equal(hub.file(hash), null, 'not served');
+            assert.equal(existsSync(join(dir, 'board-art', 'files', hash)), false, 'not kept');
+        }
+        assert.deepEqual(hub.piecesFor(board()).map(p => p.name), ['Logo']);
+        assert.equal(make().piecesFor(board()).length, 1, 'and after a restart');
+    });
+
+    it('lets go of all of a BBS once the hub no longer takes its art', async () => {
+        records = [record(art('SKULL'))];
+        await make().refreshPieces();
+        const [piece] = make().piecesFor(board());
+        const off = make(true, ['general'], { boardArt: [] });
+        await off.refreshPieces();
+        assert.equal(off.file(filesOf(piece!)[0]!), null);
+        assert.deepEqual(JSON.parse(readFileSync(join(dir, 'board-art', 'library.json'), 'utf8')).items, []);
+    });
+
+    it('neither fetches nor shows a blocked piece, and shows it again once unblocked', async () => {
+        const skull = record(art('SKULL'));
+        const logo = record(art('LOGO'), { name: 'Logo' });
+        const blocked = new Set([skull.rkey]);
+        records = [skull, logo];
+        const hub = make(true, ['general'], { blocked: hash => blocked.has(hash) });
+        await hub.refreshPieces();
+        assert.deepEqual(fetched, [`cid-${logo.rkey.slice(0, 10)}`], 'the blocked one not fetched');
+        assert.deepEqual(hub.piecesFor(board()).map(p => p.name), ['Logo']);
+
+        //  blocked after it was taken: hidden and not served, by any of its files
+        blocked.clear();
+        await hub.refreshPieces();
+        const taken = hub.piecesFor(board()).find(p => 'Skull' === p.name)!;
+        blocked.add(filesOf(taken)[1]!);
+        assert.deepEqual(hub.piecesFor(board()).map(p => p.name), ['Logo']);
+        for (const hash of filesOf(taken)) {
+            assert.equal(hub.file(hash), null);
+        }
+        blocked.clear();
+        assert.equal(hub.piecesFor(board()).length, 2, 'back once unblocked');
+    });
+
+    it('takes no more pieces from a BBS than assets.boardPieces', async () => {
+        records = [record(art('ONE')), record(art('TWO')), record(art('THREE'))];
+        const hub = make(true, ['general'], { boardPieces: 2 });
+        await hub.refreshPieces();
+        assert.equal(hub.piecesFor(board()).length, 2);
+        assert.equal(fetched.length, 2);
     });
 
     it('takes nothing from BBSes not linked here or not allowed, nor ratings the hub does not show', async () => {

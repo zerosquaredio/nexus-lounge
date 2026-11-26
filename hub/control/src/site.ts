@@ -1387,9 +1387,12 @@ ${entry ? listingDetails(entry, false) : ''}
     //  The abuse report form, for anyone
     function reportPage(
         who: WebSession | null,
-        form: { bbs?: string; kind?: string; details?: string; contact?: string } = {},
+        form: { bbs?: string; kind?: string; details?: string; contact?: string; asset?: string } = {},
         error?: string
     ): string {
+        //  a piece of art, from the gallery's report link
+        const asset = /^[0-9a-f]{64}$/.test(form.asset ?? '') ? form.asset! : '';
+        const piece = asset ? (art?.items ?? []).concat(boardPieces().flatMap(b => b.items)).find(i => i.id === asset) : null;
         const boards = registry
             .list()
             .filter(b => 'active' === b.state)
@@ -1411,10 +1414,17 @@ ${entry ? listingDetails(entry, false) : ''}
             'Report a problem',
             `${error ? `<p class="warn">${esc(error)}</p>` : ''}
 <p>Tell this hub's admin about a BBS on it, or about the hub itself: illegal content, harassment, spam or
-scams, someone's private information, a copyright claim, or a security problem.${
+scams, someone's private information, a copyright claim, art that shouldn't be here or was copied without
+permission, or a security problem.${
                 email ? ` You can also write to <a href="mailto:${esc(email)}">${esc(email)}</a>.` : ''
             }</p>
-<form method="post" action="/report">
+<form method="post" action="/report">${
+                asset
+                    ? `<p>About the art <strong>${esc(piece?.name ?? asset.slice(0, 12))}</strong> (<code>${esc(
+                          asset.slice(0, 12)
+                      )}</code>)</p><input type="hidden" name="asset" value="${esc(asset)}">`
+                    : ''
+            }
 <p><label for="r-bbs">About</label><br><select id="r-bbs" name="bbs">
 <option value="">This hub itself</option>${boards}</select></p>
 <p><label for="r-kind">What kind of problem</label><br><select id="r-kind" name="kind" required>
@@ -1627,6 +1637,7 @@ ${footer()}`,
                     kind: form.get('kind') ?? '',
                     details: form.get('details') ?? '',
                     contact: form.get('contact') ?? '',
+                    asset: form.get('asset') ?? '',
                 };
                 const board = values.bbs ? registry.get(values.bbs) : null;
                 if (values.bbs && (!board || 'active' !== board.state)) {
@@ -1843,7 +1854,15 @@ ${footer()}`,
         }
 
         if ('/report' === path) {
-            return send(res, 200, reportPage(who, { bbs: url.searchParams.get('bbs') ?? '' }));
+            return send(
+                res,
+                200,
+                reportPage(who, {
+                    bbs: url.searchParams.get('bbs') ?? '',
+                    kind: url.searchParams.get('kind') ?? '',
+                    asset: url.searchParams.get('asset') ?? '',
+                })
+            );
         }
 
         const fromBoards = ArtPath === path || ArtJsonPath === path ? boardPieces() : [];

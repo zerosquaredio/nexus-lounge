@@ -313,11 +313,36 @@ sudo hubctl space close ID --outcome "blocked for a week"
 
 Closing a report lets go of what was said in it.
 
+### Art
+
+The art on the hub, the hub's own library and what it took from BBSes
+(their splash screens, emblems and published pieces), by whose it is:
+
+```sh
+sudo hubctl assets
+```
+
+To take a piece down, block one of its files by its hash (the whole
+64 digits, or the first 12 or more, as the gallery's links and reports
+show them). The hub stops showing it and serving any of its files
+everywhere within half a minute, and refuses the same bytes if any BBS
+offers them again:
+
+```sh
+sudo hubctl asset block 1c300dbb83be --reason "not theirs to share"
+sudo hubctl asset unblock 1c300dbb83be
+```
+
+Anyone can report a piece from the gallery (its **Report** link), as "Art
+on the hub" or "Art copied without permission"; `hubctl abuse report ID`
+then shows its hash. Art a BBS withdraws (stops publishing or offering, or
+replaces) is let go of on its own, files and all.
+
 ### The record
 
-Bans and unbans, suspensions and resumptions, blocks and unblocks, and
-reports of both kinds as they come in and are closed all go in the
-moderation log (by number, never what they say):
+Bans and unbans, suspensions and resumptions, blocks and unblocks (of
+people and of art), and reports of both kinds as they come in and are
+closed all go in the moderation log (by number, never what they say):
 
 ```sh
 sudo hubctl space log --limit 50

@@ -11,6 +11,7 @@ import { createControlServer } from './server.ts';
 import { isPublicClient, SignIn } from './signin.ts';
 import { createSite } from './site.ts';
 import { loadWebTerm } from './webterm.ts';
+import { AssetBlocks } from './asset_blocks.ts';
 import { AssetLibrary } from './assets.ts';
 import { BoardArt } from './board_art.ts';
 import { atClient } from './atproto.ts';
@@ -123,11 +124,20 @@ if (isPublicClient(config)) {
         e => log(`public sign-in client failed: ${(e as Error).message}`)
     );
 }
+//  files the admin blocked (hubctl asset block): read again every half a
+//  minute, so a block takes effect that soon, everywhere art is shown
+const assetBlocks = new AssetBlocks(registry.db);
+const blocked = (sha256: string) => assetBlocks.has(sha256);
+setInterval(() => {
+    if (assetBlocks.refresh()) {
+        log(`assets: ${assetBlocks.list().length} file(s) blocked`);
+    }
+}, 30_000).unref();
 //  art the hub offers (assets spec, a first slice): checked as it loads
 let art: AssetLibrary | null = null;
 if (config.assets.library) {
     try {
-        art = AssetLibrary.load(config.assets.library, log);
+        art = AssetLibrary.load(config.assets.library, log, blocked);
     } catch (e) {
         log(`assets: can't load ${config.assets.library}: ${(e as Error).message}`);
     }
@@ -144,6 +154,7 @@ if (config.assets.boardArt.length) {
                 log,
                 at: atClient(fetchPublicJson, config.directory.relay),
                 linked: bbs => !!directory?.forBbs(bbs),
+                blocked,
             },
             join(dirname(config.database), 'board-art')
         );
