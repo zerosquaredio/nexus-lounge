@@ -205,6 +205,22 @@ from `agent-config`.
 `""` for none), enforced by frps itself (`bandwidth_limit_mode = "server"`),
 so an agent can ask for less but not more.
 
+**Agents check the hub's certificate.** An agent's token crosses its
+connection to frps, so the agent must know it reached the hub. With
+`tunnel.tlsCertFile` and `tunnel.tlsKeyFile` set, frps presents a public
+certificate for the address agents connect to (`tunnel.publicAddr`, or the
+hub's domain if that's an IP address), and agent configs name it
+(`transport.tls.serverName`) and check it against the system's trusted
+authorities (`transport.tls.useSystemCa`). The public hub uses the edge's
+own certificate for its domain, copied over by `scripts/tunnel-cert.sh`.
+Without them, as in development, frps makes its own certificate and agents
+can't check it. Older agent configs need the two lines from `agent-config`.
+
+**Cookies stay with their BBS.** The edge strips the `Domain` attribute
+from every cookie a BBS sets, so the browser keeps each one to that BBS's
+own name. Otherwise a BBS could set a cookie for the whole hub domain,
+which browsers would send to the hub's site and every other BBS.
+
 **Probation and bans.** A suspension (`suspend NAME --reason TEXT`) is
 probation: the BBS stays registered, its sysop sees the reason on their
 page, and `resume` reinstates it. A ban (`ban DID --reason TEXT`) is for

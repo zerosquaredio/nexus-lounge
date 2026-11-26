@@ -50,6 +50,60 @@ scripts/deploy.sh configs        # regenerate frps's and Caddy's configs
   its config actually changed. Restarting frps drops every tunnel for a few
   seconds, and the agents reconnect by themselves.
 
+### The tunnel's certificate
+
+Agents check the tunnel server's certificate before sending their token
+(the hub's README, "Agents check the hub's certificate"). frps uses the
+certificate Caddy already has for the hub's own name, copied over by
+`scripts/tunnel-cert.sh`, which checks it and restarts frps when it has
+changed. Caddy renews it every couple of months; frps reads it only when it
+starts, so the script runs daily. Set it up once, as root:
+
+```sh
+install -m 755 scripts/tunnel-cert.sh /usr/local/sbin/hub-tunnel-cert
+hub-tunnel-cert hub.example          # copies it to /etc/hub/tunnel-tls/
+```
+
+with these two units in `/etc/systemd/system/`, then
+`systemctl enable --now hub-tunnel-cert.timer`:
+
+```ini
+# hub-tunnel-cert.service
+[Unit]
+Description=Hub: give the tunnel server the edge's certificate
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/hub-tunnel-cert hub.example
+
+# hub-tunnel-cert.timer
+[Unit]
+Description=Hub: check the tunnel's certificate daily
+[Timer]
+OnCalendar=daily
+RandomizedDelaySec=1h
+Persistent=true
+[Install]
+WantedBy=timers.target
+```
+
+Then set `tunnel.tlsCertFile` to `/etc/hub/tunnel-tls/tunnel.crt` and
+`tunnel.tlsKeyFile` to `/etc/hub/tunnel-tls/tunnel.key` in the hub's config,
+run `scripts/deploy.sh configs`. Agent configs made from then on check the
+certificate. Configs made before need two lines, after
+`transport.tls.enable = true` (the hub's domain in place of `hub.example`):
+
+```toml
+transport.tls.serverName = "hub.example"
+transport.tls.useSystemCa = true
+```
+
+An agent without them still connects, but can't tell the hub from an
+impostor. Tell the sysops of existing BBSes.
+
+If the certificate can't be copied (Caddy has none yet, it is about to
+expire, or it doesn't match its key), the script says so and leaves frps
+as it was: check `journalctl -u hub-tunnel-cert`.
+
 The script expects the layout described in the hub's README (code in
 `/srv/hub/control`, run by the `hub` user as `hub-control`); settings in the
 script's header change each part. For test boards the hub runs itself in

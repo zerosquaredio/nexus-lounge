@@ -5,6 +5,10 @@ import { chatDomain, ChatSecretEnv } from './chat.ts';
 import { FrpsAdminPasswordEnv, type HubConfig } from './config.ts';
 import { BbsExactPaths, BbsPrefixPaths, OddPathRe2 } from './rules.ts';
 
+//  A cookie's Domain attribute, wherever it is among the others (RE2, for
+//  Caddy, in a Caddyfile quoted string)
+export const CookieDomainRe2 = String.raw`"(?i);\s*domain\s*=[^;]*"`;
+
 function tomlString(value: string): string {
     return JSON.stringify(value); //  a valid TOML basic string for these values
 }
@@ -48,15 +52,46 @@ metadatas.token = ${tomlString(options.token)}
 #  keep trying if the hub is down or restarting
 loginFailExit = false
 transport.tls.enable = true
-#  the hub needs a heartbeat: without one, it closes the tunnel
+${agentTls(config)}#  the hub needs a heartbeat: without one, it closes the tunnel
 transport.heartbeatInterval = ${config.tunnel.heartbeatSeconds}
 transport.heartbeatTimeout = ${heartbeatTimeout(config)}
 ${proxy('ws', options.wsPort ?? 8810, ['/ws'])}${proxy('web', options.webPort ?? 8080, EnigmaWebLocations)}`;
 }
 
+//  How the agent knows it reached the hub: the hub's name in its certificate,
+//  from an authority the agent's system trusts. The token goes only to it
+function agentTls(config: HubConfig): string {
+    if ('' === config.tunnel.tlsCertFile) {
+        return '#  this hub has no certificate for agents to check (development only)\n';
+    }
+    return `#  check the hub's certificate before sending the token
+transport.tls.serverName = ${tomlString(tunnelName(config))}
+transport.tls.useSystemCa = true
+`;
+}
+
+//  The name agents expect in the tunnel server's certificate: the address
+//  they connect to, unless that is an IP address, then the hub's domain
+export function tunnelName(config: HubConfig): string {
+    const addr = config.tunnel.publicAddr;
+    return /^[\d.]+$|:/.test(addr) ? config.domain : addr;
+}
+
 //  How long a tunnel lasts with no heartbeat accepted: three missed
 export function heartbeatTimeout(config: HubConfig): number {
     return config.tunnel.heartbeatSeconds * 3;
+}
+
+//  The tunnel server's certificate, if the hub has one for agents to check
+function frpsTls(config: HubConfig): string {
+    if ('' === config.tunnel.tlsCertFile) {
+        return '#  no certificate given: frps makes its own, which agents cannot check\n';
+    }
+    return `#  a public certificate for ${tunnelName(config)}, which agents check; frps
+#  reads it only at start, so it is restarted when the certificate renews
+transport.tls.certFile = ${tomlString(config.tunnel.tlsCertFile)}
+transport.tls.keyFile = ${tomlString(config.tunnel.tlsKeyFile)}
+`;
 }
 
 //  The tunnel server's config (frps)
@@ -71,7 +106,7 @@ vhostHTTPPort = ${config.tunnel.vhostHttpPort}
 subDomainHost = ${tomlString(config.domain)}
 #  agents must use TLS (their token crosses this connection)
 transport.tls.force = true
-#  no raw TCP or UDP ports for anyone
+${frpsTls(config)}#  no raw TCP or UDP ports for anyone
 allowPorts = []
 #  close an agent's tunnel, and every session in it, when no heartbeat has
 #  been accepted for this long. The control plane refuses those of a
@@ -181,6 +216,10 @@ ${tls}
 			reverse_proxy ${tunnel} {
 				#  Caddy replaces X-Forwarded-For but keeps this one
 				header_up -X-Real-IP
+				#  a cookie a BBS sets is for that BBS alone: without its
+				#  Domain, the browser keeps it to the BBS's own name, never
+				#  sending it to the hub or another BBS
+				header_down Set-Cookie ${CookieDomainRe2} ""
 			}
 		}
 

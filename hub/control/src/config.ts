@@ -44,6 +44,13 @@ export interface HubConfig {
         //  out together, enforced by frps: "1MB" or "500KB" a second; "" for
         //  none
         bandwidthLimit: string;
+        //  frps's certificate and key, for the name in publicAddr, from a
+        //  public authority (the edge's own, copied over as it renews). With
+        //  them, agents check the hub is who it says before sending their
+        //  token; without them (development), frps makes its own and agents
+        //  can't check it
+        tlsCertFile: string;
+        tlsKeyFile: string;
     };
     //  the hub's own AT account, which publishes observed status
     hubAccount: {
@@ -177,6 +184,8 @@ export const Defaults: HubConfig = {
         adminPort: 7400,
         heartbeatSeconds: 20,
         bandwidthLimit: '1MB',
+        tlsCertFile: '',
+        tlsKeyFile: '',
     },
     hubAccount: { callbackPort: 7220 },
     observedStatus: { enabled: true, settleSeconds: 20, intervalSeconds: 15 },
@@ -358,6 +367,9 @@ export function makeConfig(overrides: Partial<Record<keyof HubConfig, unknown>> 
             'config',
             'tunnel.bandwidthLimit is like "1MB" or "500KB" (a second), or "" for none'
         );
+    }
+    if (('' === config.tunnel.tlsCertFile) !== ('' === config.tunnel.tlsKeyFile)) {
+        throw new HubError('config', 'tunnel.tlsCertFile and tunnel.tlsKeyFile go together: both or neither');
     }
     const { settleSeconds, intervalSeconds } = config.observedStatus;
     if (!(settleSeconds >= 0) || !(intervalSeconds >= 1)) {

@@ -1,6 +1,6 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { agentConfig, caddyfile, frpsConfig } from '../src/generate.ts';
+import { agentConfig, caddyfile, CookieDomainRe2, frpsConfig } from '../src/generate.ts';
 import { makeConfig } from '../src/config.ts';
 import { AllowedLocations } from '../src/rules.ts';
 import { testConfig } from './helpers.ts';
@@ -78,6 +78,46 @@ describe('generated configs', () => {
         assert.match(text, /header_up -X-Real-IP/);
         assert.match(text, /handle @hub \{\n\t+reverse_proxy 127\.0\.0\.1:7210/);
         assert.match(text, /tls internal/);
+    });
+
+    it("strips the Domain from a BBS's cookies, and only a BBS's", () => {
+        const text = caddyfile(config);
+        const bbs = text.slice(text.indexOf('handle @bbs'), text.indexOf('handle {', text.indexOf('handle @bbs')));
+        assert.ok(bbs.includes(`header_down Set-Cookie ${CookieDomainRe2} ""`));
+        assert.equal(text.split('header_down').length, 2, 'not on the hub\'s own site');
+        //  the rule, as Caddy's RE2 would apply it to each Set-Cookie
+        const re = new RegExp(CookieDomainRe2.slice(5, -1), 'gi');
+        const strip = (cookie: string) => cookie.replace(re, '');
+        assert.equal(strip('s=1; Domain=hub.test; Path=/; Secure'), 's=1; Path=/; Secure');
+        assert.equal(strip('s=1; Path=/; domain = .hub.test'), 's=1; Path=/');
+        assert.equal(strip('s=1; HttpOnly; DOMAIN=hub.test; SameSite=Lax'), 's=1; HttpOnly; SameSite=Lax');
+        assert.equal(strip('s=1; Path=/; HttpOnly'), 's=1; Path=/; HttpOnly');
+        //  a value that only mentions domain is left alone
+        assert.equal(strip('domain=x; Path=/'), 'domain=x; Path=/');
+    });
+
+    it('has agents check the hub\'s certificate when it has a public one', () => {
+        const plain = agentConfig(config, { name: 'coolbbs', token: 't' });
+        assert.doesNotMatch(plain, /useSystemCa|serverName/);
+        assert.match(plain, /no certificate for agents to check/);
+        assert.doesNotMatch(frpsConfig(config), /certFile/);
+
+        const real = makeConfig({
+            domain: 'hub.example',
+            tunnel: { publicAddr: 'hub.example', tlsCertFile: '/etc/hub/tunnel.crt', tlsKeyFile: '/etc/hub/tunnel.key' },
+        });
+        const agent = agentConfig(real, { name: 'coolbbs', token: 't' });
+        assert.match(agent, /^transport\.tls\.serverName = "hub\.example"$/m);
+        assert.match(agent, /^transport\.tls\.useSystemCa = true$/m);
+        assert.ok(agent.indexOf('useSystemCa') < agent.indexOf('[[proxies]]'), 'a top-level setting');
+        const frps = frpsConfig(real);
+        assert.match(frps, /^transport\.tls\.certFile = "\/etc\/hub\/tunnel\.crt"$/m);
+        assert.match(frps, /^transport\.tls\.keyFile = "\/etc\/hub\/tunnel\.key"$/m);
+
+        //  agents given an IP address still expect the hub's name
+        const byIp = makeConfig({ ...real, tunnel: { ...real.tunnel, publicAddr: '203.0.113.7' } });
+        assert.match(agentConfig(byIp, { name: 'coolbbs', token: 't' }), /serverName = "hub\.example"/);
+        assert.throws(() => makeConfig({ tunnel: { tlsCertFile: '/x.crt' } }), /both or neither/);
     });
 
     it('uses public on-demand certificates outside development', () => {
