@@ -1,7 +1,7 @@
 # Hub Development Plan
 
 Status: Draft
-Last updated: 2026-11-08
+Last updated: 2026-11-25
 
 This plan breaks the hub ([hub.md](hub.md)) into features and milestones. The
 hub lives in this repo under `hub/` and is independent of the BBS software;
@@ -49,6 +49,11 @@ BBS-side work is in [development_plan.md](development_plan.md).
 | **Control plane** | Sysop registration (AT OAuth), BBS registry, tunnel tokens, handle verification, hub pages, observed status, directory, admin tools | **TypeScript** (Node.js), using the official AT libraries |
 | **Database** | Registrations, tokens (hashed), status, directory index | **SQLite** |
 
+Since the first slice of the common space (H13 to H19), the control plane
+also serves the hub's site, the live model's stream and assets, and a chat
+server, **freeq**, runs beside it as its own process on loopback, reached
+only through the control plane (H15).
+
 ### 2.1 Why these choices
 
 - **TypeScript for the control plane:** it is almost entirely AT work (OAuth,
@@ -67,46 +72,59 @@ BBS-side work is in [development_plan.md](development_plan.md).
 ```
 hub/
   control/    control plane (TypeScript); also generates the Caddy, frps
-              and per-BBS agent configs, so they can't drift apart
+              and per-BBS agent configs, so they can't drift apart;
+              fonts/ holds the VGA web font
+  policy/     terms of service and privacy notice
   test/       end-to-end tests
-  deploy/     compose files for the VPS (later)
+scripts/      deploy.sh: deploy the hub, roll back, build and swap board images
+art/          the project's own ANSI art, and the code that draws it
 ```
 
 ## 3. Configuration model
 
-Hub configuration (`hub/deploy/hub.yaml`, proposed):
+Hub configuration is a JSON file, `hub.json` (decided 2026-11-09: no parser
+to depend on). The main settings, with their defaults; all of them, with
+comments, are in `hub/control/src/config.ts`:
 
-```yaml
-domain: hub.cyberspace.nexus       # BBSes get <name>.hub.cyberspace.nexus
-tls:
-  mode: onDemand                 # onDemand (HTTP validation) or wildcard (DNS-01)
-  askUrl: http://control:8080/tls/allowed   # Caddy asks before issuing a certificate
-  dnsProvider: ""                # wildcard mode only
-tunnel:
-  frpsBindPort: 7000             # agents connect here (outbound from the BBS)
-  allowedPaths:                  # forwarded to BBSes; see hub.md §4
-    - /ws
-    - /peer
-    - /_enig/atproto/
-    - /_enig/handoff/
-    - /_enig/signin
-    - /_enig/signout
-    - /_enig/verify/
-    - /assets/
-registration:
-  open: true                     # anyone with an AT account may register
-  reservedNames: [www, api, admin, hub, status, mail]
-  maxBbsPerSysop: 3
-atproto:
-  oauthClientUrl: https://hub.cyberspace.nexus/oauth/client-metadata.json
-  #  the hub's own AT account (publishes observed status) is connected with
-  #  "hub-account connect" and kept in the registry, not set here (H6)
-limits:
-  requestsPerMinutePerBbs: 600
-  bandwidthMbPerDayPerBbs: 2048
-webTerminal:
-  enigTermVersion: ""            # pinned release, verified by SHA-256
+```jsonc
+{
+  "domain": "hub.cyberspace.nexus",       // BBSes get <name>.<domain>
+  "edge": { "tls": "internal" },          // or "onDemand": public certificates,
+                                          // one per registered name (H1)
+  "tunnel": { "bindPort": 7000, "heartbeatSeconds": 20, "bandwidthLimit": "1MB" },
+  "registration": {
+    "open": true,                         // false: only the admin registers BBSes
+    "approval": true,                     // the admin approves applications (H9)
+    "minAccountAgeDays": 30,
+    "maxBbsPerSysop": 3,
+    "reservedNames": ["www", "api", "admin", "…"]
+  },
+  "observedStatus": { "enabled": true },  // from the hub's own AT account (H6)
+  "directory": {
+    "enabled": true, "scope": "network", "ratings": ["general"],
+    "nsidPrefix": "nexus.cyberspace.dev"
+  },
+  "space": {                              // the common space (H13 to H19)
+    "enabled": false, "join": "members", "vouchedFrom": [],
+    "chat": { "enabled": false, "room": "#space", "reportMinutes": 5 },
+    "live": { "enabled": false }
+  },
+  "assets": { "library": "" },            // a baked art library to serve (H20)
+  "webTerminal": { "root": "", "digest": "" },  // the pinned enig-term release
+  "contact": { "abuse": "" },
+  "policy": { "operator": "", "minimumAge": 16 }
+}
 ```
+
+- **Secrets aren't in it:** the tunnel server's admin password and the chat
+  secret come from the environment; the hub's AT account is connected with
+  `hub-account connect` and kept in the registry (H6).
+- **The paths forwarded to BBSes** ([hub.md](hub.md) §4) are fixed in the
+  code, not a setting: `/ws`, `/_enig/atproto/`, `/_enig/handoff/`,
+  `/_enig/signin` and `/_enig/signout` today. `/assets/` (F21), `/peer`
+  (F12) and `/_enig/verify/` (F7) are added when those features need them
+  (§5.2).
+- The public hub runs with `registration.open: false` for now.
 
 BBS side (generated for the sysop at registration): an `frpc` config with the
 hub address, the BBS's tunnel token, and its two local targets (ENiGMA½ web
@@ -354,7 +372,8 @@ it to its registered name. 85 unit tests.
   banners; the API for apps (§5.2); a large hub's `hub` scope (the stream
   is given the accounts in its address, which keeps it to a few hundred).
 
-Still open, for the public server:
+Still open, for the public server (the first two are requirements for
+public launch, §5.2):
 
 - **The agent's connection.** Agents must use TLS (the tunnel server
   refuses them otherwise, tested), but don't yet check the hub's
@@ -377,6 +396,7 @@ Still open, for the public server:
 |---|---|
 | Implements | Caddy with on-demand TLS (certificates only for registered names); host-based routing to frps; the endpoint allowlist from [hub.md](hub.md) §4; WebSocket passthrough with keepalive; per-BBS rate limits; 404 for everything else |
 | Depends on | H0 |
+| Status | **Working on the public hub** (2026-11-22; locally 2026-11-09), with public certificates made on demand. Open: cookies a BBS sets for the whole hub domain (§5.2) |
 | Done when | Allowed paths reach the BBS; all other paths return 404 without touching the tunnel; WebSocket sessions survive idle periods |
 
 ### H2. Tunnel server and agent
@@ -385,6 +405,7 @@ Still open, for the public server:
 |---|---|
 | Implements | `frps` with authentication delegated to the control plane through the server plugin (tokens validated, subdomain and paths enforced); `frpc` config templates for ENiGMA½; agent setup script; reconnection behavior |
 | Depends on | H0.2 |
+| Status | **Working on the public hub** (2026-11-22; locally 2026-11-09), with heartbeats since H8. Open: the agent doesn't check the hub's certificate (§5.2) |
 | Done when | A BBS's agent connects with its token, can serve only its own subdomain and allowed paths, and reconnects automatically after network loss or hub restart |
 
 ### H3. Sysop registration and BBS registry
@@ -393,6 +414,7 @@ Still open, for the public server:
 |---|---|
 | Implements | Hub web page "Register a BBS": sysop signs in with AT OAuth (base `atproto` scope); chooses a name (reserved-name and format rules); hub stores the registration keyed to the sysop's DID and issues a tunnel token (shown once, stored hashed); token rotation and revocation; admin CLI (list, suspend, delete) |
 | Depends on | H2 |
+| Status | **Working on the public hub** (2026-11-22; locally 2026-11-09), where registration is closed and the admin registers boards. Stage 1 of how a BBS proves itself (below) only |
 | Done when | A sysop can register, receive a working agent config, rotate the token, and delete the BBS; names can't be claimed twice; admin CLI can suspend a BBS |
 
 Note: before H3 exists, HM1 registers BBSes with the admin CLI only.
@@ -428,6 +450,7 @@ specs described three different ways):
 |---|---|
 | Implements | Per-BBS info page at `/` (name, description, status, connect button); pinned enig-term release served by the hub and pointed at `wss://name.hub.cyberspace.nexus/ws`; offline page when the tunnel is down, showing when the BBS was last seen and its regular hours (listing `hours`), since part-time boards are normal ([hub.md](hub.md) §6) |
 | Depends on | H1, H3; H6 for live status |
+| Status | **Working on the public hub** (2026-11-22; locally 2026-11-09): both test boards are used through the hub's web terminal, from PCs and phones |
 | Done when | Users can open `https://name.hub.cyberspace.nexus`, see the BBS, and connect in the browser; enig-term files match the pinned SHA-256 |
 
 Coordinate with BBS-side F14 (web sign-in, built 2026-11-07): the sign-in
@@ -494,6 +517,7 @@ it back after 28 s. 2 new tests for the public client.
 |---|---|
 | Implements | Jetstream consumer indexing BBS listing, status, and event records; directory web page (search, tags, status, upcoming events); later, the same data as XRPC methods under the hub's `did:web` ([hub.md](hub.md) §5) |
 | Depends on | H0.3; BBS-side F9 publishing listings |
+| Status | **Working on the public hub** (seen 2026-11-25: both test boards listed from their own accounts' records; locally 2026-11-09). Not yet: events, which no BBS publishes (F9), search and tags, and the XRPC methods |
 | Done when | A BBS that publishes a listing appears in the directory within minutes, with current status and events |
 
 ### H8. Operations and moderation
@@ -635,6 +659,9 @@ config, off by default; they run as their own processes beside the
 control plane, behind the same edge. The BBS side is F18 and F19
 ([development_plan.md](development_plan.md)).
 
+All of it runs on the public hub since 2026-11-24 (HM5). The statuses below
+record how each part was first built and tested.
+
 ### H13. User sign-in and profiles
 
 | | |
@@ -710,13 +737,50 @@ control plane, behind the same edge. The BBS side is F18 and F19
 | Done when | A BBS publishes its ANSI logo and the hub's map draws its board with it; until then, art from a library can be shared in the chat |
 | Status | **Proof of concept working** (2026-11-25), on a scratch hub. Baked from ENiGMA½'s own art: the Mystery Skulls theme by Luciano Ayres of Blocktronics, and a welcome screen by dangermouse. SAUCE names almost nobody in these files, so credit comes from whoever bakes a pack; ENiGMA½'s theme screens hold its menu codes (`%TL1` and the like), which the baker blanks (`--mci`). All 157 of ENiGMA½'s ANSI files come out clean, with and without that. The hub's check caught a real fault on the first try (the parser and the writer disagreeing about blanks at the ends of rows), fixed with a test. **Tested in a real browser** with the real chat server: the gallery; two people sharing pieces by the picker and by `/art`, each seeing the other's drawn with its credit; text that only looks like a reference staying text; one person seeing art as ANSI and then as text while the other kept pictures, and the choice surviving a reload; a phone-sized page. The ANSI view draws in the IBM VGA web font, which the hub serves (VileR's, CC BY-SA 4.0, unchanged, as ENiGMA½'s own website uses it). Of ENiGMA½'s 157 ANSI files, 43 are clean as they ship and would be taken without baking at all. Views tried in a real browser too: each across the chat and the gallery, with the VGA font, and at phone size. 21 new tests in all. Not on the public hub: the art's licence isn't settled (it ships with ENiGMA½, but the artists haven't been asked), and nothing is published to AT yet |
 
+**What remains for boards' own art** (2026-11-25; the proof of concept
+serves a library baked by the admin):
+
+- Following asset records as the directory follows listings (H7): the
+  sweep and the stream gain the asset types, kept only for accounts whose
+  listings the hub shows.
+- Fetching blobs from account servers and files from boards
+  (`/assets/<sha256>` through the tunnel, a path to add, §5.2), with the
+  directory's guarded fetcher, then the checks the library already gets.
+- Caps and quotas for each publisher, and withdrawal when a record goes
+  ([assets spec](assets.md) §6.3, §6.5).
+- Moderation before any of it is public: `hubctl asset block`, `hubctl
+  assets`, and the report kinds for an asset and for a copy (spec §9).
+- The live model's `look` for an entity (spec §12), and the map drawing a
+  board with its emblem and a person with their Bluesky picture.
+- The terms of service need their section on assets before the public hub
+  shows boards' art (spec §10). The project's own art (`art/`, CC BY 4.0)
+  can be shown there before that.
+
 ### H21. Resource nodes (later)
 
 | | |
 |---|---|
 | Implements | The hub's side of the [resource node spec](resource_node.md): leaves with no front end, run by sysops or anyone, offering storage, compute and agents to their owner and whoever they allow. Registration of kind `node`, with its token and tunnel and no session routing; its assets taken like any leaf's; object backends relayed through the live model; the admin's rules for what nodes may offer; reports, suspension and bans as for boards |
-| Depends on | H3, H8; H20 and assets spec step 2 for storage; objects and their WebAssembly rules for compute |
+| Depends on | H3, H8; H20 and H22 for storage; objects and their WebAssembly rules (after H23) for compute |
 | Done when | A node's owner sees files from their own machine in the space, served through the hub (spec §9, step 1) |
+| Status | Ideas (2026-11-25) |
+
+### H22. Members' assets, looks and remixing (later)
+
+| | |
+|---|---|
+| Implements | The [assets spec](assets.md)'s steps 2 to 4 (its §11). **Members' assets** (§5): claims in a BBS's presence report, each file fetched through its tunnel and used only while the claim holds (`always`, `on-leaf`, `in-space`); with F23. **People's own looks** (§3.4, §8): `actor.looks`, signature looks and their marks, and "Your assets" on the hub. **Catalogues, permissions and remixing** (§3.3, §7): the hub's tools obeying each author's permissions, exact copies refused, near-copies flagged, and credit carried |
+| Depends on | H20 complete (boards' own art); H14; F23 |
+| Done when | Step by step, as the spec's §11 has it; first, a member's portrait from their board shows on the map |
+| Status | Ideas (2026-11-25) |
+
+### H23. Places and the MUD view (later)
+
+| | |
+|---|---|
+| Implements | The world beyond one room ([One World at Every Level](https://github.com/zerosquaredio/cyberspace-framework/blob/main/docs/world.md) §3, §4, §9 step 2): places, exits and descriptions in the live model; a chat room per place; the map drawing places; and the hub's side of the text level (`look`, `go`, `say`, `emote`), for the door (F24) and the web. Building (step 3) and object rules in WebAssembly follow, and with them the compute side of resource nodes (H21) |
+| Depends on | H16, H17, H18; the world model's shape (world.md §10) |
+| Done when | Two people in different places don't hear each other, walk to the same one, and do; one of them in a terminal |
 | Status | Ideas (2026-11-25) |
 
 ## 5. Milestones
@@ -726,12 +790,13 @@ control plane, behind the same edge. The BBS side is F18 and F19
 | **HM0** Groundwork | H0 | Domain, VPS, and spikes done; tunnel choice confirmed |
 | **HM1** Reachable | H1, H2, minimal H3 (admin CLI) | A throwaway test ENiGMA½ (§6; never the personal dev VM) is reachable at `test.hub.cyberspace.nexus`, with AT login working through the hub. **Working on the public hub** (2026-11-22; locally 2026-11-09) |
 | **HM2** Self-service | H3, H4, H5 | Sysops register themselves, get handles, and users connect in the browser. **Working on the public hub**: H3 and H5 (2026-11-22, registration by the admin for now), H4 (2026-11-23) |
-| **HM3** Discovery | H6, H7 | Observed status and a public directory. **Working locally**: H7 (2026-11-09), H6 (2026-11-17). **Working on the public hub**: H6 (2026-11-25) |
-| **HM4** Public launch | H8 | Operations and moderation in place; open to outside sysops. H8 and H9 done (2026-11-25); before opening, a lawyer's review of the terms |
+| **HM3** Discovery | H6, H7 | Observed status and a public directory. **Working locally**: H7 (2026-11-09), H6 (2026-11-17). **Working on the public hub**: H6 and H7 (2026-11-25) |
+| **HM4** Public launch | H8, H9 | Operations and moderation in place; open to outside sysops. H8 and H9 done (2026-11-25); before opening, the requirements of §5.2 |
 | **HM5** Common space, first slice | H13 to H19 | Sign-in, presence, one chat room, the live model, a 2D map and an ANSI view, with basic blocking. Built on the test hub; needs HM3, not HM4, but must be in place (with H18) before a public hub turns it on. **Working locally** (2026-11-19): H13 to H18 all done on the test hub. **Working on the public hub** (2026-11-24), H13 to H19, with two people and two boards with different sysops: each sysop sees only their own board; both people see each other in the room and at the board one is logged in to (shown in two places at once, from the hub's page and the board's report); boards open from the map; chat works both ways |
 | **HM6** Assets, first slice | H20 (with F21) | BBSes' ANSI art on the hub: emblems on the map, and art shared in the chat ([assets spec](assets.md)). **Proof of concept working** (2026-11-25): a baked library, checked and served, shared in the chat |
 | **HM7** Resource nodes | H21 (with F22) | Leaves with no front end: storage first, then the owner's accounts and sites, sharing, compute and agents ([resource node spec](resource_node.md) §9) |
-| Later | H9, H10, H11 | Sysop verification, end-to-end privacy, hosted accounts |
+| After HM6 | H22, H23 | Members' assets, looks and remixing; places and the MUD view; then building, the baker and the higher levels, in the order of [One World at Every Level](https://github.com/zerosquaredio/cyberspace-framework/blob/main/docs/world.md) §9. Voice has no place in this order yet |
+| Later | H10, H11 | End-to-end privacy, hosted accounts; payment and attestation checks for sysops (the rest of H9) |
 
 ### 5.1 Dependencies on the BBS plan
 
@@ -740,7 +805,41 @@ control plane, behind the same edge. The BBS side is F18 and F19
 | HM1 | F3 (AT login) and F10 (running behind a tunnel) to demonstrate end to end; reachability alone needs neither |
 | HM2 | F9 (BBS account) for handles; F14 routes for web sign-in |
 | HM3 | F9 listing and status records; record type names |
-| HM5 | F18 (presence reports) and F19 (the ANSI view) |
+| HM5 | F18 (presence reports), F19 (the ANSI view) and F20 (staying on while busy on the hub) |
+| HM6 | F21 (a board's art, emblem and view), after its first step: the board account's permissions and `/assets/` through the tunnel |
+| HM7 | F22 (the settings screen), only for a node beside a BBS |
+
+### 5.2 Before public launch (HM4)
+
+Gathered 2026-11-25, reviewing the plans. Opening registration to outside
+sysops waits for all of these. The first four are faults or gaps; the rest
+are things far cheaper to settle while every board is ours.
+
+1. **Cookies for the whole hub domain.** A BBS can set a cookie with
+   `Domain=` the hub's domain, which browsers then send to the hub's own
+   site and every other BBS. The edge drops any `Set-Cookie` from a BBS
+   that names a domain (BBSes' own cookies are host-only, F14), or the
+   hub's domain goes on the Public Suffix List; the first is ours to do and
+   quick.
+2. **The agent checks the hub's certificate.** The tunnel is encrypted, but
+   the agent would accept anyone's certificate, and its token crosses that
+   connection. The tunnel server gets a real certificate and the generated
+   agent config names it; or the tunnel moves to `wss://` on 443.
+3. **A sysop's guide to joining** (development plan F17, first part).
+4. **The operator's list:** a lawyer's review of the terms, the abuse
+   address (`contact.abuse`) and an uptime monitor.
+5. **Record names:** final names, or outside boards on the development
+   names with a migration later (development plan §6).
+6. **The board account's permission list,** complete, so sysops connect it
+   once (development plan F21, first step).
+7. **The agent config's paths,** complete for what is coming (`/assets/`
+   at least), so sysops install it once.
+8. **Chat beyond the one room** (H15): whether someone connected through
+   the hub can open rooms of their own or message people privately, which
+   freeq allows and the hub's moderation doesn't see. Check what the hub's
+   relay lets through, and close it or decide to allow it.
+9. **Boards' art stays off** until the terms have their section on assets
+   (H20).
 
 ## 6. Testing
 
@@ -763,9 +862,20 @@ control plane, behind the same edge. The BBS side is F18 and F19
 
 ## 7. Deployment
 
-- One small VPS running Caddy, frps, and the control plane via Docker Compose,
-  with SQLite on a persistent volume and scheduled backups.
-- Ports: 443 (users), the frps bind port (agents), SSH for administration.
+As built (2026-11-22 to 25); day-to-day use is in
+[running_a_hub.md](../admin/running_a_hub.md).
+
+- One small VPS. Caddy, frps, freeq and the control plane run as system
+  services, not containers: the control plane needs only Node, and the
+  others are single programs. Test boards run as Docker containers built
+  from the fork.
+- `scripts/deploy.sh` deploys a revision of the hub and rolls it back, and
+  builds and swaps board images. The server itself was set up by hand, not by
+  a script.
+- SQLite on disk, backed up nightly off the server and restored as a test
+  (H8). Logs kept 3 months.
+- Ports: 443 and 80 (users, and certificate validation), the frps bind
+  port (agents), SSH for administration.
 - Terminal traffic is light, so a modest VPS should carry many BBSes;
   bandwidth limits protect against file-transfer-heavy boards.
 
@@ -784,10 +894,18 @@ control plane, behind the same edge. The BBS side is F18 and F19
   port per BBS or SNI-style routing).
 - **Multiple hubs:** whether hubs federate (shared directory) or stay
   independent. Direction in the vision, §10.
-- **The common space beyond the first slice** (voice, more rooms, the
-  other moderation models, assets and avatars) has no features here
-  yet; the order is in the vision, §3.2.
-- **Ratings** ([hub.md](hub.md) §5.4): the directory (H7) should filter by
-  the listing's `rating` from the start, even before there are spaces.
+- **The common space beyond the first slice:** assets are H20 and H22,
+  and places H23, in the order of
+  [One World at Every Level](https://github.com/zerosquaredio/cyberspace-framework/blob/main/docs/world.md) §9
+  (revised 2026-11-25). Voice, the other moderation models, and whether 3D
+  is Overte or our own web views have no features here yet.
+- ~~**Ratings**~~ ([hub.md](hub.md) §5.4): the directory shows only the
+  ratings in `directory.ratings`, by the higher of a listing's rating and
+  its self-labels (H7, F9).
+- **Resource nodes and registration** (H21): nodes need names under the
+  hub's domain, and the rules for sysops (approval, account age, three
+  each) weren't made for "anyone" ([resource_node.md](resource_node.md)
+  §10).
+- **An admin page** for moderation, in place of the command line (H18).
 - **Cost model:** free for all, donation-supported, or paid tiers for heavy
   use.

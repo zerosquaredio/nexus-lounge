@@ -1,7 +1,7 @@
 # Development Plan
 
 Status: Draft
-Last updated: 2026-11-08
+Last updated: 2026-11-25
 
 This plan breaks the work into features, says where each one is delivered
 (upstream ENiGMA½, our fork, or this repo), and defines how sysops enable it.
@@ -65,7 +65,7 @@ unchanged; its module boundaries are designed so that this costs nothing.
 ## 2. Configuration model
 
 The `config.hjson` settings, modeled on the existing top-level
-`activityPub` block, as built on the fork (2026-11-08). Names may still
+`activityPub` block, as built on the fork (2026-11-25). Names may still
 change if the maintainer prefers others.
 
 ```hjson
@@ -118,6 +118,21 @@ atProto: {
             deriveEndpoints: true
             endpoints: []
             sysopDid: ""
+            rating: "general"       //  general, mature or adult
+        }
+        triggers: {
+            moved: { enabled: false }   //  a post when the board's addresses change
+        }
+    }
+
+    hub: {                          //  the hub this board runs behind (F18)
+        url: ""
+        name: ""                    //  both from the agent config the hub gave
+        token: ""
+        presence: {
+            enabled: false          //  report members who chose to be shown
+            includeLocalUsers: false
+            hubIdleMinutes: 30      //  stay on while busy on the hub (F20)
         }
     }
 }
@@ -139,7 +154,9 @@ contentServers: {
 Menu side: an `atprotoLogin` menu and a matching "login with AT" option on the
 login matrix, both commented out in `misc/menu_templates/login.in.hjson`.
 Later features add their own menus the same way (each feature's Config row
-names them).
+names them). On the AT login screens, `hyperlinks: true` on the status view
+makes the approval link clickable, and `config.qrCode` on the login menu
+draws it as a QR code too (F3).
 
 ## 3. Features
 
@@ -181,7 +198,7 @@ and what "done" means.
 | | |
 |---|---|
 | Implements | `atproto` login type in `authenticateFactor1`; member DID stored as a user property and used for lookup; username derived from handle with collision handling; first-login user creation (since F4: an application form after first login); `atprotoLogin` menu module (enter handle, show handoff URL, wait); web handler for client metadata and callback under `/_enig/atproto/`; secure-connection check (originally ACS `SC`; since F4 the module's own check, with a message); public client mode (client metadata, signing keys) alongside F1's loopback mode |
-| Status | **Done** (2026-11-05) on the fork's `atproto-login` branch, in four commits (login core, login screen and callback, public client mode, sysop docs), tagged `pr/03-atproto-login` and pushed. 42 new tests. Logged in live with a real Bluesky account over SSH, first in loopback mode and then in public mode through a Cloudflare quick tunnel: first login created the sysop via `rootDid`, a later login found the same user by DID. enig-term was tried later, with F14 |
+| Status | **Done** (2026-11-05) on the fork's `atproto-login` branch, in four commits (login core, login screen and callback, public client mode, sysop docs), tagged `pr/03-atproto-login` and pushed. 42 new tests. Logged in live with a real Bluesky account over SSH, first in loopback mode and then in public mode through a Cloudflare quick tunnel: first login created the sysop via `rootDid`, a later login found the same user by DID. enig-term was tried later, with F14. **Since** (2026-11-25, `4ffc41bd` and `070cc9a1`): the approval link is clickable where the terminal says it supports hyperlinks (OSC 8; enig-term does); a QR code of it is drawn at the bottom right of the login screen where it fits below the link; a caller can give their board user name in place of their handle (an exact match only; sign-in then starts at their account's host, with no hint of who they are); and the board account screen moves to its actions after connecting and says how to leave. 2 new test files, and more tests of login. The link was used live on both public test boards; the QR code was checked module for module against a reference; the board account screen's change is deployed but not yet seen by a person |
 | Track | **Upstream** |
 | Config | `atProto.login.*`, `atProto.oauth.clientMode: public` (uses `contentServers.web.overrideUrlPrefix`; no separate URL setting), `contentServers.web.handlers.atProto.enabled`, menu template entries (commented out) |
 | Depends on | F1, F2 |
@@ -200,9 +217,9 @@ otherwise become root. F3 therefore supports two setups:
   (an `oputil user` subcommand to set the DID property).
 
 **Web terminal flow.** In enig-term, the handoff URL is opened in a separate
-browser tab; no enig-term changes are needed. To verify: whether enig-term
-renders the URL as a clickable link (ENiGMA½ already detects hyperlink
-support in terminals). The smoother sign-in-first flow is F14.
+browser tab; no enig-term changes are needed. Since 2026-11-25 the URL is
+a clickable link there, and a QR code beside it serves someone with a phone
+in hand. The smoother sign-in-first flow is F14.
 
 ### F4. Allowed login types
 
@@ -385,7 +402,7 @@ building it:
 | | |
 |---|---|
 | Implements | The BBS's own AT account (OAuth with write scopes); Bluesky announcement posts; events; listing and status records ([publishing.md](publishing.md)); event-scheduler jobs for updates |
-| Status | **Part 1 done** (2026-11-08) on the fork's `atproto-login` branch, in one commit, tagged `pr/09-board-account` and pushed: the board account, listing and status records, announcements, and the ready-made invite message. 21 new tests. Tested live with the Bluesky test account as the board account: connected from the `BA` screen (the consent page listed only the granular permissions), the listing and status read back publicly from the account's host, and a first announcement posted from the screen (2026-11-08). The screen is sysops-only by its menu ACS; `ID1` makes it root-only. Part 2, started (2026-11-17): the listing's `rating` (`general`, `mature` or `adult`) with matching self-labels ([hub.md](hub.md) §5.4), and a "we've moved" post when the board's addresses change (`triggers.moved`, off by default; it never posts on a first listing or with no addresses left, and the listing is still written if the post fails). 9 new tests; the rating tested live (the test board's listing reads back `rating: general`); the moved post unit-tested only, since a live test would post publicly. Committed as `019ec483`, tagged `pr/09-rating-and-moved` (after `pr/10`, as it uses the listing addresses; fork-only, with the listing). The hub now rates a listing by the higher of its rating and its self-labels, and counts an unrecognised rating as adult. Still to do: other triggered posts, events, stats, ads, art, bridging and DM invites |
+| Status | **Part 1 done** (2026-11-08) on the fork's `atproto-login` branch, in one commit, tagged `pr/09-board-account` and pushed: the board account, listing and status records, announcements, and the ready-made invite message. 21 new tests. Tested live with the Bluesky test account as the board account: connected from the `BA` screen (the consent page listed only the granular permissions), the listing and status read back publicly from the account's host, and a first announcement posted from the screen (2026-11-08). The screen is sysops-only by its menu ACS; `ID1` makes it root-only. Part 2, started (2026-11-17): the listing's `rating` (`general`, `mature` or `adult`) with matching self-labels ([hub.md](hub.md) §5.4), and a "we've moved" post when the board's addresses change (`triggers.moved`, off by default; it never posts on a first listing or with no addresses left, and the listing is still written if the post fails). 9 new tests; the rating tested live (the test board's listing reads back `rating: general`); the moved post unit-tested only, since a live test would post publicly. Committed as `019ec483`, tagged `pr/09-rating-and-moved` (after `pr/10`, as it uses the listing addresses; fork-only, with the listing). The hub now rates a listing by the higher of its rating and its self-labels, and counts an unrecognised rating as adult. Still to do: other triggered posts, events (the hub's directory is ready to show them, H7), stats, ads, bridging and DM invites; art is F21 now. **On the public hub** (2026-11-25): both test boards' own accounts connected from the `BA` screen, by their sysop in a browser, and their listings and status read back publicly |
 | Track | Split: **generic Bluesky announcement posting goes upstream**; the **listing and status records are project-specific** (our record types), so fork-only |
 | Config | `atProto.publishing.*` |
 | Depends on | F1; record type names (`nexus.cyberspace.*`, decided) |
@@ -460,7 +477,7 @@ are public, so the first live post waits for the user's go-ahead.
 | | |
 |---|---|
 | Implements | Mostly configuration of existing settings: public URL, `wsTerm.endpoint`, trusted proxy headers, path routing for the web and WebSocket ports ([enigma_integration.md](enigma_integration.md) §6). Hub registration client if needed |
-| Status | **Local part done** (2026-11-09): the settings, a fix and the docs, tested behind the dev hub on the VM; the public test remains, with the VPS. Upstream's trusted-proxy work (#983, already merged into the fork) provides the proxy handling: `contentServers.web.proxied`, `loginServers.webSocket.proxied`, `trustedProxies`. Tested with the test board behind the dev hub: a WebSocket through the hub counts as secure (the agent sets `X-Forwarded-Proto`), so AT login is offered; hand-off links use the hub address; the board names the real visitor, not the hub or a forged header, and limits each visitor separately; web sign-in accepts its form from the hub address and refuses others. Found and fixed: the listing put SSH and telnet at the public web address, which behind a hub is the hub's; they now use the board's own `contentServers.web.domain`, only when that is a public name. Not testable locally: the browser's return from Bluesky to the board through the hub, which needs public mode. Committed as `3c8b1ca0`, tagged `pr/10-behind-a-proxy`; its listing fix belongs with PR 9, so include it when that branch is cut |
+| Status | **Working on the public hub** (2026-11-22, hub HM1): two test boards run as containers on the VPS behind the hub, with AT login in public mode and enig-term over `wss://`, used since. They sit behind the hub, not at an address of their own, so a hosted board behind its own Caddy (as "Done when" has it) hasn't been tried as such. **Local part** (2026-11-09): the settings, a fix and the docs, tested behind the dev hub on the VM; the public test remains, with the VPS. Upstream's trusted-proxy work (#983, already merged into the fork) provides the proxy handling: `contentServers.web.proxied`, `loginServers.webSocket.proxied`, `trustedProxies`. Tested with the test board behind the dev hub: a WebSocket through the hub counts as secure (the agent sets `X-Forwarded-Proto`), so AT login is offered; hand-off links use the hub address; the board names the real visitor, not the hub or a forged header, and limits each visitor separately; web sign-in accepts its form from the hub address and refuses others. Found and fixed: the listing put SSH and telnet at the public web address, which behind a hub is the hub's; they now use the board's own `contentServers.web.domain`, only when that is a public name. Not testable locally: the browser's return from Bluesky to the board through the hub, which needs public mode. Committed as `3c8b1ca0`, tagged `pr/10-behind-a-proxy`; its listing fix belongs with PR 9, so include it when that branch is cut |
 | Track | **Upstream docs PR** for tunnel setup (ENiGMA½ already ships an ngrok dev helper in `dev_util/ngrok`). Hub registration client is fork-only |
 | Config | Existing web and WebSocket settings; hub settings TBD |
 | Depends on | F3; F11 for the hub part; a VPS (the dev VM is never exposed to the internet) |
@@ -473,6 +490,7 @@ are public, so the first live post waits for the user's go-ahead.
 | Implements | Tunnel relay, sysop registration, routing, allowed endpoints, handle verification, directory, observed status, serving enig-term ([hub.md](hub.md)). Planned in detail in [hub_development_plan.md](hub_development_plan.md). |
 | Track | **This repo** (`hub/`) |
 | Config | Hub's own config |
+| Status | **Working on the public hub** (2026-11-22), `hub.cyberspace.nexus`, with two test boards; the common space since 2026-11-24. Closed to outside sysops until the launch requirements are met ([hub_development_plan.md](hub_development_plan.md) §5.2) |
 | Depends on | F10; test hub domain (`hub.cyberspace.nexus`, decided) |
 | Done when | A BBS behind a home firewall registers, gets `name.hub.cyberspace.nexus`, and users can connect and log in through it |
 
@@ -645,6 +663,7 @@ in.
 | Config | The image's first-run settings; publishes the listing's `hours` if the sysop gives them |
 | Depends on | F10 (hosted), F11 (home-based, through the hub) |
 | Done when | Someone with no ENiGMA½ experience starts a board from the image, signs in as its sysop with Bluesky, and it appears on the hub, in both models |
+| Status | Not started. The public hub's test boards run from an image built from the fork by `scripts/deploy.sh`, set up by hand. **First part, needed before the hub opens to outside sysops** (hub plan §5.2): a written guide for a sysop joining a hub (the fork or its image, the hub's agent, the board's own account, presence), in `docs/admin/`. The first-run setup and the VM image follow |
 
 ### F18. Presence reports to the hub
 
@@ -655,7 +674,7 @@ in.
 | Config | `atProto.hub.presence.*` (names to be settled with the hub settings, F10 and F11); a user config entry |
 | Depends on | F9 (the board's identity), F11; hub H14 |
 | Done when | A member who turned it on appears on the hub when they log in by any route, and is gone when they log off or turn it off; nobody is reported without their own setting on; a member the sysop withheld never appears |
-| Status | **Working locally** (2026-11-17), with hub H14. `atProto.hub` (`url`, `name`, `token`: the hub's address, and the name and token from its agent config) and `atProto.hub.presence` (`enabled`, `includeLocalUsers`). The whole list of members who chose it goes to the hub over HTTPS (or `http://` to `127.0.0.1`) after each login and logoff, a change of setting, and every minute. Members choose from a new menu (`hubPresenceConfig`, behind a commented out `HP`); sysops withhold with `oputil.js user hub USERNAME withhold\|allow`, shown in `user info`. Invisible members count as not on. 10 new tests. Tested live behind the dev hub, as for H14: logging in by SSH, leaving, the tunnel cut and back, and a member withheld. Committed as `3657e213` (fork-only, no PR tag) |
+| Status | **Working locally** (2026-11-17), with hub H14. `atProto.hub` (`url`, `name`, `token`: the hub's address, and the name and token from its agent config) and `atProto.hub.presence` (`enabled`, `includeLocalUsers`). The whole list of members who chose it goes to the hub over HTTPS (or `http://` to `127.0.0.1`) after each login and logoff, a change of setting, and every minute. Members choose from a new menu (`hubPresenceConfig`, behind a commented out `HP`); sysops withhold with `oputil.js user hub USERNAME withhold\|allow`, shown in `user info`. Invisible members count as not on. 10 new tests. Tested live behind the dev hub, as for H14: logging in by SSH, leaving, the tunnel cut and back, and a member withheld. Committed as `3657e213` (fork-only, no PR tag). **On the public hub** (2026-11-24, hub HM5), from both test boards |
 
 ### F19. The hub as a door
 
@@ -666,7 +685,7 @@ in.
 | Config | A menu entry (commented out in the templates); art |
 | Depends on | F18; hub H15 to H17 |
 | Done when | A caller opens it from the main menu, sees people from another BBS and from the hub's web page, and chats with them |
-| Status | **Working locally** (2026-11-18), with hub H17. A new menu module (`hubSpace`, behind a commented out `HS`; art `HUBSPACE`) using the `atProto.hub` settings of F18, nothing more. It shows who is around, one line a place (the room, then boards up, then the rest), redrawn at most once a second as the hub's live model changes, and the hub's chat room below it. The board connects for the member with its token, naming them as its presence report does; only members who confirmed the board at the hub can talk, others watch. Names and messages from elsewhere reach the screen without control codes, with pipe codes escaped. Idle logoff is off inside, as in MRC, unless set. 10 new tests. **Tested live** on the VM: the test board behind the dev hub with the real freeq, a member with a key login opening it from the main menu, seeing a member of another board, talking with her in a browser both ways, a pipe code sent as text, the door cut off within seconds when the member withdrew their confirmation at the hub (the map cleared, with the reason), and leaving it taking them out of the room. Also fixes the F18 Hub Presence menu entry, whose art was set where its module doesn't look and which closed the connection when opened. **With hub H18** (2026-11-19): `/mute`, `/unmute`, `/mutes` and `/report` typed where you talk (`/help` lists them), the hub's muting applied to the map and chat, and the hub's own reasons shown when it refuses or closes the door (who blocked them, and why). 4 new tests; tested live with H18 |
+| Status | **Working locally** (2026-11-18), with hub H17. A new menu module (`hubSpace`, behind a commented out `HS`; art `HUBSPACE`) using the `atProto.hub` settings of F18, nothing more. It shows who is around, one line a place (the room, then boards up, then the rest), redrawn at most once a second as the hub's live model changes, and the hub's chat room below it. The board connects for the member with its token, naming them as its presence report does; only members who confirmed the board at the hub can talk, others watch. Names and messages from elsewhere reach the screen without control codes, with pipe codes escaped. Idle logoff is off inside, as in MRC, unless set. 10 new tests. **Tested live** on the VM: the test board behind the dev hub with the real freeq, a member with a key login opening it from the main menu, seeing a member of another board, talking with her in a browser both ways, a pipe code sent as text, the door cut off within seconds when the member withdrew their confirmation at the hub (the map cleared, with the reason), and leaving it taking them out of the room. Also fixes the F18 Hub Presence menu entry, whose art was set where its module doesn't look and which closed the connection when opened. **With hub H18** (2026-11-19): `/mute`, `/unmute`, `/mutes` and `/report` typed where you talk (`/help` lists them), the hub's muting applied to the map and chat, and the hub's own reasons shown when it refuses or closes the door (who blocked them, and why). 4 new tests; tested live with H18. **On the public hub** (2026-11-24, hub HM5) |
 
 ### F20. Staying on while active on the hub
 
@@ -688,7 +707,27 @@ in.
 | Config | `atProto.publishing.assets` (to be drafted): the pieces, and which is the emblem |
 | Depends on | F9 (the BBS's AT account); hub H20 |
 | Done when | A test board's emblem appears on the hub's map |
-| Status | Planned (2026-11-25). Waits on F9's app passwords for the test boards (your to-do list) |
+| Status | Planned (2026-11-25); the test boards' own accounts are connected (F9), so it can start |
+
+**First, before any code** (found reviewing the plans, 2026-11-25):
+
+1. **Try a blob.** Whether bsky.social's account server takes an ANSI file
+   as a blob, under which media type, and how large
+   ([assets spec](assets.md) §12). If it doesn't, ANSI files go by
+   `/assets/<sha256>` only (§4.2 there).
+2. **Settle the board account's whole permission list at once.** It can
+   write listings, status and posts, and upload `image/*` blobs, nothing
+   more. Art needs the asset record types (`asset.item`,
+   `asset.catalogue`, `asset.view`) and perhaps other blob types; proving
+   the board to a hub or a peer needs an `rpc:` permission (hub H3 stage 2,
+   F12; §6). Each addition makes every sysop reconnect the board account,
+   so they are added together, and the board account screen says when the
+   account needs reconnecting.
+3. **`/assets/` through the tunnel.** The hub's agent config forwards only
+   `/ws` and the four `/_enig/` sign-in paths. Serving files from the board
+   needs `/assets/` added, on the hub's allowlist and in each board's agent
+   config, which is again a change every sysop makes; better before
+   outside boards exist (hub plan §5.2).
 
 ### F22. Configuring a resource node
 
@@ -698,6 +737,26 @@ in.
 | Track | **Fork-only** (hub integration) |
 | Depends on | F9; hub H21 |
 | Done when | A sysop turns on the node's storage and adds a drive from inside the BBS |
+| Status | Ideas (2026-11-25) |
+
+### F23. Members' assets
+
+| | |
+|---|---|
+| Implements | The BBS's side of the [assets spec](assets.md) §5 (its §11, step 2): a member's avatar and portrait kept on the board, chosen in their user config, served under `/assets/<sha256>`, and claimed to the hub in the presence report (F18) with when each may be used (`always`, `on-leaf`, `in-space`). Members with no AT account can have them too |
+| Track | **Fork-only** (hub integration) |
+| Depends on | F18, F21; hub H22 |
+| Done when | A member's portrait, kept only on their board, shows beside their name on the hub's map while the board's claim holds, and goes when it ends |
+| Status | Ideas (2026-11-25) |
+
+### F24. The hub door as a MUD
+
+| | |
+|---|---|
+| Implements | The door of F19 grown into the text level of the world ([One World at Every Level](https://github.com/zerosquaredio/cyberspace-framework/blob/main/docs/world.md) §4, §9 step 2): places with descriptions and exits, `look`, `go`, `say` and `emote`, a room per place, and people and objects described in words |
+| Track | **Fork-only** |
+| Depends on | F19; hub H23 |
+| Done when | A caller walks from the hub's room to another place by typing, and sees who is there and what they do, as someone on the map sees it drawn |
 | Status | Ideas (2026-11-25) |
 
 ## 4. Milestones
@@ -711,8 +770,8 @@ in.
 | **M4** Common space, first slice | F18, F19, F20 (with hub H13 to H19) | Members appear on the hub and can chat with people on other BBSes, from a browser or from inside the BBS (decided 2026-11-08, vision §3.2) |
 | **M5** Networking | F12 | Shared boards between BBSes |
 | **M6** Art on the hub | F21 (with hub H20) | The BBS's ANSI art and emblem on the hub ([assets spec](assets.md)) |
-| Later | F7, F8, F13, F15, F22 | Paid verification, attestation table, clusters, in-BBS user manager |
-| After M4 | (not yet split into features) | Voice, then assets and avatars, then the 3D and VR social space: Overte worlds, AT login through a hub-run metaverse server, a browser client, an in-world BBS terminal. Decision and next steps in [overte_evaluation.md](overte_evaluation.md) |
+| After M6 | F23, F24 (ideas), then not yet split into features | The order of [One World at Every Level](https://github.com/zerosquaredio/cyberspace-framework/blob/main/docs/world.md) §9 (revised 2026-11-25; it was voice, then assets, then 3D with Overte): members' assets; places and the MUD view; building in text and on the map, with object rules; the baker; a Doom-style view; then the 3D levels and VR. Whether 3D is Overte worlds or our own web views is open (world.md §10; [overte_evaluation.md](overte_evaluation.md)). Voice is still wanted and has no place in this order yet |
+| Later | F7, F8, F13, F15, F22 | Paid verification, attestation table, clusters, in-BBS user manager, a resource node's settings screen |
 
 ## 5. Branches and PR sequence
 
@@ -779,5 +838,33 @@ order, each small and independently reviewable:
   and `blob:` ones F9 asks for (to verify against the permission spec).
   Adding a permission later means every sysop reconnects the board
   account, so the full set should be settled before real boards connect.
+  Scheduled as F21's first step (2026-11-25), with the asset permissions.
+- **Record names** (F9, F21). Everything is published under
+  `nexus.cyberspace.dev.*`, from one setting. The final names are permanent
+  once used ([publishing.md](publishing.md) §3.8), and moving to them means
+  every board and hub changing together. To decide before outside boards
+  publish (hub plan §5.2): review the shapes and use the final names first,
+  or let outside boards publish under the development names and migrate
+  later, with hubs following both for a while.
+- **Upstream drift.** Nothing has been offered upstream but one bug fix
+  (#987), by choice (§5.2), while the fork gains features upstream hasn't
+  seen. The longer the wait, the more a maintainer's different
+  preferences would cost.
 - **Root vs. sysop semantics.** ENiGMA½'s `isSysOp()` means "is root"; any
   upstream change touching privileges should keep that distinction intact.
+
+### 6.1 Small checks still open
+
+Gathered from the features above (2026-11-25), none blocking:
+
+- SyncTERM's behaviour when the `none` method is refused for new user names
+  (F5).
+- Which numbering of account status `AS` is right, the ACS docs' or the
+  code's, before using it in rules (F6).
+- Whether OAuth can grant Bluesky's chat permission, for invites by DM (F9).
+- A wrong password when unlinking isn't counted as a failed login, and a key
+  removed with `oputil` during a session still counts when unlinking (F16).
+- The "we've moved" post has only been unit-tested (F9).
+- A hosted board behind its own Caddy, with no hub (F10).
+- A person seeing the board account screen's new behaviour after connecting
+  (F3).

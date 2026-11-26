@@ -272,6 +272,11 @@ as it suspends a board.
 
 - The name. "Resource node" for now.
 - Whether a node can serve a group with no hub, directly.
+- Names and registration. A node needs a name under the hub's domain for
+  its tunnel, sharing the BBSes' names; and the hub's rules for sysops
+  (an approval queue, a minimum account age, three BBSes each) weren't
+  made for anyone at all running one. Nodes that serve only their owner
+  could be let in by membership, as people are let into the space.
 - How "shown to the owner alone" looks to others in the space: nothing,
   or a screen marked private.
 - How groups map onto a leaf's vouched membership (vision §6.4).
