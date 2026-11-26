@@ -31,10 +31,10 @@ can be handed to a community later.
 - **AT / Bluesky:** existing infrastructure. Nothing is added to it; the BBS
   and hub interoperate with it over the network as clients.
 
-The docs are in two folders: [development/](development/) for how it's
-built and where it's going (plans, specs, research), and [admin/](admin/) for
-running a board or a hub. Guides for people using boards and the hub will go
-in `user/`.
+The docs are in three folders: [development/](development/) for how it's
+built and where it's going (plans, specs, research), [admin/](admin/) for
+running a board or a hub, and [user/](user/) for people using boards and the
+hub.
 
 ### Development
 
@@ -61,6 +61,12 @@ in `user/`.
 | [running_a_hub.md](admin/running_a_hub.md) | A hub admin's day to day: deploying and rolling back, registering, suspending and banning, moderating the common space, the hub's own AT account, and backups |
 | [bbs_account.md](admin/bbs_account.md) | Setting up a BBS's AT account and its handle under a hub: the steps, and how the check works |
 | [related_tools.md](admin/related_tools.md) | Software around boards and the hub: ANSI art tools, and what the hub is built from |
+
+### Using boards and the hub
+
+| Doc | Covers |
+|---|---|
+| [where_your_art_lives.md](user/where_your_art_lives.md) | For anyone publishing art: where it's kept (the account, the board, the hub), the hub's limits, Bluesky's storage and write limits, and what they mean for large art later |
 
 ## Glossary
 
