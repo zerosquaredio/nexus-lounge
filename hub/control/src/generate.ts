@@ -53,6 +53,9 @@ requestHeaders.set.x-forwarded-proto = "https"
 `;
     return `#  Tunnel agent (frpc) for ${options.name}.${config.domain}, made by the hub.
 #  The token is a password for this BBS on the hub: keep this file private.
+#  For the board's own setup (ENiGMA½: oputil.js config hub --agent FILE):
+#  hub: ${config.site.publicUrl}
+#  address: https://${options.name}.${config.domain}
 serverAddr = ${tomlString(config.tunnel.publicAddr)}
 serverPort = ${config.tunnel.bindPort}
 user = ${tomlString(options.name)}

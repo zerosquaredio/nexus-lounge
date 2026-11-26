@@ -184,16 +184,41 @@ agent is in.
 
 ## 6. Set the board up for the hub
 
-All of this goes in `config/config.hjson` (in `/srv/coolbbs/config/`).
-`config new` doesn't ask about any of it yet. Each setting is explained in
-the fork's
-[AT Protocol docs](https://github.com/zerosquaredio/enigma-bbs/blob/atproto-login/website/src/content/docs/servers/contentservers/atproto-handler.md);
-this is what a hub board needs.
+One command does this, from the agent config the hub gave you. Put the
+agent config where the board can read it (`/srv/coolbbs/config/` will do),
+and run, with your own Bluesky handle:
 
-### 6.1 The settings
+```sh
+docker run --rm -it -v /srv/coolbbs/config:/enigma-bbs/config \
+  --entrypoint ./oputil.js enigma-bbs:hub \
+  config hub --agent config/coolbbs-agent.toml --sysop you.bsky.social
+```
 
-Merge these into the config (the blocks may exist already; add the keys to
-them). Replace `coolbbs`, the hub's address and the DID.
+(Without Docker: `./oputil.js config hub --agent coolbbs-agent.toml --sysop
+you.bsky.social` in the board's folder.)
+
+It reads the board's name, token and ports from the agent config, then:
+
+- writes the settings below into `config/config.hjson`, keeping your
+  comments and everything else;
+- keeps the token in `config/security/hub_token`, readable only by you;
+- makes your account the board's sysop (`rootDid`, §6.1);
+- turns on the menu entries for Bluesky login and the hub (§6.2).
+
+It asks for anything you leave out, including whether to allow **Bluesky
+login only**: say no if anyone logs in to the board with a password now,
+yourself included. You can run it again at any time, for example after
+pressing **New token** on the hub: it sets the same things and leaves the
+rest alone. `./oputil.js config hub --help` lists its options.
+
+Then describe your board for the directory (§6.3) and start it (§6.4).
+
+### 6.1 What it sets
+
+For reference, or to set the board up by hand. Each setting is explained
+in the fork's
+[AT Protocol docs](https://github.com/zerosquaredio/enigma-bbs/blob/atproto-login/website/src/content/docs/servers/contentservers/atproto-handler.md).
+Replace `coolbbs`, the hub's address and the DID.
 
 ```hjson
 contentServers: {
@@ -226,8 +251,8 @@ loginServers: {
     }
 }
 
+//  only when you choose Bluesky login only (--bluesky-only)
 users: {
-    //  Bluesky login only (leave this out to keep passwords as well)
     allowedAuthFactor1Types: [ "atproto" ]
 }
 
@@ -246,10 +271,6 @@ atProto: {
     webSignIn: {
         enabled: true
     }
-    admission: {
-        //  who may join: open, invite, invite-code, sysop-approval
-        policy: [ "open" ]
-    }
     hub: {
         //  the hub's own address
         url: "https://hub.example"
@@ -260,45 +281,41 @@ atProto: {
             enabled: true
         }
     }
+    //  the board's own account publishes its listing (§7)
     publishing: {
         enabled: true
-        listing: {
-            description: "Door games and ANSI art since 1994"
-            tags: [ "doors", "ansi" ]
-            howToJoin: "Log in with Bluesky and apply"
-            rating: general
-        }
     }
 }
 ```
 
 Notes:
 
-- **Your DID** is the permanent ID behind your handle. To find it, open
+- **Your DID** is the permanent ID behind your handle; `--sysop` looks it
+  up for you. By hand, open
   `https://bsky.social/xrpc/com.atproto.identity.resolveHandle?handle=you.bsky.social`
   in a browser. Only that DID can become the board's first user, who is
   its sysop. Without `rootDid`, a board that allows Bluesky login only has
   no way to get a sysop.
-- **The token** is kept in a file of its own rather than in the config:
-  copy the value of `metadatas.token` from the agent config (without the
-  quotes) into `config/security/hub_token`, readable only by you. A path
-  after `@file:` is taken from the config's folder. If the file can't be
-  read, the board only logs a warning and the hub refuses its reports, so
-  check the log after starting (§6.4). When you press **New token** on the
-  hub, change it in both places.
+- **The token** is kept in a file of its own rather than in the config.
+  By hand: copy the value of `metadatas.token` from the agent config
+  (without the quotes) into `config/security/hub_token`, readable only by
+  you. A path after `@file:` is taken from the config's folder. If the
+  file can't be read, the board only logs a warning and the hub refuses
+  its reports, so check the log after starting (§6.4).
 - **Ports:** if you change 8080 or 8810, register the same ones on the hub
   (they're in the agent config it makes).
-- **Admission** decides who becomes a member once they've logged in with
-  Bluesky. `open` lets anyone in. The fork's docs describe the others
+- **Who may join** once they've logged in with Bluesky is
+  `atProto.admission.policy`, which the command leaves alone: by default
+  `open`, anyone. The fork's docs describe the others, invites, invite
+  codes and sysop approval
   ([Admission](https://github.com/zerosquaredio/enigma-bbs/blob/atproto-login/website/src/content/docs/servers/contentservers/atproto-handler.md#admission)).
-- **The rating** must be one the hub lists, or the board isn't listed. On
-  the public hub that's `general`.
 
 ### 6.2 The menus
 
 Several of the screens the hub needs are in the menu files but commented
-out, so a board offers nothing it isn't set up for. In
-`config/menus/` (the files `config new` wrote, named after your board):
+out, so a board offers nothing it isn't set up for. The command turns them
+on in `config/menus/` (the files `config new` wrote, named after your
+board). By hand:
 
 - **The login menu** (`…-login.hjson`): uncomment the **bluesky login**
   option on the login matrix:
@@ -322,15 +339,22 @@ out, so a board offers nothing it isn't set up for. In
   The stock main menu art doesn't name these commands; add them to your
   art, or tell your members.
 
-### 6.3 Hours (for boards that aren't always up)
+### 6.3 Describe the board
 
-If the board runs only some of the time, say when, and the hub shows it on
-the board's page and in the directory while you're off:
+What the directory shows about your board comes from its listing, which
+you write in `config/config.hjson`:
 
 ```hjson
 atProto: {
     publishing: {
         listing: {
+            description: "Door games and ANSI art since 1994"
+            tags: [ "doors", "ansi" ]
+            howToJoin: "Log in with Bluesky and apply"
+            //  the most mature content anything on the board may have
+            rating: general
+            //  for a board that isn't always up: the hub shows these
+            //  while you're off
             hours: {
                 timezone: "America/Los_Angeles"
                 weekly: [ { days: [ "fri", "sat" ], from: "19:00", to: "23:00" } ]
@@ -340,6 +364,9 @@ atProto: {
     }
 }
 ```
+
+The rating must be one the hub lists, or the board isn't listed; on the
+public hub that's `general`. The board's name is its `general.boardName`.
 
 ### 6.4 Start the board
 
@@ -441,9 +468,9 @@ then it shows a splash of its own choosing.
 - **Back up** `/srv/coolbbs/config` and `/srv/coolbbs/db`. They hold the
   board's signing key (`config/security/atproto_oauth_key.json`), the hub
   token, and the members' sessions: keep them private.
-- **A new token:** press **New token** on **Your BBSes**, then put the new
-  agent config in place of the old one, the token in `hub_token`, and
-  restart the agent and the board.
+- **A new token:** press **New token** on **Your BBSes**, put the new
+  agent config in place of the old one, run `config hub` again with it
+  (§6), and restart the agent and the board.
 - **Status for monitors:** `https://hub.example/status.json?bbs=coolbbs`
   answers 200 while the board is connected and 503 when it isn't, for an
   uptime monitor to watch.

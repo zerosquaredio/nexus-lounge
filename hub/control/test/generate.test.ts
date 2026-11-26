@@ -24,6 +24,12 @@ describe('generated configs', () => {
         assert.equal([...text.matchAll(/x-forwarded-proto = "https"/g)].length, 2);
     });
 
+    it("names the hub's site and the board's address, for the board's setup", () => {
+        const text = agentConfig(config, { name: 'coolbbs', token: 't' });
+        assert.match(text, new RegExp(`^#  hub: ${config.site.publicUrl.replace(/[.]/g, '\\.')}$`, 'm'));
+        assert.match(text, /^#  address: https:\/\/coolbbs\.hub\.test$/m);
+    });
+
     it('uses the given local ports', () => {
         const text = agentConfig(config, { name: 'coolbbs', token: 't', webPort: 9080, wsPort: 9810 });
         assert.match(text, /localPort = 9810/);
