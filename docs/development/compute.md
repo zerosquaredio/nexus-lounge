@@ -441,6 +441,9 @@ one is named `signal` to keep them apart.)
 
 ### 11.4 Who may set it up
 
+(How people set all this, as sentences and presets on each thing's own
+page: [settings_ui.md](settings_ui.md).)
+
 Connecting a feed to a place's events takes **both sides' consent**: the
 feed's owner allows its use, and the place's side accepts it. Both are
 rules, written the same way as a resource node's permissions (resource

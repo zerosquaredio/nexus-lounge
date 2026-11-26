@@ -83,7 +83,8 @@ computation (§8.8), and agents (§8.5). It hosts assets the way a leaf does
 
 The node works like a firewall: a list of rules, each allowing **who**
 may do **what** with **which** resource. Anything no rule allows is
-refused. A block list of people overrides every rule.
+refused. A block list of people overrides every rule. How people see and
+set these, as sentences with presets, is [settings_ui.md](settings_ui.md).
 
 | Part | Is one of |
 |---|---|

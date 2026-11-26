@@ -49,6 +49,7 @@ hub.
 | [publishing.md](development/publishing.md) | The BBS's own AT account and public records: listing, events, status, announcements |
 | [assets.md](development/assets.md) | Art and models from leaves, their members and users: records, publishing, the hub's checks and cache, permissions and remixing, identity and impersonation |
 | [compute.md](development/compute.md) | Where live objects' work runs: portable WebAssembly programs with declared limits, places reporting capacity, the hub placing and moving programs (itself first, then people's own compute, groups, BBSes), driven 3D models, trust in results, people giving compute, storage, bandwidth and live data feeds and events (a weather station driving rain in a place, a bell that rings when a market opens) to everyone, with contributor awards |
+| [settings_ui.md](development/settings_ui.md) | How people set settings and permissions: rules as sentences, presets, showing their effect, settings on each thing's own page, history, the web then terminals then in-world panels, typing, voice and agents with confirmation, trusted panels |
 | [resource_node.md](development/resource_node.md) | Leaves with no front end: storage, compute and agents run by sysops or anyone, under firewall-style permissions |
 | [transport.md](development/transport.md) | HTTPS/WebSocket transport, tunnels and reachability, optional SSH, P2P backlog |
 | [networking.md](development/networking.md) | BBS-to-BBS peering: shared boards, files, and games; clusters of BBSes acting as one |
