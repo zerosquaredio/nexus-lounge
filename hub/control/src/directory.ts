@@ -59,11 +59,15 @@ export class Directory {
             this.deleteListing(did);
             return false;
         }
+        //  kept again when the record changed, or when this hub keeps more
+        //  of it than it did (a field a newer hub reads), so a sweep brings
+        //  existing listings up to date
         this.db
             .prepare(
                 `INSERT INTO directory_entry (did, listing, listing_cid, updated_at) VALUES (?, ?, ?, ?)
                  ON CONFLICT (did) DO UPDATE SET listing = excluded.listing, listing_cid = excluded.listing_cid,
-                 updated_at = excluded.updated_at WHERE directory_entry.listing_cid IS NOT excluded.listing_cid`
+                 updated_at = excluded.updated_at WHERE directory_entry.listing_cid IS NOT excluded.listing_cid
+                 OR directory_entry.listing IS NOT excluded.listing`
             )
             .run(did, JSON.stringify(listing), cid, this.now().toISOString());
         return true;

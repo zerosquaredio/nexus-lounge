@@ -165,6 +165,26 @@ function setup(overrides: Partial<HubConfig['directory']> = {}) {
 describe('the directory', () => {
     beforeEach(() => setup());
 
+    it('keeps a listing again when it reads more of the same record than before', () => {
+        directory.putListing(BbsDid, 'cid1', listing());
+        const stored = () =>
+            (registry.db.prepare('SELECT listing, updated_at FROM directory_entry WHERE did = ?').get(BbsDid) as {
+                listing: string;
+                updated_at: string;
+            });
+        //  as an older hub kept it, before it read the splash
+        const old = JSON.parse(stored().listing);
+        delete old.splash;
+        registry.db.prepare('UPDATE directory_entry SET listing = ? WHERE did = ?').run(JSON.stringify(old), BbsDid);
+        const splash = { sha256: 'ab'.repeat(32), size: 100 };
+        directory.putListing(BbsDid, 'cid1', listing({ splash }));
+        assert.deepEqual(JSON.parse(stored().listing).splash, splash, 'the same record, read again');
+        //  and nothing is written when nothing differs
+        const before = stored().updated_at;
+        directory.putListing(BbsDid, 'cid1', listing({ splash }));
+        assert.equal(stored().updated_at, before);
+    });
+
     it('links a listing to a registered BBS only when both sides agree', () => {
         registry.add('coolbbs', SysopDid);
         directory.putListing(BbsDid, 'cid1', listing());
