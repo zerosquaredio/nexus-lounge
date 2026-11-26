@@ -108,6 +108,16 @@ message, not by their nick. The hub closes that connection when they
 sign out or stop being allowed (checked every `checkSeconds`, 30 by default).
 The chat itself is at `/space/chat`, for anyone signed in who may join.
 
+**One room, nothing else.** freeq would let anyone connected open rooms of
+their own, message people privately, set topics, and edit or react to
+messages through tags, none of which the hub's moderation sees. So the hub
+reads every line a connection sends, from a browser or a BBS's door, and
+takes only what its chat page and the doors send: signing in, `NICK`,
+`USER`, `PING`/`PONG`, joining or leaving the room (without a parting
+message), and `PRIVMSG` to the room (text or an action). Anything else
+closes the connection; the log says what kind of thing it was, never what
+it said.
+
 **The live model** (`"live": { "enabled": true }` in `space`) is a stream of
 who is where, for views of the space such as a map or a BBS door: a
 WebSocket at `/space/live` on the hub's address, for people allowed in. It

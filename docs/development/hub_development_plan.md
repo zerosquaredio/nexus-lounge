@@ -838,10 +838,15 @@ are things far cheaper to settle while every board is ours.
    once (development plan F21, first step).
 7. **The agent config's paths,** complete for what is coming (`/assets/`
    at least), so sysops install it once.
-8. **Chat beyond the one room** (H15): whether someone connected through
-   the hub can open rooms of their own or message people privately, which
-   freeq allows and the hub's moderation doesn't see. Check what the hub's
-   relay lets through, and close it or decide to allow it.
+8. ~~**Chat beyond the one room**~~ **Done** (2026-11-26): the hub's relay
+   passed every line but the sign-in on to freeq, so other rooms, private
+   messages, topics, and edits and reactions by tags were all open. It now
+   takes only what its chat page and BBS doors send, the one room's
+   messages and the sign-in, and closes a connection that sends anything
+   else. Tested with the real freeq: two people still talking, and a
+   tampered browser cut off for joining another room, a private message,
+   or a tagged reaction. More rooms, or private messages, come later as
+   features the hub's moderation covers.
 9. **Boards' art stays off** until the terms have their section on assets
    (H20).
 

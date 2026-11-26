@@ -160,14 +160,23 @@ export function parseIrc(line: string): {
 //  together from 400-byte chunks; this does the same, and refuses anything
 //  it can't read the same way: fragments, extensions, stray carriage
 //  returns. push() gives the bytes to pass on, or null to close
+//
+//  Only what the hub's chat page and BBS doors send gets through: signing in,
+//  entering, leaving and speaking in the one room. Not other rooms, private
+//  messages, topics, client tags (edits, reactions) or freeq's own commands,
+//  none of which the hub's moderation sees (hub plan §5.2, item 8).
 export class ClientFrames {
     did: string;
+    room: string;
     buffer: Buffer = Buffer.alloc(0);
     answer = '';
     signingIn = false;
+    //  why the connection was refused, for the log: never what was said
+    refused = '';
 
-    constructor(did: string) {
+    constructor(did: string, room = '#space') {
         this.did = did;
+        this.room = room.toLowerCase();
     }
 
     push(chunk: Buffer): Buffer | null {
@@ -233,9 +242,50 @@ export class ClientFrames {
     }
 
     line(line: string): boolean {
-        const { command, params } = parseIrc(line);
-        if ('AUTHENTICATE' !== command) {
+        if ('' === line.trim()) {
             return true;
+        }
+        const { tags, prefix, command, params } = parseIrc(line);
+        const refuse = (why: string) => {
+            this.refused = why;
+            return false;
+        };
+        //  clients send neither: tags carry edits and reactions, which the
+        //  hub doesn't see, and a prefix is the server's to set
+        if (Object.keys(tags).length || line.trimStart().startsWith('@')) {
+            return refuse('a message tag');
+        }
+        if (prefix || line.trimStart().startsWith(':')) {
+            return refuse('a prefix');
+        }
+        const inRoom = (target: string | undefined) => (target ?? '').toLowerCase() === this.room;
+        switch (command) {
+            case 'CAP':
+            case 'NICK':
+            case 'USER':
+            case 'PING':
+            case 'PONG':
+                return true;
+            case 'JOIN':
+                //  the room alone (not "JOIN 0", lists, or a key)
+                return 1 === params.length && inRoom(params[0]) ? true : refuse('JOIN elsewhere');
+            case 'PART':
+                //  without a parting message, which would be said outside the room's record
+                return 1 === params.length && inRoom(params[0]) ? true : refuse('PART with a message');
+            case 'PRIVMSG': {
+                if (2 !== params.length || !inRoom(params[0])) {
+                    return refuse('PRIVMSG to someone or somewhere else');
+                }
+                //  text, or an action (/me); no other CTCP
+                const text = params[1] ?? '';
+                return !text.includes('\x01') || /^\x01ACTION [^\x01]*\x01?$/.test(text)
+                    ? true
+                    : refuse('a CTCP request');
+            }
+            case 'AUTHENTICATE':
+                break;
+            default:
+                return refuse(command ? `${command.slice(0, 20)}` : 'an empty command');
         }
         const param = params[0] ?? '';
         if ('*' === param) {
@@ -394,11 +444,17 @@ export class Chat {
             side.once('close', close);
             side.once('error', close);
         }
-        const frames = new ClientFrames(person.did);
+        const frames = new ClientFrames(person.did, this.chat.room);
         const pass = (chunk: Buffer): void => {
             const ok = frames.push(chunk);
             if (!ok) {
-                this.log(`chat: closed ${person.did}: its sign-in was not theirs, or freeq could read it otherwise`);
+                this.log(
+                    `chat: closed ${person.did}: ${
+                        frames.refused
+                            ? `it sent ${frames.refused}, which this hub's chat doesn't take`
+                            : 'its sign-in was not theirs, or freeq could read it otherwise'
+                    }`
+                );
                 return close();
             }
             if (ok.length) {

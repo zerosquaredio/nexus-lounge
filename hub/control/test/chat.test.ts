@@ -237,6 +237,53 @@ describe('what a chat client sends', () => {
         assert.equal(new ClientFrames(Member).push(frame(`NICK a\rAUTHENTICATE ${answer(Stranger)}\r\n`)), null);
     });
 
+    it("takes exactly what the hub's chat page and BBS doors send", () => {
+        //  both clients' whole conversation, as they send it (chat_page.ts,
+        //  and the fork's core/atproto/hub_space.js)
+        const f = new ClientFrames(Member, '#space');
+        const sent = Buffer.concat([
+            lines('CAP LS 302', 'NICK alice', 'USER chat 0 * :chat'),
+            lines('CAP REQ :sasl message-tags server-time echo-message account-tag'),
+            lines('AUTHENTICATE ATPROTO-CHALLENGE'),
+            lines(`AUTHENTICATE ${answer(Member)}`),
+            lines('CAP END', 'NICK alice_', 'JOIN #space', 'PONG :abc', 'PING :x'),
+            lines('PRIVMSG #space :hello, everyone', 'PRIVMSG #Space :[art:0123456789ab] skull'),
+            lines('PRIVMSG #space :\x01ACTION waves\x01', 'PART #space', ''),
+        ]);
+        assert.deepEqual(f.push(sent), sent);
+        assert.equal(f.refused, '');
+    });
+
+    it('closes a connection that reaches past the one room, saying what it tried', () => {
+        for (const [line, why] of [
+            ['JOIN #elsewhere', 'JOIN elsewhere'],
+            ['JOIN #space,#elsewhere', 'JOIN elsewhere'],
+            ['JOIN 0', 'JOIN elsewhere'],
+            ['JOIN #space key', 'JOIN elsewhere'],
+            ['PRIVMSG bob :psst', 'PRIVMSG to someone or somewhere else'],
+            ['PRIVMSG #space,bob :hi', 'PRIVMSG to someone or somewhere else'],
+            ['PRIVMSG #space :\x01VERSION\x01', 'a CTCP request'],
+            ['NOTICE #space :hi', 'NOTICE'],
+            ['TOPIC #space :new topic', 'TOPIC'],
+            ['MODE #space +o alice', 'MODE'],
+            ['KICK #space bob', 'KICK'],
+            ['INVITE bob #space', 'INVITE'],
+            ['WHOIS bob', 'WHOIS'],
+            ['LIST', 'LIST'],
+            ['TAGMSG #space', 'TAGMSG'],
+            ['CHATHISTORY LATEST #other * 50', 'CHATHISTORY'],
+            ['@+draft/react=👍 TAGMSG #space', 'a message tag'],
+            ['@+draft/edit=abc PRIVMSG #space :changed', 'a message tag'],
+            [':someone PRIVMSG #space :hi', 'a prefix'],
+            ['PART #space :goodbye, with words', 'PART with a message'],
+            ['QUIT :a last word', 'QUIT'],
+        ]) {
+            const f = new ClientFrames(Member, '#space');
+            assert.equal(f.push(lines('NICK alice', 'JOIN #space', line as string)), null, line);
+            assert.equal(f.refused, why, line);
+        }
+    });
+
     it('refuses frames it could not read as freeq does', () => {
         for (const bad of [
             frame('NICK a\r\n', { masked: false }),
