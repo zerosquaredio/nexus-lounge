@@ -52,6 +52,7 @@ hub.
 | [transport.md](development/transport.md) | HTTPS/WebSocket transport, tunnels and reachability, optional SSH, P2P backlog |
 | [networking.md](development/networking.md) | BBS-to-BBS peering: shared boards, files, and games; clusters of BBSes acting as one |
 | [overte_evaluation.md](development/overte_evaluation.md) | The 3D and VR choice: Overte worlds, a browser client from Vircadia's web SDK, and how identity and networking would fit |
+| [known_bugs.md](development/known_bugs.md) | Bugs we know about and haven't fixed: what is known, workarounds, and where the fix belongs |
 | [at_communities.md](development/at_communities.md) | Where AT development happens: code hosting, shared schemas, community, developer references |
 
 ### Running a board or hub
