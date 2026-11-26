@@ -12,7 +12,11 @@ export const CookieDomainRe2 = String.raw`"(?i);\s*domain\s*=[^;]*"`;
 //  The hub's own view cookie in a request's Cookie header (RE2, for Caddy):
 //  it is set for the whole hub domain, so browsers send it to BBSes'
 //  addresses too, and the edge takes it out before a BBS sees it
-export const ViewCookieRe2 = String.raw`"(?:^|;\s*)hub_view=[^;]*"`;
+//  Two rules, so no stray separator is left: the cookie first in the
+//  header (with the separator after it), then anywhere later (with the one
+//  before it)
+export const ViewCookieFirstRe2 = String.raw`"^hub_view=[^;]*(?:;\s*)?"`;
+export const ViewCookieRe2 = String.raw`";\s*hub_view=[^;]*"`;
 
 function tomlString(value: string): string {
     return JSON.stringify(value); //  a valid TOML basic string for these values
@@ -233,6 +237,7 @@ ${tls}
 				#  Caddy replaces X-Forwarded-For but keeps this one
 				header_up -X-Real-IP
 				#  the hub's own view cookie is the hub's: not passed on
+				header_up Cookie ${ViewCookieFirstRe2} ""
 				header_up Cookie ${ViewCookieRe2} ""
 				#  a cookie a BBS sets is for that BBS alone: without its
 				#  Domain, the browser keeps it to the BBS's own name, never

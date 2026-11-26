@@ -1,6 +1,13 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { agentConfig, caddyfile, CookieDomainRe2, frpsConfig, ViewCookieRe2 } from '../src/generate.ts';
+import {
+    agentConfig,
+    caddyfile,
+    CookieDomainRe2,
+    frpsConfig,
+    ViewCookieFirstRe2,
+    ViewCookieRe2,
+} from '../src/generate.ts';
 import { ViewCookie } from '../src/views.ts';
 import { makeConfig } from '../src/config.ts';
 import { AllowedLocations } from '../src/rules.ts';
@@ -92,22 +99,20 @@ describe('generated configs', () => {
     it("keeps the hub's view cookie from BBSes, and passes their own on", () => {
         const text = caddyfile(config);
         const bbs = text.slice(text.indexOf('handle @bbs'), text.indexOf('handle {', text.indexOf('handle @bbs')));
-        assert.ok(bbs.includes(`header_up Cookie ${ViewCookieRe2} ""`));
-        assert.ok(ViewCookieRe2.includes(`${ViewCookie}=`), 'the cookie the site sets');
-        const re = new RegExp(ViewCookieRe2.slice(1, -1), 'g');
-        //  Caddy's replacement, then what a server reads: names and values
+        assert.ok(bbs.includes(`header_up Cookie ${ViewCookieFirstRe2} ""
+				header_up Cookie ${ViewCookieRe2} ""`));
+        assert.ok(ViewCookieRe2.includes(`${ViewCookie}=`) && ViewCookieFirstRe2.includes(`${ViewCookie}=`));
+        //  Caddy's two replacements, in order: the header a BBS then gets
         const seen = (cookie: string) =>
             cookie
-                .replace(re, '')
-                .split(';')
-                .map(c => c.trim())
-                .filter(Boolean);
-        assert.deepEqual(seen('hub_view=bbs'), []);
-        assert.deepEqual(seen('hub_view=bbs; enig_session=abc'), ['enig_session=abc']);
-        assert.deepEqual(seen('enig_session=abc; hub_view=pink; other=1'), ['enig_session=abc', 'other=1']);
-        assert.deepEqual(seen('enig_session=abc; hub_view=bbs'), ['enig_session=abc']);
+                .replace(new RegExp(ViewCookieFirstRe2.slice(1, -1)), '')
+                .replace(new RegExp(ViewCookieRe2.slice(1, -1), 'g'), '');
+        assert.equal(seen('hub_view=bbs'), '');
+        assert.equal(seen('hub_view=bbs; enig_session=abc'), 'enig_session=abc');
+        assert.equal(seen('enig_session=abc; hub_view=pink; other=1'), 'enig_session=abc; other=1');
+        assert.equal(seen('enig_session=abc; hub_view=bbs'), 'enig_session=abc');
         //  a BBS's own cookie that only ends in the name is left alone
-        assert.deepEqual(seen('my_hub_view=1; a=b'), ['my_hub_view=1', 'a=b']);
+        assert.equal(seen('my_hub_view=1; a=b'), 'my_hub_view=1; a=b');
     });
 
     it("strips the Domain from a BBS's cookies, and only a BBS's", () => {
