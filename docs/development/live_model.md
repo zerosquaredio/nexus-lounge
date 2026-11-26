@@ -94,9 +94,10 @@ grows within a version.
 
 *Planned too:* **live events** ([compute spec](compute.md) §11), such as a
 market opening, which a place makes from the feeds it listens to: sent
-once as their own message to the people in that place, with their type,
-the place and feed, the time and how long they stay news, never kept in
-the state.
+once as their own message (`signal`, so as not to be confused with a
+BBS's calendar events) to the people in that place, with their type, the
+place and feed, the time and how long they stay news, never kept in the
+state.
 
 **presence:** `person`, `place` (a leaf or room id), `since`, and
 `source`: how the hub knows (`bbs`, the BBS's report; `hub`, a board opened

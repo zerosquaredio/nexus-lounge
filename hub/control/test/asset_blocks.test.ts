@@ -139,5 +139,14 @@ describe('blocked art', () => {
         assert.throws(() => resolveHash('abc', art), /first 12 or more/);
         assert.throws(() => resolveHash('f'.repeat(12), art), /No file on the hub/);
         assert.deepEqual(artOnHub({ library: '', boardArt: join(dir, 'none') }), []);
+        //  people's pictures are listed too, so one can be blocked by its hash
+        mkdirSync(join(dir, 'pictures'));
+        writeFileSync(
+            join(dir, 'pictures', 'index.json'),
+            JSON.stringify({ 'did:plc:abcdefghijklmnopqrstuvwx': { sha256: 'd'.repeat(64) } })
+        );
+        const withPictures = artOnHub({ library: '', boardArt: join(dir, 'none'), pictures: join(dir, 'pictures') });
+        assert.deepEqual(withPictures.map(a => a.owner), ["did:plc:abcdefghijklmnopqrstuvwx's picture"]);
+        assert.equal(resolveHash('d'.repeat(12), withPictures), 'd'.repeat(64));
     });
 });

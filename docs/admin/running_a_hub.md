@@ -341,6 +341,14 @@ sudo hubctl asset refuse did:plc:... --reason "keeps posting others' art"
 sudo hubctl asset accept did:plc:...
 ```
 
+**People's pictures on the map** are moderated the same way. `hubctl
+assets` lists them by account; blocking a picture's hash stops it being
+shown or served; `asset refuse` with a person's DID means they get no
+picture at all (a dot instead). A profile that labels itself with content
+the hub's directory doesn't list (the labels Bluesky accounts put on
+themselves: nudity, graphic media, and so on) gets no picture either, with
+nothing for you to do.
+
 Anyone can report a piece from the gallery (its **Report** link), as "Art
 on the hub" or "Art copied without permission"; `hubctl abuse report ID`
 then shows its hash. Art a BBS withdraws (stops publishing or offering, or

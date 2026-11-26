@@ -35,7 +35,7 @@ export interface ArtOnHub {
 
 //  The art in the hub's own library (assets.library) and what it took from
 //  BBSes (board-art/), as their files on disk say. Either may be missing.
-export function artOnHub(dirs: { library: string; boardArt: string }): ArtOnHub[] {
+export function artOnHub(dirs: { library: string; boardArt: string; pictures?: string }): ArtOnHub[] {
     const read = (path: string): unknown => {
         try {
             return JSON.parse(readFileSync(path, 'utf8'));
@@ -72,6 +72,16 @@ export function artOnHub(dirs: { library: string; boardArt: string }): ArtOnHub[
             id: item.id,
             files: filesOf(item),
         });
+    }
+    //  people's Bluesky pictures (pictures.ts): by DID
+    const pictures = (dirs.pictures ? read(join(dirs.pictures, 'index.json')) : null) as Record<
+        string,
+        { sha256: string }
+    > | null;
+    for (const [did, k] of Object.entries(pictures ?? {})) {
+        if (isSha256(String(k?.sha256))) {
+            out.push({ owner: `${did}'s picture`, name: 'profile picture', id: k.sha256, files: [k.sha256] });
+        }
     }
     return out;
 }

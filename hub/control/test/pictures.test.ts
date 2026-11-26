@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { existsSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { avatarOf, Pictures, pictureSize } from '../src/pictures.ts';
+import { avatarOf, Pictures, pictureSize, selfLabelRatings, type PictureRules } from '../src/pictures.ts';
 import type { AtClient } from '../src/atproto.ts';
 
 const Did = 'did:plc:abcdefghijklmnopqrstuvwx';
@@ -46,6 +46,14 @@ describe("people's Bluesky pictures", () => {
         assert.equal(avatarOf(null), null);
     });
 
+    it("reads a profile's own labels as the ratings they need", () => {
+        const labels = (...vals: string[]) => ({ labels: { values: vals.map(val => ({ val })) } });
+        assert.deepEqual(selfLabelRatings(labels('nudity', 'porn')), ['mature', 'adult']);
+        assert.deepEqual(selfLabelRatings(labels('something-new')), ['adult'], 'unknown counts as adult');
+        assert.deepEqual(selfLabelRatings(labels('!no-unauthenticated')), [], 'not a content label');
+        assert.deepEqual(selfLabelRatings({}), []);
+    });
+
     describe('kept by the hub', () => {
         let dir: string;
         let profile: unknown;
@@ -70,7 +78,8 @@ describe("people's Bluesky pictures", () => {
             blobs.set(cid, body);
             profile = { avatar: { ref: { $link: cid }, mimeType: 'image/jpeg', size: body.length } };
         };
-        const make = () => new Pictures(join(dir, 'pictures'), at, () => {}, () => clock);
+        const make = (rules: PictureRules = {}) =>
+            new Pictures(join(dir, 'pictures'), at, () => {}, () => clock, rules);
 
         beforeEach(() => {
             dir = mkdtempSync(join(tmpdir(), 'hub-pictures-'));
@@ -130,6 +139,65 @@ describe("people's Bluesky pictures", () => {
             pictures.pictureOf(Did);
             await pictures.settled;
             assert.equal(pictures.pictureOf(Did), null);
+        });
+
+        it('neither shows nor serves a blocked picture, and has it back once unblocked', async () => {
+            withAvatar('cid-a', jpeg(100, 100));
+            const blocked = new Set<string>();
+            const pictures = make({ blocked: hash => blocked.has(hash) });
+            pictures.pictureOf(Did);
+            await pictures.settled;
+            const hash = pictures.pictureOf(Did)!.url.slice('/pictures/'.length);
+            assert.deepEqual(pictures.held(), [{ did: Did, sha256: hash }]);
+            blocked.add(hash);
+            assert.equal(pictures.pictureOf(Did), null);
+            assert.equal(pictures.file(hash), null);
+            blocked.clear();
+            assert.ok(pictures.pictureOf(Did));
+            assert.ok(pictures.file(hash));
+        });
+
+        it('keeps nothing for an account the hub refuses, and fetches nothing', async () => {
+            withAvatar('cid-a', jpeg(100, 100));
+            const refused = new Set<string>();
+            const pictures = make({ refused: did => refused.has(did) });
+            pictures.pictureOf(Did);
+            await pictures.settled;
+            const hash = pictures.pictureOf(Did)!.url.slice('/pictures/'.length);
+            refused.add(Did);
+            assert.equal(pictures.pictureOf(Did), null);
+            assert.equal(existsSync(join(dir, 'pictures', 'files', hash)), false, 'deleted');
+            const asks = asked.length;
+            clock += 7 * 60 * 60 * 1000;
+            pictures.pictureOf(Did);
+            await pictures.settled;
+            assert.equal(asked.length, asks, 'not asked for again');
+        });
+
+        it("shows no picture for a profile labelled beyond the hub's ratings", async () => {
+            withAvatar('cid-a', jpeg(100, 100));
+            (profile as { labels?: unknown }).labels = {
+                $type: 'com.atproto.label.defs#selfLabels',
+                values: [{ val: 'nudity' }],
+            };
+            const general = make();
+            general.pictureOf(Did);
+            await general.settled;
+            assert.equal(general.pictureOf(Did), null);
+            assert.equal(asked.filter(a => a.startsWith('blob')).length, 0, 'not even fetched');
+
+            rmSync(join(dir, 'pictures'), { recursive: true, force: true });
+            const mature = make({ ratings: ['general', 'mature'] });
+            mature.pictureOf(Did);
+            await mature.settled;
+            assert.ok(mature.pictureOf(Did), 'a hub that lists mature shows it');
+
+            //  labelled after it was taken: it goes at the next reading
+            (profile as { labels?: unknown }).labels = { values: [{ val: 'porn' }] };
+            clock += 7 * 60 * 60 * 1000;
+            mature.pictureOf(Did);
+            await mature.settled;
+            assert.equal(mature.pictureOf(Did), null);
         });
 
         it('deletes a picture its owner turns off, one gone from their profile, and one unused for a week', async () => {

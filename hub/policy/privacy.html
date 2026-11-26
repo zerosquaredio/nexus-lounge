@@ -6,17 +6,25 @@ you as it can, sells nothing, and shows no ads. This notice says what it keeps, 
 <h2>1. When you sign in</h2>
 <p>You sign in with your AT Protocol account (such as a Bluesky account). Your account's server tells the hub
 your <strong>DID</strong> (your account's permanent ID) and your <strong>handle</strong>. The hub never sees
-your password, can't post or read anything in your account, and keeps no access to it afterwards. It sets one
+your password, can't post or read anything in your account, and keeps no access to it afterwards. It sets a
 cookie, <code>hub_session</code>, to keep you signed in for up to 7 days; only a scrambled copy of it is
 stored.</p>
+<p>Signed in or not, if you choose a <strong>view</strong> (how the hub's pages look), a second cookie,
+<code>hub_view</code>, remembers it for a year, on the hub's pages and on its BBSes' pages at their addresses
+here; it holds only the view's name, and isn't passed on to the BBSes themselves. How you choose to see art in
+the chat is remembered in your browser alone.</p>
 
 <h2>2. In the common space</h2>
 <ul>
 <li><strong>Your profile:</strong> your DID, handle, when you first came and last signed in, and whether
 you're shown in the space (off until you turn it on).</li>
-<li><strong>Your BBSes:</strong> BBSes you belong to report your membership and whether you're on (by DID,
-or by your name there if you have no AT account); the hub keeps the latest report from each BBS, and your
-answer when you confirm or deny one.</li>
+<li><strong>Your BBSes:</strong> BBSes you belong to report your membership and whether you're on, for members
+who chose it there (by your DID and your name there, or by your name alone if you have no AT account); the hub
+keeps the latest report from each BBS, and your answer when you confirm or deny one.</li>
+<li><strong>Through a BBS:</strong> a BBS you're a member of can show you the common space from inside it. It
+then receives what you would see there (who is shown, and the chat), and, once you have confirmed that BBS on
+your profile, what you type there is said in the chat as you. A BBS you haven't confirmed can't speak as
+you.</li>
 <li><strong>The map:</strong> where you are while you have it open. This isn't stored.</li>
 <li><strong>Your picture:</strong> while you're shown as your own account, the map draws you with the
 picture from your public Bluesky profile. The hub keeps a copy, so others' browsers fetch it from the hub,
@@ -50,8 +58,8 @@ try to sign in or send reports.</p>
 
 <h2>6. What's public</h2>
 <p>Some things are public by design, on the AT network: the hub's own account publishes whether each BBS's
-tunnel is up, and BBSes publish their own directory listings. People allowed into the common space can see
-who's shown there and what's said in its chat.</p>
+tunnel is up, and BBSes publish their own directory listings. People allowed into the common space, and the
+BBSes on this hub (which show it to their members), can see who's shown there and what's said in its chat.</p>
 
 <h2>7. Usage totals</h2>
 <p>The hub keeps daily totals, such as how many people signed in and how much traffic each BBS carried. They
@@ -59,8 +67,9 @@ hold no DIDs and nothing anyone said, and are kept for the long term.</p>
 
 <h2>8. Who else sees it</h2>
 <p>Nobody, except: the company that hosts the hub's server (OVHcloud, in Oregon, USA); your own AT account's
-server, when you sign in; and authorities when the law requires it. Nothing is sold or shared for
-advertising.</p>
+server, when you sign in; the BBSes on this hub, which are run by their own sysops, for what section 2 says
+passes through them and for whatever you do on them; and authorities when the law requires it. Nothing is sold
+or shared for advertising.</p>
 
 <h2>9. Where it's kept, and backups</h2>
 <p>The hub's server is in Oregon, USA. Its database is backed up nightly to the operator's own equipment in

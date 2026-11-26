@@ -6,6 +6,12 @@
 //  so viewers' browsers never reach Bluesky. Each picture is read again at
 //  most every few hours; one nobody has needed for a week is deleted, and
 //  so is one its owner turns off (their profile's setting).
+//
+//  Moderation, as for art (assets spec §9): a picture blocked by its hash
+//  ("hubctl asset block") is neither shown nor served; an account the hub
+//  refuses art from ("hubctl asset refuse") gets no picture; and a profile
+//  that labels itself with content this hub's directory doesn't list (the
+//  labels Bluesky accounts put on themselves) gets none either.
 
 import { createHash } from 'node:crypto';
 import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'node:fs';
@@ -23,6 +29,36 @@ const KeepMs = 7 * 24 * 60 * 60 * 1000;
 const RetryMs = 60 * 60 * 1000;
 
 export const PictureTypes = { jpeg: 'image/jpeg', png: 'image/png' } as const;
+
+//  The self-labels a profile may carry, and the rating each needs (as the
+//  boards' listings publish theirs, development plan F9)
+const LabelRating: Record<string, string> = {
+    'graphic-media': 'mature',
+    nudity: 'mature',
+    sexual: 'adult',
+    porn: 'adult',
+};
+
+//  The ratings a profile's own labels ask for; a label the hub doesn't
+//  know counts as adult, as an unknown rating does for listings
+export function selfLabelRatings(record: unknown): string[] {
+    const labels = (record as { labels?: { values?: unknown } } | null)?.labels?.values;
+    if (!Array.isArray(labels)) {
+        return [];
+    }
+    return labels
+        .map(l => (l as { val?: unknown } | null)?.val)
+        .filter((v): v is string => 'string' === typeof v && !v.startsWith('!'))
+        .map(v => LabelRating[v] ?? 'adult');
+}
+
+export interface PictureRules {
+    //  the ratings this hub's directory lists (directory.ratings)
+    ratings?: string[];
+    //  a file blocked on this hub, and an account it refuses art from
+    blocked?: (sha256: string) => boolean;
+    refused?: (did: string) => boolean;
+}
 
 export interface PictureInfo {
     url: string;
@@ -117,12 +153,20 @@ export class Pictures {
     private failed = new Map<string, number>();
     private queue: string[] = [];
     private busy = false;
+    rules: PictureRules;
 
-    constructor(dir: string, at: AtClient, log: (line: string) => void = () => {}, now: () => number = Date.now) {
+    constructor(
+        dir: string,
+        at: AtClient,
+        log: (line: string) => void = () => {},
+        now: () => number = Date.now,
+        rules: PictureRules = {}
+    ) {
         this.dir = dir;
         this.at = at;
         this.log = log;
         this.now = now;
+        this.rules = rules;
         mkdirSync(join(dir, 'files'), { recursive: true });
         try {
             const index = JSON.parse(readFileSync(join(dir, 'index.json'), 'utf8')) as Record<string, Kept>;
@@ -139,6 +183,11 @@ export class Pictures {
     //  The picture to show for |did| now, if the hub has one; asking for it
     //  also has it fetched, or read again, in the background
     pictureOf(did: string): PictureInfo | null {
+        if (this.rules.refused?.(did)) {
+            //  nothing shown, kept or fetched for an account the hub refuses
+            this.forget(did);
+            return null;
+        }
         const k = this.kept.get(did);
         const now = this.now();
         if (k) {
@@ -147,7 +196,14 @@ export class Pictures {
         if ((!k || now - k.checkedAt > FreshMs) && now - (this.failed.get(did) ?? 0) > RetryMs) {
             this.want(did);
         }
-        return k ? { url: `/pictures/${k.sha256}`, width: k.width, height: k.height } : null;
+        return k && !this.rules.blocked?.(k.sha256)
+            ? { url: `/pictures/${k.sha256}`, width: k.width, height: k.height }
+            : null;
+    }
+
+    //  Whose pictures the hub holds, by file, for the admin's list
+    held(): { did: string; sha256: string }[] {
+        return [...this.kept].map(([did, k]) => ({ did, sha256: k.sha256 }));
     }
 
     file(sha256: string): { body: Buffer; type: string } | null {
@@ -155,7 +211,7 @@ export class Pictures {
             return null;
         }
         const k = [...this.kept.values()].find(p => p.sha256 === sha256);
-        if (!k) {
+        if (!k || this.rules.blocked?.(sha256)) {
             return null;
         }
         try {
@@ -229,7 +285,11 @@ export class Pictures {
     private async read(did: string): Promise<boolean> {
         const before = this.kept.get(did);
         const profile = await this.at.getRecord(did, 'app.bsky.actor.profile', 'self');
-        const avatar = profile ? avatarOf(profile.value) : null;
+        //  a profile labelled with content this hub doesn't list has no
+        //  picture here, as if it had none
+        const allowed = this.rules.ratings ?? ['general'];
+        const labelled = profile ? selfLabelRatings(profile.value).some(r => !allowed.includes(r)) : false;
+        const avatar = profile && !labelled ? avatarOf(profile.value) : null;
         if (!avatar) {
             //  no picture (any more)
             if (before) {
@@ -255,6 +315,9 @@ export class Pictures {
             throw new Error(`its picture is ${size.width} by ${size.height}, too large`);
         }
         const sha256 = createHash('sha256').update(body).digest('hex');
+        if (this.rules.blocked?.(sha256)) {
+            throw new Error('its picture is blocked on this hub');
+        }
         writeFileSync(join(this.dir, 'files', sha256), body);
         this.kept.set(did, {
             cid: avatar.cid,

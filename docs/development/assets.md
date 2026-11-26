@@ -1,7 +1,7 @@
 # Assets Spec
 
 Status: Draft
-Last updated: 2026-11-25
+Last updated: 2026-11-26
 
 How leaves (BBSes today), their members and other users make art and
 models available to a hub and to each other; how the hub finds, checks,
@@ -188,8 +188,9 @@ The hub's rules for views:
 - **Contrast:** text colours (`fg`, `dim`, `accent`, `warn`) must reach
   WCAG's contrast ratio of 4.5 against `bg`. A view that doesn't is refused.
 - **Plain where it matters:** pages where people sign in, see tokens or
-  report abuse keep the hub's own look under any view, so nothing on them
-  can be mistaken.
+  report abuse are drawn only in the hub's own views (which apply on every
+  page), never in a leaf's or a person's view, so nothing on them can be
+  mistaken.
 - **The viewer has the last say:** a person's own settings (high contrast,
   larger text, the plain hub look) win over any view (world.md §8's
   cascade).
@@ -293,13 +294,25 @@ asset **only while the leaf's claim holds**:
 
 | `available` | The hub uses it |
 |---|---|
-| `always` | Whenever the person is present on the hub. The hub keeps it cached, so it works while the leaf is down |
+| `always` | Whenever the person is present on the hub. The hub keeps it cached, so it works while the leaf is down: a leaf that is only offline hasn't withdrawn its claim |
 | `on-leaf` | Only while they are signed in to the leaf: the claim ends when the leaf stops reporting them as on |
 | `in-space` | Only while they are present in the hub's common space |
 
-- A claim ends when the leaf's report stops including it, or the leaf
-  leaves the hub. The hub stops serving the file then, and drops it from
-  its cache after a day unless something else still uses it.
+- A claim ends when a report from the leaf leaves it out, or the leaf
+  leaves the hub; a leaf that sends no report (it is down) ends nothing.
+  The hub stops using the file at once then, and deletes its copy within
+  the hour unless something else still uses it, as for withdrawn art
+  (§6.5).
+- **The leaf serves claimed files to the hub alone.** Served to anyone at
+  `/assets/<sha256>`, a member's avatar would show which leaf hosts it:
+  ask each board for the hash, and the one that answers is theirs. So the
+  hub's edge doesn't pass public requests for claimed files to the leaf;
+  the hub fetches them itself, through the tunnel, and serves its own
+  copy.
+- **The person decides what is shown as theirs.** A leaf can't put a
+  picture on someone across the hub by claiming it: a claim for a slot
+  shows on `/me`, where the person accepts it, and picks one when two
+  leaves claim the same slot. Until then it is used on that leaf only.
 - A leaf speaks only for its own members, as in its presence report: a
   claim for a DID counts once that person has confirmed the leaf at the
   hub (H14); before that, and for members with no AT account, the asset is
@@ -381,6 +394,13 @@ Suggested starting caps, to be tuned with use:
 - For large files with a direct source, the live model may give clients
   that address and the hash instead, and clients check the hash themselves.
   So the people who want heavy assets supply the bandwidth (vision §8.8).
+  **Only for viewers who opt in:** whoever runs a direct source sees the
+  address (IP) of everyone who fetches from it, and when, which would let
+  the owner of a model learn who came near it. By default a client fetches
+  only from the hub, and shows a lighter version the hub serves, or the
+  description, for anything it would have to fetch elsewhere. The same
+  goes for mirrors ([compute spec](compute.md) §9.1). The hub's privacy
+  notice says so before any of this is turned on.
 - Views don't resolve AT records. The live model (live_model.md) carries
   each entity's **look**: the versions available (form, class, the hub's
   address for each), the description, and the identity marks of §8.2, as a
@@ -443,15 +463,19 @@ What the hub can do, in the world:
   restyling, where the author said so; the hub won't let someone wear what
   they may not `use`.
 - **Exact copies are caught:** a file whose hash belongs to an asset that
-  doesn't allow `copy`, published by someone else, is refused.
+  doesn't allow `copy`, published by someone else, is held for the admin
+  to look at and both publishers are told. It isn't refused outright: the
+  first to publish a file isn't always its author, and refusing would let
+  someone lock an artist out of their own work by publishing it first.
 - **Near-copies are flagged, not refused.** Perceptual hashes (for images
   and rendered ANSI) and shape fingerprints (for models) catch lightly
   changed copies. The publisher is asked to mark it as a remix, which
   credits the original, or to explain; the author is told. Real changes
   aren't caught, and aren't meant to be.
-- **First seen:** the hub records when it first saw each hash, and the
-  original's record is signed by its author, which together settle most
-  disputes over who had something first.
+- **First seen:** the hub records when it first saw each hash, and each
+  record is signed by its publisher. That is evidence for the admin, not
+  proof of authorship: it shows who published first here, which a copier
+  can be.
 
 Beyond that, protection is social: visible credit, the hub's norms in its
 terms, a report kind for "copied without permission" (§9), and the admin's
@@ -486,9 +510,15 @@ A person can name assets as their **signature looks**, in their
 - When they wear one, clients show a small **own look** mark, verified
   against their record.
 - When someone else wears something that resembles it (the near-copy check
-  of §7.3, against the signature looks of people nearby and of people the
-  viewer follows), clients show **"resembles @ana's look"**. A one-pixel
-  change doesn't escape it: the check is for resemblance, not equality.
+  of §7.3, against the signature looks of people nearby), clients show
+  **"resembles @ana's look"**. A one-pixel change doesn't escape it: the
+  check is for resemblance, not equality. Checking against the people a
+  viewer follows would mean the hub reading who follows whom; that is
+  left out unless the viewer asks for it and the privacy notice says so.
+- A look can be claimed as a signature only by whoever the hub saw wear
+  or publish it first, and a person has a small number of them, so nobody
+  can name someone else's look as their own and have the real owner
+  marked as the look-alike.
 - A hub may go further and refuse look-alikes of someone's signature look
   in its space without their permission. That is the hub admin's choice.
 
@@ -525,9 +555,11 @@ warning.
 
 ## 11. Order
 
-*A proof of concept of step 1 works (hub plan H20, 2026-11-25): the baker,
-for ANSI; a library the hub checks and serves; a gallery; and art shared in
-the chat.*
+*Step 1 works on the public hub for its test boards (hub plan H20,
+2026-11-26): the baker, for ANSI; a library the hub checks and serves; a
+gallery; art shared in the chat; BBSes' splash screens, emblems and
+published art, with moderation and withdrawal; and people's pictures on
+the map. Other boards' art waits for the terms (§10).*
 
 1. **A leaf's emblem on the map.** Draft records (`dev.asset.item`); the
    listing's `emblem`; the fork publishes an ANSI logo; the hub fetches,

@@ -1,6 +1,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { agentConfig, caddyfile, CookieDomainRe2, frpsConfig } from '../src/generate.ts';
+import { agentConfig, caddyfile, CookieDomainRe2, frpsConfig, ViewCookieRe2 } from '../src/generate.ts';
+import { ViewCookie } from '../src/views.ts';
 import { makeConfig } from '../src/config.ts';
 import { AllowedLocations } from '../src/rules.ts';
 import { testConfig } from './helpers.ts';
@@ -86,6 +87,27 @@ describe('generated configs', () => {
         assert.match(text, /tls internal/);
         //  a BBS's page at its own address uses the hub's VGA font
         assert.match(text, /@hubpage path \/ \/fonts\/vga-8x16\.woff \/_enig\/ws-term /);
+    });
+
+    it("keeps the hub's view cookie from BBSes, and passes their own on", () => {
+        const text = caddyfile(config);
+        const bbs = text.slice(text.indexOf('handle @bbs'), text.indexOf('handle {', text.indexOf('handle @bbs')));
+        assert.ok(bbs.includes(`header_up Cookie ${ViewCookieRe2} ""`));
+        assert.ok(ViewCookieRe2.includes(`${ViewCookie}=`), 'the cookie the site sets');
+        const re = new RegExp(ViewCookieRe2.slice(1, -1), 'g');
+        //  Caddy's replacement, then what a server reads: names and values
+        const seen = (cookie: string) =>
+            cookie
+                .replace(re, '')
+                .split(';')
+                .map(c => c.trim())
+                .filter(Boolean);
+        assert.deepEqual(seen('hub_view=bbs'), []);
+        assert.deepEqual(seen('hub_view=bbs; enig_session=abc'), ['enig_session=abc']);
+        assert.deepEqual(seen('enig_session=abc; hub_view=pink; other=1'), ['enig_session=abc', 'other=1']);
+        assert.deepEqual(seen('enig_session=abc; hub_view=bbs'), ['enig_session=abc']);
+        //  a BBS's own cookie that only ends in the name is left alone
+        assert.deepEqual(seen('my_hub_view=1; a=b'), ['my_hub_view=1', 'a=b']);
     });
 
     it("strips the Domain from a BBS's cookies, and only a BBS's", () => {

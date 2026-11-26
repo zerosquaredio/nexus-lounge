@@ -1,7 +1,7 @@
 # Resource Node Spec
 
 Status: Draft (ideas, not yet built)
-Last updated: 2026-11-25
+Last updated: 2026-11-26
 
 A **resource node** is a leaf with no front end: a program that BBS
 sysops, or anyone, can run on their own machine or server. It connects to
@@ -24,10 +24,12 @@ computation (§8.8), and agents (§8.5). It hosts assets the way a leaf does
 
 ## 1. Overview
 
-- **A leaf with no front end.** The node uses a BBS's tunnel and hub
-  token, and links to the hub with its own AT account, as a BBS does. It
-  has no terminal, so the hub doesn't route sessions to it or put it on
-  the map as a board.
+- **A leaf with no front end.** The node connects through a tunnel of
+  its own, with a registration and a token of its own (kind `node`, §3),
+  and links to the hub with its own AT account, as a BBS does. It never
+  shares a BBS's token: a break-in on the node must not take the board
+  with it. It has no terminal, so the hub doesn't route terminal sessions
+  to it or put it on the map as a board.
 - **A program of its own,** not part of the BBS (§3). It can run beside a
   BBS on the same server, and the BBS configures it when it's there.
 - **Every role is off until its owner turns it on,** and everything not
@@ -42,7 +44,8 @@ computation (§8.8), and agents (§8.5). It hosts assets the way a leaf does
 - **It can also be given to everyone:** compute, storage and bandwidth
   offered to the hub's pool, counted and recognised with contributor
   awards ([compute spec](compute.md) §9), and live data feeds, such as a
-  weather station, that show up in the world as objects (§10).
+  weather station, that show up in the world as objects (compute spec
+  §10).
 
 ## 2. Identity and linking
 
@@ -76,8 +79,18 @@ computation (§8.8), and agents (§8.5). It hosts assets the way a leaf does
   node, the screen isn't shown (development plan F22).
 - **On its own:** the owner configures it through a page it serves on
   loopback only, opened in their browser, and through its config file.
-- **Toward the hub:** the same tunnel (frp) and hub token as a board,
-  registered with kind `node`. Nothing on it listens to the internet.
+- **That page and the settings API are guarded like a site,** because any
+  web page the owner visits, and any other user of the machine, can reach
+  a loopback port: a token for every request (given to the browser once,
+  from a link the node prints), requests refused unless their `Host` is
+  the loopback address and their `Origin` the page's own (which stops DNS
+  rebinding and forms posted from other sites), and nothing changed by a
+  `GET`.
+- **Toward the hub:** a tunnel (frp) of the same kind as a board's, with
+  the node's own token, registered with kind `node`. The node opens no
+  port to the internet: what people reach of it (their own drive's pages,
+  §5.1) reaches it through the hub's tunnel, as a board's sign-in pages
+  do, and only the paths the hub allows a node.
 
 ## 4. Permissions
 
@@ -162,7 +175,9 @@ the [compute spec](compute.md). What follows is the node's side.*
   trust group.
 - **Programs are WebAssembly,** named by their hash and signed by their
   author's DID. The owner consents to a specific hash, as in a trust
-  group. Each runs with a budget of instructions ("fuel") and memory, and
+  group; or, having chosen to give compute to everyone ([compute
+  spec](compute.md) §9), to whatever the hub places there, within the
+  limits they set. Each runs with a budget of instructions ("fuel") and memory, and
   can reach nothing except through functions the node gives it. Every one
   of those goes through the rules (§4).
 - **Triggers:** who may start a program, from the space or by a message,
@@ -176,7 +191,12 @@ relay or a way into the owner's home network. So:
 - **Sites are a whitelist:** host names, with `https` only. Private and
   local addresses (the owner's router, `localhost`, cloud metadata
   addresses) are refused, wherever a name resolves to, unless a rule names
-  one exactly.
+  one exactly. The address a name resolved to is the one connected to
+  (checked once, then pinned), and every redirect is checked again as a
+  new request. A wildcard (`*.example.org`) is a wide door, above all for
+  agents (§7): an agent steered by text it read could send data out in a
+  URL to any name under it, so wildcards are flagged when a rule for an
+  agent uses one, and such rules can be limited to reading.
 - **Accounts:** the owner signs in to services such as Twitch and Dropbox
   on the node's own page. The tokens are kept encrypted on the node, with
   the system's own key store where there is one (DPAPI on Windows, the

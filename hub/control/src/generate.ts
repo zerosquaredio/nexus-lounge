@@ -9,6 +9,10 @@ import { BbsExactPaths, BbsPrefixPaths, OddPathRe2 } from './rules.ts';
 //  A cookie's Domain attribute, wherever it is among the others (RE2, for
 //  Caddy, in a Caddyfile quoted string)
 export const CookieDomainRe2 = String.raw`"(?i);\s*domain\s*=[^;]*"`;
+//  The hub's own view cookie in a request's Cookie header (RE2, for Caddy):
+//  it is set for the whole hub domain, so browsers send it to BBSes'
+//  addresses too, and the edge takes it out before a BBS sees it
+export const ViewCookieRe2 = String.raw`"(?:^|;\s*)hub_view=[^;]*"`;
 
 function tomlString(value: string): string {
     return JSON.stringify(value); //  a valid TOML basic string for these values
@@ -228,6 +232,8 @@ ${tls}
 			reverse_proxy ${tunnel} {
 				#  Caddy replaces X-Forwarded-For but keeps this one
 				header_up -X-Real-IP
+				#  the hub's own view cookie is the hub's: not passed on
+				header_up Cookie ${ViewCookieRe2} ""
 				#  a cookie a BBS sets is for that BBS alone: without its
 				#  Domain, the browser keeps it to the BBS's own name, never
 				#  sending it to the hub or another BBS

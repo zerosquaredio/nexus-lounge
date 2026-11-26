@@ -54,16 +54,19 @@ mechanical watch, whose parts and motion are computed rather than stored.
 A WebAssembly module with no access to anything but the functions its host
 gives it: read its inputs, read and set its object's state, fetch from the
 sites its rules allow (through the host, §7), log. No clock but the one the
-host gives, no randomness but a seeded one, so that a step can be repeated
-anywhere and give the same result (§6.2).
+host gives, no randomness but a seeded one. Everything a step takes in is
+an **input**: its state, the time, the seed, and every byte it fetched.
+Given the same inputs, a step gives the same result anywhere, so it can be
+repeated to check it (§6.2); the inputs are what has to be kept to do
+that.
 
 It runs in **steps**: each update (a tick, an input, a message) is one call,
 which reads the object's state and its inputs and sets new state.
 
 ### 2.2 Its manifest
 
-Published with the program, as part of its record (an asset of kind
-`program`, assets spec §2), and signed with it:
+Published with the program, as part of its record (an asset whose form
+is `program`, assets spec §2), and signed with it:
 
 | Field | Meaning |
 |---|---|
@@ -97,6 +100,7 @@ machine. That makes it the unit for everything here.
 | **A BBS** | Its members' programs, if its sysop offers compute | The sysop |
 | **A resource node** | Its owner's programs, and others' as its rules allow (resource node §4) | Its owner |
 | **A viewer's browser** | Local work only: smoothing, motion programs (§5.3) | The viewer |
+| **A browser tab as a small leaf** | A page of the hub's that a person leaves open, giving compute while it is: programs in a worker, placed by the hub like any place, with nothing to install. Scaled down: only while the tab is open (browsers slow hidden tabs), no files or sign-ins of its own, no fetching from other sites, and its results count as a pool member's (§9), checked or local only | The person |
 
 ### 3.2 What each reports
 
@@ -152,11 +156,14 @@ whose state is local (§6.1) can also run in each viewer's browser.
 ### 4.3 Moving
 
 When a place fills, goes away or does badly, or a better one frees up, the
-hub moves the program: it takes the last state (kept in the live model,
-which carries every object's state anyway), starts the program at the new
-place with it, and switches over between steps. Viewers see at most a
-missed update. Programs that keep large state say so (`state`, §2.2), and
-are moved less readily.
+hub moves the program: it takes the last state, starts the program at
+the new place with it, and switches over between steps. Viewers see at
+most a missed update. A program's state has two parts: the settings
+viewers are shown, which the live model carries anyway (§5.2), and its
+own working state, which viewers never get: the hub holds that
+checkpoint itself, handed over by the old place at each step or every so
+many, and passes it only to the next place. Programs that keep large
+state say so (`state`, §2.2), and are moved less readily.
 
 ### 4.4 What stays hard
 
@@ -177,7 +184,11 @@ are moved less readily.
 A model (glTF, assets spec §2) names what about it may change, with
 limits: a part's position, turn or scale within a range; a colour from a
 set or a range; a morph's weight; a text label of so many characters; an
-animation of its own to play. Its program can set only those, and a
+animation of its own to play. A label is words from someone's program
+shown to everyone, so it is treated as chat is: plain text only (each
+view escapes it; control and colour codes are dropped), limited in how
+often it changes, marked as the object's and not the hub's, and
+reportable like any message. Its program can set only those, and a
 viewer applies only those. Anything else in the state is ignored.
 
 The same object then works in every view: the 3D view draws the model;
@@ -208,10 +219,15 @@ model plays its own stored animations, or holds still between updates.
 
 ### 6.1 Shared and local
 
-- **Shared state,** which everyone sees and which may matter (a score, who
-  owns what, a reading shown as fact), comes only from places trusted for
-  it: the hub, the object's owner's own compute, and a BBS or resource
-  node the owner chose.
+- **Shared state,** which everyone sees, comes only from places trusted
+  for it. Who that is depends on whose it is to say:
+  - **an object's own looks** (what the owner's bell or sign shows) are
+    its owner's word: the hub, the owner's own compute, or a group, BBS
+    or node the owner chose (§4.2) may work them out;
+  - **anything others rely on** (a score, who owns what, a reading shown
+    as fact, the result of a game between people) is not its owner's
+    word alone: it comes from the hub, or from work that is checked
+    (§6.2), wherever it runs.
 - **Local state,** which only changes one viewer's own view (smoothing,
   effects, a view of their own), can be worked out anywhere, the viewer's
   browser included.
@@ -219,9 +235,17 @@ model plays its own stored animations, or holds still between updates.
 ### 6.2 Checking
 
 Work placed on a group or on others' compute, for shared state, has to be
-checked. Steps are repeatable (§2.1), so the hub can run the same step in
-two places, or on itself now and then, and compare: a place whose results
-differ loses the work and its standing (§3.3). The vision's trust groups
+checked. A step is repeatable from its inputs (§2.1), so the hub can run
+the same step again and compare: a place whose results differ loses the
+work and its standing (§3.3). For that to mean anything:
+
+- **The hub supplies the inputs.** A place that fetched its own data, or
+  kept its own clock, could feed a program anything and pass every
+  re-run. For checked work the hub does the fetching (§7) and hands each
+  step its data, time and seed; the place gets no fetch of its own.
+- **The second run is somewhere unrelated:** on the hub, or on a place
+  whose owner has nothing to do with the first (not another account of
+  the same person, as far as the hub can tell, §9.3). The vision's trust groups
 (§8.8) are the way in: people who choose to share compute with each other
 and accept that.
 
@@ -248,6 +272,8 @@ to viewers, never through the hub (resource node §6.2).
 | `compute.order` | The placement order (§4.2), and which steps are on |
 | `compute.objectRate` | The most state updates a second the hub relays for an object |
 | `compute.openEvents` | Whether places may leave their events open to everyone (§11.4) |
+| `compute.eventRate` | The most live events a place, a type and an object may make in a minute (§11.3) |
+| `compute.events` | Whether places may make events at all, and which types |
 | `compute.headroom` | The share of each place's capacity kept free |
 
 Running others' code, even in a sandbox, is a risk the hub takes on: a flaw
@@ -267,19 +293,27 @@ way.
 ### 9.1 What can be given
 
 - **Compute:** a place whose report (§3.2) says "anyone the hub places".
-  The hub puts programs there after its own budget and before refusing
-  (§4.2). It suits local work (§6.1) and checked work (§6.2); shared state
+  The hub puts programs there last, after its own budget and the owner's
+  own places, and before refusing (§4.2, step 5). It suits local work (§6.1) and checked work (§6.2); shared state
   that isn't checked stays with trusted places.
 - **Storage:** room for others' files, assets above all. Files are named by
-  their hash (assets spec §3), so a copy anywhere is as good as the
+  their hash (assets spec §1, §4.2), so a copy anywhere is as good as the
   original, and anyone can check it. A giver keeps copies of files the hub
   asks them to hold, and the hub checks now and then that they still do
-  (asking for a hash over a random part of a file it knows).
+  (asking for a hash over a random part of a file it knows, to be
+  answered within seconds, so the copy can't be fetched back from the hub
+  just to answer).
 - **Bandwidth:** serving those copies to viewers, as a mirror. The live
   model can give a client a mirror's address with the file's hash (assets
   spec §6.4), and the client checks what it gets. That takes load off the
   hub and off small account hosts. A mirror sees the viewer's IP address,
-  so viewers choose whether to use mirrors at all.
+  so viewers choose whether to use mirrors at all (assets spec §6.4).
+  **It also shows the giver's own address** to everyone it serves: a
+  mirror only saves the hub's bandwidth if viewers reach it directly,
+  which means an open port on the giver's connection, unlike the rest of
+  a resource node (which opens none, resource node §3). So being a
+  mirror is its own choice, made knowing that, and suits a server more
+  than a home.
 - **Paying toward costs,** for those who'd rather: later, with payment
   (H9's later part).
 
@@ -288,6 +322,10 @@ way.
 What a giver does is measured by the hub, not taken from their reports:
 fuel of steps they ran and the hub accepted (checked ones count fully),
 storage held and passed in checks, bytes served that clients confirmed.
+Only work **the hub assigned, for other people** counts: running one's
+own programs on one's own node, or serving files to one's own accounts,
+earns nothing, and confirmations count by how many different,
+long-standing accounts gave them, not how many there were.
 From those, the hub gives **contributor awards**: badges on a person's
 profile and in the space, issued by the hub as attestations
 ([attestation.md](attestation.md) §4), so they can be shown and checked
@@ -304,13 +342,16 @@ to its own members first).
   a file blocked on the hub (assets spec §9) is dropped from every mirror.
   Their responsibility for others' content is a question for the terms
   (a later section, after the lawyer's look at the art section).
-- **For everyone else:** a giver can't change anything, only fail. Work
-  that matters is checked, files are checked by hash, and a giver whose
-  results or copies don't hold up loses the work and its awards.
+- **For everyone else:** a giver can change nothing that is checked: files
+  are checked by hash, and work that matters is run from inputs the hub
+  supplies and compared (§6.2). Unchecked work on a giver's place can be
+  wrong, which is why only local state and checked work go there. A giver
+  whose results or copies don't hold up loses the work and its awards.
 - **Against gaming:** awards count only measured, checked contributions,
   so offering capacity that isn't real earns nothing; many accounts
   claiming the same machine are found by checking where the work was done
-  (timings, addresses) and count once.
+  (timings, addresses) and count once. That check uses givers' addresses,
+  which the privacy notice must say before the pool opens.
 
 ## 10. Data feeds
 
@@ -325,7 +366,10 @@ build on it.
 - **A feed record** in its publisher's AT repo describes it: its **type**,
   where it is (as precise as its owner chooses, §10.4), how often it
   updates, its source (an own sensor, or a named service, with that
-  service's terms), and its licence.
+  service's terms), and its licence. The record is public, so it holds
+  nothing more: **who may use the feed is kept on the hub** (§11.4), not
+  in the record, where "members of my BBS" would tell everyone which
+  board its owner uses.
 - **Types are shared**, so anything that uses weather can use any weather
   feed: `feed.weather` has a temperature, precipitation, wind, cloud cover,
   day or night, and so on, each with units and limits. A new type is a new
@@ -344,10 +388,15 @@ build on it.
   environment: its sky, light, rain or snow follow the weather feed of the
   town it stands for, by settings its scene declares.
 - **Driving looks:** a person's look can follow a feed by a simple rule,
-  data and not code: "when it rains where I am, add my umbrella",
-  choosing a variant or an accessory their model declares (assets spec
-  §3.4, `actor.looks`). The viewer or the hub applies the rule; nobody's
-  code runs for it.
+  data and not code: "when it rains here, open my umbrella", choosing
+  among the looks or the parts their model declares (§5.1; a person's
+  looks are `actor.looks`, assets spec §3.4). The viewer or the hub
+  applies the rule; nobody's code runs for it. **"Here" is the place they
+  are in the world,** and the feed that place follows: never where the
+  person really is, which the hub doesn't know and never works out from
+  their network address. Someone who wants their own town's weather picks
+  that feed themselves, knowing it shows others roughly what the weather
+  is where they live.
 - **As input to programs:** a program (§2) can read feeds as inputs, as it
   reads outside data (§7), but through the hub's copy, so many programs
   can use one feed without each fetching it.
@@ -364,7 +413,11 @@ defaults. A feed that misleads can be reported and blocked like any asset
 
 - **A location is personal.** A weather station names where its owner
   lives. The feed's place is as precise as its owner says (a town, a
-  region, nothing), never their address, and the hub shows no more.
+  region, nothing), never their address, and the hub shows no more. Even
+  with no place given, exact readings can be matched against public
+  weather to find the town, so a feed can also publish rounded values
+  (rain or not, temperature to a few degrees), and the page for setting
+  one up says so.
 - **Others' data has terms.** Data from a service (a weather API, a
   transit agency) may not allow passing it on; the feed record names its
   source, and its publisher answers for using it within those terms.
@@ -407,7 +460,9 @@ one is named `signal` to keep them apart.)
   decides whether to listen to it.
 - **An object's owner can do the same for their own object:** a bell they
   own can follow a market feed and ring, but only in its own looks and
-  sounds, not as an event for the place.
+  sounds, not as an event for the place. Sounds and motion others can
+  hear and see are under the place's limits all the same (§11.3), and
+  anyone can mute an object for themselves, as they can a person.
 - **Types are shared and named** (`market.open`, `rain.start`,
   `sport.goal`), with a few fields each (which market, how strong). The
   names join the shared **states and events** models name their
@@ -435,9 +490,10 @@ one is named `signal` to keep them apart.)
   and the rules; the feeds behind them answer for their values (§10.3).
   A feed that misleads a place's events can be dropped by the place, and
   reported and blocked on the hub.
-- **Rate limits,** per place and per type, kept by the hub, so a jittery
-  feed (a value bobbing across a line) can't turn bells into noise: rules
-  can also say how long a state must hold before it counts.
+- **Rate limits,** per place, per type and per object, kept by the hub
+  (`compute.eventRate`, §8), so a jittery feed (a value bobbing across a
+  line) can't turn bells into noise: rules can also say how long a state
+  must hold before it counts.
 
 ### 11.4 Who may set it up
 
@@ -448,7 +504,10 @@ Connecting a feed to a place's events takes **both sides' consent**: the
 feed's owner allows its use, and the place's side accepts it. Both are
 rules, written the same way as a resource node's permissions (resource
 node §4: who may do what, with which, within what limits), checked by the
-hub, and every connection made or dropped goes in the place's log.
+hub, and every connection made or dropped goes in the place's log. That
+log says who arrived with what and when, so it is for the place's
+environment role alone, kept a short, stated time, and named in the
+hub's privacy notice ([settings_ui.md](settings_ui.md) §6).
 
 - **The feed's side.** A feed record says who may use it: anyone, named
   places, members of the owner's BBS, or "ask me" (each request waits for
@@ -467,13 +526,22 @@ hub, and every connection made or dropped goes in the place's log.
   - **the types** it takes automatically (weather yes, markets no);
   - **who qualifies:** present now, members, confirmed accounts, people
     with an attestation or standing (attestation.md §5), never anyone the
-    place or the hub has blocked;
+    place or the hub has blocked. **"Present" means their BBS reported
+    them on** (presence with source `bbs`, live model): what a browser
+    says of itself is for display only, and counts for no rule;
   - **how to choose** among several: the owner's own first, nearest,
     most reliable (§10.5), longest present;
   - **what happens when it goes:** the next one, or the place's default.
 
   The person providing the feed still has to allow it (the feed's side,
   above); a feed set to "ask me" is never taken automatically.
+
+  **What an automatic rule may take is limited,** because everything it
+  chooses by is the feed's own word: where it says it is, and how steady
+  it has been, which an invented feed can be perfectly. So automatic
+  rules take only feeds that change how a place looks (its weather, its
+  light), never ones whose events matter (`quake`, a market, a score):
+  those are connected by hand, or need an attestation of their source.
 - **Or open to everyone,** as a place's setting: anyone may connect a feed
   to its events, or anyone's feed of the allowed types is taken as it
   comes, with no rule to choose among them. Good for a sandbox or a

@@ -31,8 +31,9 @@ carries visitors' connections back in. The hub then:
 - if you and your members want it, shows them in the hub's common space,
   where people from all its boards see each other and chat.
 
-Only web traffic goes through the hub: the terminal's WebSocket and the
-sign-in pages. SSH and telnet don't. If you want those, open them on your
+Only web traffic goes through the hub: the terminal's WebSocket, the
+sign-in pages, and the art your board offers (`/assets/`). SSH and telnet
+don't. If you want those, open them on your
 own address as usual.
 
 ## 2. What you need
@@ -64,24 +65,29 @@ own address as usual.
 
 Hub boards run ENiGMA½ from the Cyberspace Framework's fork, branch
 `atproto-login`, which adds Bluesky login, the board's own account and the
-hub's features. There is no ready-made image yet, so build one:
+hub's features. It is published as a ready-made image,
+`ghcr.io/zerosquaredio/enigma-bbs:hub`, for ordinary servers and PCs
+(amd64) and for a Raspberry Pi 4 or 5 (arm64).
 
-```sh
-git clone -b atproto-login https://github.com/zerosquaredio/enigma-bbs.git
-cd enigma-bbs
-docker build -t enigma-bbs:hub -f docker/Dockerfile .
-```
-
-The build takes several minutes. The board and the hub's tunnel agent then
-run side by side from one Compose file, which comes with the fork. Give the
-board a folder of its own, with the Compose file in it, and run the board
-once, interactively, to write a starter config:
+The board and the hub's tunnel agent run side by side from one Compose
+file, which comes with the fork. Give the board a folder of its own, put
+the Compose file in it, and run the board once, interactively, to write a
+starter config (the first run downloads the image):
 
 ```sh
 sudo mkdir -p /srv/coolbbs && sudo chown "$USER" /srv/coolbbs
-cp docker/hub/compose.yml /srv/coolbbs/
 cd /srv/coolbbs
+curl -fsSLO https://raw.githubusercontent.com/zerosquaredio/enigma-bbs/atproto-login/docker/hub/compose.yml
 docker compose run --rm bbs
+```
+
+To build the image yourself instead, clone the fork, build it, and tell
+Compose to use yours:
+
+```sh
+git clone -b atproto-login https://github.com/zerosquaredio/enigma-bbs.git
+cd enigma-bbs && docker build -t enigma-bbs:hub -f docker/Dockerfile .
+echo 'BBS_IMAGE=enigma-bbs:hub' > /srv/coolbbs/.env
 ```
 
 It asks for the board's name, its first message area and a few other
@@ -187,9 +193,13 @@ sudo install -o coolbbs -m 600 coolbbs-agent.toml /srv/coolbbs/agent.toml
 sudo systemctl enable --now coolbbs-agent
 ```
 
+(Here the file you saved from the hub is `coolbbs-agent.toml`; installed,
+it belongs to the agent's own user, and only that user and root can read
+it.)
+
 If the hub is down or restarting, the agent keeps trying; it reconnects by
 itself. Your board's row on **Your BBSes** shows **connected** once the
-agent is in.
+agent is running: with the Compose file, that is after §6.4.
 
 ## 6. Set the board up for the hub
 
@@ -209,7 +219,8 @@ It reads the board's name, token and ports from the agent config, then:
 
 - writes the settings below into `config/config.hjson`, keeping your
   comments and everything else;
-- keeps the token in `config/security/hub_token`, readable only by you;
+- keeps the token in `config/security/hub_token`, readable only by the
+  board's own user (and root);
 - makes your account the board's sysop (`rootDid`, §6.1);
 - turns on the menu entries for Bluesky login and the hub (§6.2).
 
@@ -423,7 +434,8 @@ From **BA** you can also post an announcement, publish the listing at once,
 turn the splash screen on or off, or disconnect the account. The same
 things are at the shell, with the board running or not:
 `./oputil.js atproto board`, `publish`, `status`, `post`, `splash on|off`
-(in Docker: `docker exec -it coolbbs ./oputil.js atproto board`).
+(with the Compose file: `docker compose exec bbs ./oputil.js atproto
+board`, in `/srv/coolbbs`).
 
 **Optionally, a handle under the hub,** such as `@coolbbs.hub.example`,
 which shows people the account really is the board at that address: see
@@ -440,10 +452,14 @@ which shows people the account really is the board at that address: see
 With the account connected, the board offers the hub its login screen as a
 **splash**, the picture the hub shows for it in the directory and on its
 page, and, if you set `atProto.publishing.emblem.art`, a small **emblem**
-for the hub's map. Connecting turns the splash on; **splash** on **BA** (or
-`./oputil.js atproto splash off`) turns it off, and the hub stops showing
-it within minutes. Only offer art that is yours to share: the stock theme's
-art belongs to its artists. See [Where your art lives](../user/where_your_art_lives.md).
+for the hub's map. Connecting turns the splash on, and the screen says
+so; **splash** on **BA** (or `./oputil.js atproto splash off`) turns it
+off, and the hub stops showing it within minutes (and deletes its copy
+within the hour). **Only offer art that is yours to share.** ENiGMA½'s
+stock theme's art belongs to its artists: if your login screen is still
+the stock one, turn the splash off until you have art of your own. (The
+framework's own free theme, and the board asking again whenever your art
+changes, are planned.) See [Where your art lives](../user/where_your_art_lives.md).
 
 The hub shows boards' own art only once its admin has turned it on for
 them, which on the public hub waits for its terms to cover art. Until
@@ -468,10 +484,10 @@ then it shows a splash of its own choosing.
 
 ## 9. Keeping it running
 
-- **Updating** the board: pull the branch and build a new image (§3), then
-  `docker compose up -d` in `/srv/coolbbs`, which replaces the board's
-  container with one from the new image. Your config, database and logs
-  stay in their folders.
+- **Updating** the board: in `/srv/coolbbs`, `docker compose pull` (or
+  build a new image, if you build your own, §3), then `docker compose up
+  -d`, which replaces the board's container with one from the new image.
+  Your config, database and logs stay in their folders.
 - **Back up** `/srv/coolbbs/config` and `/srv/coolbbs/db`. They hold the
   board's signing key (`config/security/atproto_oauth_key.json`), the hub
   token, and the members' sessions: keep them private.

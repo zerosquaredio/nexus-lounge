@@ -186,7 +186,11 @@ for (const [bbs, piece] of Object.entries(config.assets.splashes)) {
 //  the live model only, which is what shows them
 const pictures =
     config.space.enabled && config.space.live.enabled && config.space.pictures
-        ? new Pictures(join(dirname(config.database), 'pictures'), at, log)
+        ? new Pictures(join(dirname(config.database), 'pictures'), at, log, Date.now, {
+              ratings: config.directory.ratings,
+              blocked,
+              refused: did => assetBlocks.refuses(did),
+          })
         : null;
 if (pictures) {
     setInterval(() => pictures.prune(), 60 * 60_000).unref();

@@ -85,7 +85,8 @@ The hub's own AT account (it publishes observed status)
 
 Art (takes effect within half a minute)
   assets                 the art on the hub: the hub's library, and what it
-                         took from BBSes, by whose it is; and what is blocked
+                         took from BBSes, by whose it is; people's
+                         pictures on the map; and what is blocked
   asset block SHA256 [--reason TEXT]
                          stop showing and serving a file, and the piece it
                          belongs to, anywhere on the hub, and refuse it if
@@ -94,7 +95,8 @@ Art (takes effect within half a minute)
   asset unblock SHA256
   asset refuse DID [--reason TEXT]
                          take no art from that account at all, and let go
-                         of what was taken (its BBS's splash, emblem and art)
+                         of what was taken (its BBS's splash, emblem and
+                         art; or, for a person, their picture on the map)
   asset accept DID       take its art again
 
 Abuse reports (from the report form on the hub's site, by anyone)
@@ -245,8 +247,12 @@ export async function tellSysop(
 
 //  where the hub keeps art: its own library, and what it took from BBSes
 //  (beside its database, as main.ts puts it)
-function artDirs(config: HubConfig): { library: string; boardArt: string } {
-    return { library: config.assets.library, boardArt: join(dirname(config.database), 'board-art') };
+function artDirs(config: HubConfig): { library: string; boardArt: string; pictures: string } {
+    return {
+        library: config.assets.library,
+        boardArt: join(dirname(config.database), 'board-art'),
+        pictures: join(dirname(config.database), 'pictures'),
+    };
 }
 
 export async function run(argv: string[]): Promise<void> {

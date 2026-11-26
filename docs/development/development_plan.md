@@ -687,7 +687,7 @@ in.
 | Config | The image's first-run settings; publishes the listing's `hours` if the sysop gives them |
 | Depends on | F10 (hosted), F11 (home-based, through the hub) |
 | Done when | Someone with no ENiGMA½ experience starts a board from the image, signs in as its sysop with Bluesky, and it appears on the hub, in both models |
-| Status | **First part done** (2026-11-26): [Joining a Hub](../admin/joining_a_hub.md), the guide for a sysop joining a hub (building the fork's image, registering, the tunnel agent, the board's settings and menus, its own account, members, leaving), checked against the hub's and the fork's code. Writing it showed what the first-run setup must take over: `config new` asks nothing about AT or the hub, so a sysop adds about twenty settings by hand; the login option and the AT, BA, HP and HS commands are commented out in the menu templates, and the stock main menu art doesn't name them; there is no published image or Compose file. The public hub's test boards run from an image built by `scripts/deploy.sh`, set up by a script of their own. **Second part, the hub setup** (2026-11-26, fork): `./oputil.js config hub --agent FILE --sysop HANDLE` takes the board's name, token and ports from the hub's agent config (which now also names the hub's and the board's addresses, in comments), writes the settings, keeps the token in `config/security/hub_token`, sets `rootDid` from the sysop's handle, and turns on the menu entries; safe to run again; the guide uses it. **Third part** (2026-11-26, fork): `docker/hub/compose.yml` runs the board and frp's own agent image (pinned) side by side, the agent sharing the board's network so the hub's agent config works unchanged and the board publishes no ports, tested end to end with a local tunnel server; the main menu gets its own prompt with a hint line naming HS, HP and AT, placed over the theme's prompt art by configuration and turned on by `config hub`, checked on screen; and a workflow (`hub-image.yml`) that publishes the image to the fork's packages when a `hub-v*` release is tagged. The guide uses all of it. Still to do: the first published release, hosted vs home-based, and the VM image |
+| Status | **First part done** (2026-11-26): [Joining a Hub](../admin/joining_a_hub.md), the guide for a sysop joining a hub (building the fork's image, registering, the tunnel agent, the board's settings and menus, its own account, members, leaving), checked against the hub's and the fork's code. Writing it showed what the first-run setup must take over: `config new` asks nothing about AT or the hub, so a sysop adds about twenty settings by hand; the login option and the AT, BA, HP and HS commands are commented out in the menu templates, and the stock main menu art doesn't name them; there is no published image or Compose file. The public hub's test boards run from an image built by `scripts/deploy.sh`, set up by a script of their own. **Second part, the hub setup** (2026-11-26, fork): `./oputil.js config hub --agent FILE --sysop HANDLE` takes the board's name, token and ports from the hub's agent config (which now also names the hub's and the board's addresses, in comments), writes the settings, keeps the token in `config/security/hub_token`, sets `rootDid` from the sysop's handle, and turns on the menu entries; safe to run again; the guide uses it. **Third part** (2026-11-26, fork): `docker/hub/compose.yml` runs the board and frp's own agent image (pinned) side by side, the agent sharing the board's network so the hub's agent config works unchanged and the board publishes no ports, tested end to end with a local tunnel server; the main menu gets its own prompt with a hint line naming HS, HP and AT, placed over the theme's prompt art by configuration and turned on by `config hub`, checked on screen; and a workflow (`hub-image.yml`) that publishes the image to the fork's packages when a `hub-v*` release is tagged. The guide uses all of it. The first release, `hub-v0.1.0`, is published (2026-11-26) as `ghcr.io/zerosquaredio/enigma-bbs:hub`, public, for amd64 and arm64, and the Compose file and the guide use it by default. Still to do: hosted vs home-based, the VM image, and the framework's own stock theme (F21) |
 
 ### F18. Presence reports to the hub
 
@@ -741,7 +741,18 @@ in.
   ready-made images, F17): "Show this board's login screen on the hub?
   It's shown with its artist's credit; you can choose another piece, or
   none, at any time." Yes by default. The answer and when it was given are
-  kept, and a setting changes it later.
+  kept, and a setting changes it later. *As built (2026-11-26), connecting
+  turns it on and says so, without asking. Revised the same day, after a
+  review:* yes by default is right only for art the sysop may share, so
+  (1) the framework gets **its own stock theme, free to use** (below), so
+  that a board on the default theme offers art that is ours to give; and
+  (2) **consent is asked again whenever the art changes:** the board
+  remembers the hash of the art the sysop agreed to, and when its login
+  screen's art is a different file (a new theme, an edited screen), it
+  stops offering it and asks on the `BA` screen (and says so at the
+  sysop's next login) before offering the new one. Until our theme
+  exists, a board whose art is ENiGMA½'s stock theme's isn't offered by
+  default.
 - **The login screen itself, by default.** The fork takes the art its login
   menu shows, from whatever theme the board uses, so nobody has to choose.
   Files are named by their content, so a new theme or new art is offered
@@ -758,6 +769,14 @@ in.
   sysop's. Boards on ENiGMA½'s stock theme show Luciano Ayres's art, so
   the hub asks him and Blocktronics before showing it, and its terms need
   their section on assets first (hub plan §5.2, item 9).
+- **A stock theme of our own** (planned, 2026-11-26): a complete ENiGMA½
+  theme made for the framework, under a free licence (CC BY 4.0, as the
+  project's own art in `art/` is, or CC0), shipped with the fork's image
+  as its default. Boards that keep it offer art the hub may show, so
+  "yes by default" is safe; boards that change it are asked again. It is
+  a large art job (a theme is some 150 screens), so it starts with the
+  screens a hub shows (the connect and login screens, the main menu) and
+  grows from there.
 - **Later, an option:** a hub capturing what a board actually sends up to
   its login prompt, for boards not running the fork, by the board's
   opt-in. It needs a small terminal emulator, patience with slow-drawn
