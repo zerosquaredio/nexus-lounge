@@ -168,7 +168,11 @@ record }`.
    object's page with its source and credit.
 5. **The fork:** `atProto.publishing` gains programs and objects, as it
    has models. Then a scratch hub, then the public hub for test2
-   (decision 10).
+   (decision 10). (**In progress** 2026-11-27: the fork's side is done,
+   `c9d9df54`, with the door's line; the scratch hub gave way to the tests
+   and a browser check of the map; the hub `faa8e21` and test2 run it, and
+   test2 publishes the weather program. Left: test2's account connected
+   again for objects, then compute on for test2 alone.)
 
 **Done when** test2 publishes "Weather in Portland" from its own account,
 and everyone on the hub's map sees the current weather there on test2's
