@@ -762,7 +762,17 @@ in.
   offered now, unless stock. The board serves only the agreed file.
   **Working on the public hub:** test2 upgraded, its earlier yes kept for
   its own logo, which the hub still shows; the board refuses stock art
-  asked for by hash. Still to do: the framework's own stock theme.
+  asked for by hash. **The framework's own art, first piece** (2026-11-27,
+  fork `46a364b3`): ENiGMA½'s stock theme has no `CONNECT` art (the
+  screen shown before the login matrix), so the fork ships its own in the
+  general art directory, `art/general/CONNECT.ANS`, a synthwave sunset
+  (CC BY 4.0, Nexus Lounge), shown on any theme without one and offered
+  as the splash ahead of the stock matrix: on the stock theme, yes by
+  default is now safe. Live on test2's image (which names its own logo in
+  its menu, so it still shows that). Still to do: a main menu (its art
+  holds the menu's options, so it needs its own layout), and more screens
+  as the theme grows; drafts and their sources in `art-drafts/` (not in
+  git) and [media_sources.md](media_sources.md).
 - **The login screen itself, by default.** The fork takes the art its login
   menu shows, from whatever theme the board uses, so nobody has to choose.
   Files are named by their content, so a new theme or new art is offered

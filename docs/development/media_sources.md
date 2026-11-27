@@ -84,6 +84,15 @@ faces** without a model release.
 |---|---|
 | [The Ultimate Oldschool PC Font Pack](https://int10h.org/oldschool-pc-fonts/) | CC BY-SA 4.0; the hub draws art with its IBM VGA font (credited on the art page). Drawing with a font doesn't make the picture BY-SA |
 
+### Tools
+
+| Tool | What | Notes |
+|---|---|---|
+| [Moebius](https://github.com/blocktronics/moebius) | A free, open-source editor for ANSI art in the 16 colours and the IBM PC character set | For finishing art by hand: tidying stray pixels after a conversion, as ANSI artists do |
+| The project's own scripts (`art-drafts/scripts/`, not in git yet) | Picture to 16-colour ANSI with half-blocks, with cleaning and a limited palette; a figure on a drawn, shaded background; pieces drawn from code; a preview drawn by the hub's own renderer | What made the first theme art |
+| [ANSI-Art](https://github.com/EtoDemerzel0427/ANSI-art) (Apache-2.0) | Pictures and GIFs to coloured text in a terminal | **Truecolour only** (24-bit, Unicode): BBS clients and the hub show 16 colours in the IBM PC character set, so its output doesn't carry over. Its plain ASCII mode (characters chosen by how dark they look) does |
+| [image-to-ansi](https://dom111.github.io/image-to-ansi/) | In the browser: a picture to coloured half-blocks | Truecolour too, as above |
+
 ## 3. When using one
 
 1. Save the item's page address, author and licence as you download it.
