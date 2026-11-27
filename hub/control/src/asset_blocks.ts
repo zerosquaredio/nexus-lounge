@@ -40,6 +40,7 @@ export function artOnHub(dirs: {
     boardArt: string;
     pictures?: string;
     boardModels?: string;
+    boardObjects?: string;
 }): ArtOnHub[] {
     const read = (path: string): unknown => {
         try {
@@ -90,6 +91,21 @@ export function artOnHub(dirs: {
                 name: String(m.name),
                 id: m.id,
                 files: [m.id, m.preview, m.raw].filter((hash, i, all) => isSha256(String(hash)) && all.indexOf(hash) === i),
+            });
+        }
+    }
+    //  live objects' programs (board_objects.ts): the module and its source;
+    //  blocking either stops every object that runs it
+    const programs = (dirs.boardObjects ? read(join(dirs.boardObjects, 'programs.json')) : null) as
+        | { sha256: string; source: string; name: string; did: string }[]
+        | null;
+    for (const p of Array.isArray(programs) ? programs : []) {
+        if (isSha256(String(p?.sha256))) {
+            out.push({
+                owner: `${p.did}'s program`,
+                name: String(p.name),
+                id: p.sha256,
+                files: [p.sha256, p.source].filter(hash => isSha256(String(hash))),
             });
         }
     }

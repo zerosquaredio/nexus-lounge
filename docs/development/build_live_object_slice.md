@@ -158,10 +158,10 @@ record }`.
 2. **The weather program** (**done** 2026-11-27: `programs/weather/`, AssemblyScript, 20 KB; 8 tests run it against Open-Meteo's real replies and the worst replies a 16 KB limit allows, none making it trap; two builds from a clean copy gave the same hash): built
    reproducibly, its hash recorded; tested against the fixtures, with no
    network.
-3. **Records and the hub's reading** (`board_objects.ts`): programs and
+3. **Records and the hub's reading** (**done** 2026-11-27: `board_objects.ts`, the `compute` config, 15 tests; blocking reuses the hub's own: `hubctl asset block` on a program's module or source stops every object running it, and refusing an account stops its objects and programs; programs are listed among what the admin can block): programs and
    objects from linked boards, as models are read (H25), with the same
    care: withdrawn records dropped, a changed record read again, limits
-   per owner; blocking (`hubctl compute block`).
+   per owner; blocking.
 4. **Running and showing:** the scheduler (each object at its interval,
    within the limits, stale after three missed), the `object` entity in
    the live model, the badge on the map, a line in the door, and the

@@ -188,6 +188,23 @@ export interface HubConfig {
         reservedNames: string[];
         maxBbsPerSysop: number;
     };
+    //  live objects' programs, run by the hub (compute spec; build spec of
+    //  the live object slice): off by default. owners: whose objects it
+    //  runs, "registered" for every BBS registered here, or a list of BBS
+    //  names. programs: the programs it runs, by the SHA-256 of their
+    //  modules, as vetted by the admin. fetch: the sites programs may reach
+    //  from the hub (each program names its own too, and must be on both).
+    //  The rest are limits, each a default the admin may change.
+    compute: {
+        enabled: boolean;
+        owners: 'registered' | string[];
+        programs: string[];
+        fetch: string[];
+        minInterval: number; //  seconds between an object's updates, at least
+        maxObjects: number; //   objects in all
+        perOwner: { objects: number };
+        perStep: { fuel: number; memoryPages: number; ms: number; fetchBytes: number; fetches: number };
+    };
 }
 
 //  The tunnel server's admin password, for frps and the control plane both:
@@ -267,6 +284,17 @@ export const Defaults: HubConfig = {
         reservedNames: DefaultReservedNames,
         maxBbsPerSysop: 3,
     },
+    //  provisional numbers (trials.md §2a)
+    compute: {
+        enabled: false,
+        owners: [],
+        programs: [],
+        fetch: [],
+        minInterval: 600,
+        maxObjects: 50,
+        perOwner: { objects: 3 },
+        perStep: { fuel: 50_000_000, memoryPages: 16, ms: 2000, fetchBytes: 16 * 1024, fetches: 2 },
+    },
 };
 
 const DomainRe = /^(?=.{1,200}$)([a-z0-9]([a-z0-9-]*[a-z0-9])?\.)+[a-z][a-z0-9-]*[a-z0-9]$/;
@@ -306,6 +334,18 @@ export function makeConfig(overrides: Partial<Record<keyof HubConfig, unknown>> 
             },
         },
         registration: { ...Defaults.registration, ...(overrides.registration as object) },
+        compute: {
+            ...Defaults.compute,
+            ...(overrides.compute as object),
+            perOwner: {
+                ...Defaults.compute.perOwner,
+                ...((overrides.compute as { perOwner?: object } | undefined)?.perOwner ?? {}),
+            },
+            perStep: {
+                ...Defaults.compute.perStep,
+                ...((overrides.compute as { perStep?: object } | undefined)?.perStep ?? {}),
+            },
+        },
     };
     if (!DomainRe.test(config.domain)) {
         throw new HubError('config', `"${config.domain}" is not a domain name`);
@@ -465,10 +505,37 @@ export function makeConfig(overrides: Partial<Record<keyof HubConfig, unknown>> 
         throw new HubError('config', 'site.publicUrl is https://, or http://127.0.0.1 for development');
     }
     config.site.publicUrl = site.origin;
+    checkCompute(config.compute);
     if ('string' !== typeof config.site.signingKey || !config.site.signingKey) {
         throw new HubError('config', 'site.signingKey is the path of a file');
     }
     return config;
+}
+
+function checkCompute(c: HubConfig['compute']): void {
+    const whole = (v: unknown, min: number, max: number) => Number.isInteger(v) && (v as number) >= min && (v as number) <= max;
+    const bad = (what: string) => {
+        throw new HubError('config', `compute.${what}`);
+    };
+    if ('boolean' !== typeof c.enabled) bad('enabled is true or false');
+    if ('registered' !== c.owners && (!Array.isArray(c.owners) || c.owners.some(o => 'string' !== typeof o))) {
+        bad('owners is "registered", or a list of BBS names: [ "coolbbs" ]');
+    }
+    if (!Array.isArray(c.programs) || c.programs.some(p => 'string' !== typeof p || !/^[0-9a-f]{64}$/.test(p))) {
+        bad("programs is a list of the SHA-256 hashes of programs' modules");
+    }
+    if (!Array.isArray(c.fetch) || c.fetch.some(h => 'string' !== typeof h || !DomainRe.test(h))) {
+        bad('fetch is a list of host names: [ "api.open-meteo.com" ]');
+    }
+    if (!whole(c.minInterval, 60, 86400)) bad('minInterval is a whole number of seconds, 60 to 86400');
+    if (!whole(c.maxObjects, 0, 10000)) bad('maxObjects is a whole number from 0 to 10000');
+    if (!whole(c.perOwner.objects, 0, 1000)) bad('perOwner.objects is a whole number from 0 to 1000');
+    const s = c.perStep;
+    if (!whole(s.fuel, 1000, 10_000_000_000)) bad('perStep.fuel is a whole number from 1000 to 10 billion');
+    if (!whole(s.memoryPages, 1, 1024)) bad('perStep.memoryPages is a whole number of 64 KB pages, 1 to 1024');
+    if (!whole(s.ms, 50, 60_000)) bad('perStep.ms is a whole number of milliseconds, 50 to 60000');
+    if (!whole(s.fetchBytes, 1024, 4 * 1024 * 1024)) bad('perStep.fetchBytes is a whole number of bytes, 1 KB to 4 MB');
+    if (!whole(s.fetches, 0, 8)) bad('perStep.fetches is a whole number from 0 to 8');
 }
 
 export function loadConfig(path: string | undefined): HubConfig {

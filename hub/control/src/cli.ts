@@ -247,12 +247,19 @@ export async function tellSysop(
 
 //  where the hub keeps art: its own library, and what it took from BBSes
 //  (beside its database, as main.ts puts it)
-function artDirs(config: HubConfig): { library: string; boardArt: string; pictures: string; boardModels: string } {
+function artDirs(config: HubConfig): {
+    library: string;
+    boardArt: string;
+    pictures: string;
+    boardModels: string;
+    boardObjects: string;
+} {
     return {
         library: config.assets.library,
         boardArt: join(dirname(config.database), 'board-art'),
         pictures: join(dirname(config.database), 'pictures'),
         boardModels: join(dirname(config.database), 'board-models'),
+        boardObjects: join(dirname(config.database), 'board-objects'),
     };
 }
 
