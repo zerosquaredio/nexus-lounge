@@ -150,7 +150,7 @@ record }`.
    limit, a deep recursion stopped by the stack, a worker past its time
    replaced); one Open-Meteo request by name and one by coordinates,
    with the reply's size and shape kept as a test fixture.
-1. **The runtime** (`program.ts`, `wasm_meter.ts`): checking a module,
+1. **The runtime** (**done** 2026-11-27: `wasm_meter.ts`, `program.ts`, `program_worker.ts`, 24 tests, real AssemblyScript output among them): checking a module,
    instrumenting it, running a step in a worker with its limits, the host
    interface. Tests with hostile modules: endless loops, huge memory,
    forbidden imports, a `start` function, malformed bytes, a fetch
