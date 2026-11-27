@@ -89,7 +89,8 @@ grows within a version.
 | `person` | `label`, `did`, `kind`, `picture` | `kind`: `account` (signed in to the hub, or a BBS they confirmed), `via` (a BBS's word, unconfirmed: `label` is "name via bbs", `did` is null), `vouched` (a BBS member with no AT account: "name@bbs"). `picture` is their Bluesky profile picture as the hub serves it (`url` on the hub, `width`, `height`), for `account` people who haven't turned it off, or null (added 2026-11-26, a field a version 1 viewer may ignore) |
 | `leaf` | `name`, `title`, `url`, `online`, `terminal`, `emblem` | A BBS on this hub. `title` comes from its listing, if it has one; `online` is whether its tunnel is up; `terminal` is the hub's web terminal for it, or null; `emblem` is its small picture for the map (`url` on the hub, `width`, `height`, `label`), or null (added 2026-11-26, F21; a field a version 1 viewer may ignore) |
 | `room` | `name` | The chat room |
-| `object` | (planned) | A live object: its model and its `state`, the settings its program sets ([compute spec](compute.md) §5.2). Not built yet |
+| `zone` | (planned) `name`, `title`, `owner`, `open`, `exits` | A zone of the common space ([compute spec](compute.md) §4.4; world.md §2.1): `owner` the person or group holding it, or null for the hub's own; `open` false while its place is away; `exits` the zones it leads to. Each viewer is sent the objects, presence and signals of their own zone, and the zones themselves |
+| `object` | (planned) `owner`, `title`, `kind`, `zone`, `position`, `look`, `values`, `updatedAt`, `stale`, `record` | A live object ([compute spec](compute.md) §1.1, §1.2): `owner` is a person or leaf id; `kind` its shared value type, if it has one (`weather`); `zone` the zone it is in, or null for the common space; `look` what to draw (a model, a badge) with its credit; `values` its state, the settings its program sets (§5.2), checked against its record's declaration; `stale` once it has missed three updates; `record` its AT record's URI, for its page. Where its program runs is never sent. First built for the weather slice ([build_live_object_slice.md](build_live_object_slice.md)) |
 | `feed` | (planned) | A live data feed from a leaf, such as the weather in a town: its type, place and current values ([compute spec](compute.md) §10). Not built yet. In the compute spec's one model of a live object (§1.1) this is an `object` whose values come from the world, so it may be carried as one |
 
 *Planned too:* **live events** ([compute spec](compute.md) §11), such as a
@@ -97,7 +98,8 @@ market opening, which a place makes from the feeds it listens to: sent
 once as their own message (`signal`, so as not to be confused with a
 BBS's calendar events) to the people in that place, with their type, the
 place and feed, the time and how long they stay news, never kept in the
-state.
+state. A signal goes to one zone, or, for the hub's own global ones, to
+everyone.
 
 **presence:** `person`, `place` (a leaf or room id), `since`, and
 `source`: how the hub knows (`bbs`, the BBS's report; `hub`, a board opened
@@ -108,7 +110,14 @@ a BBS and the hub's page both say so, the BBS's report is the one shown.
 who is in the room.
 
 **links:** `from`, `to`, `kind`. None yet; reserved for links between
-people and things.
+people and things. (*Planned, 2026-11-27*) The **technical view** draws
+them (world.md §2.2): `kind` `fetch` (an object and a site it reads,
+`to` being the site's host name), `call` (an object and one it calls),
+`feed` (a feed and the zone or object following it), `event` (an object
+and the zone that takes its events). Links between objects, zones and
+sites go to anyone who may see both ends; a link to a **person** (the
+objects or agents they use) goes only to that person unless they make it
+public.
 
 ## Who appears
 

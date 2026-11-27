@@ -53,6 +53,7 @@ hub.
 | [media_sources.md](development/media_sources.md) | Where free pictures, textures, models, sounds and fonts come from, and which licences may go into the project's own CC BY art |
 | [trials.md](development/trials.md) | Every number and choice made without data, in one list: what it is now, where it's set, how to try it and who can, by stage; and what was found |
 | [build_3d_slice.md](development/build_3d_slice.md) | Build spec for the first 3D slice (boards publish glTF models, the hub checks and serves them, a viewer in the gallery): the owner's decisions, the shapes, the checker, the work split |
+| [build_live_object_slice.md](development/build_live_object_slice.md) | Build spec for the first live object (a WebAssembly program, run by the hub with fuel metering, that fetches the weather for a place from Open-Meteo through whitelisted sites and shows it as a badge on the map): decisions, shapes, the host interface, stages |
 | [resource_node.md](development/resource_node.md) | Leaves with no front end: storage, compute and agents run by sysops or anyone, under firewall-style permissions |
 | [transport.md](development/transport.md) | HTTPS/WebSocket transport, tunnels and reachability, optional SSH, P2P backlog |
 | [networking.md](development/networking.md) | BBS-to-BBS peering: shared boards, files, and games; clusters of BBSes acting as one |

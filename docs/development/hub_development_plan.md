@@ -830,7 +830,7 @@ serves a library baked by the admin):
 | Implements | The [compute spec](compute.md): driven models and object state in the live model; WebAssembly programs run by the hub within its admin's limits (`compute.*`), with fuel metering; capacity reports from BBSes and resource nodes; placement in a configurable order (the hub first, then the owner's own compute, their group, their BBS, a node) and moving programs between places; trust in shared results |
 | Depends on | H16 (live model), H20 and the first 3D slice (H25); H21 for nodes; F18's reports for capacity |
 | Done when | A 3D object driven by a streaming feed moves for everyone looking at it, its program running on the hub until the hub's budget is full, then on its owner's node, without the viewers noticing the move |
-| Status | Ideas (2026-11-26), from looking at live 3D explainers (an animated mechanical watch) and real-time 3D infographics |
+| Status | Ideas (2026-11-26), from looking at live 3D explainers (an animated mechanical watch) and real-time 3D infographics. **First slice specified** (2026-11-27, decisions accepted): [build_live_object_slice.md](build_live_object_slice.md), a weather object whose own program fetches from Open-Meteo, run on the hub. The compute spec gained, from the owner's description: objects' own APIs, switching looks, moving, raising events, zones as separate spaces that can be owned and run on leaves, and looking inside and remixing objects (compute §1.2, §2.4–2.6, §4.4, §5.4) |
 
 ## 5. Milestones
 
