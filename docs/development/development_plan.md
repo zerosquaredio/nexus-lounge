@@ -752,7 +752,17 @@ in.
   stops offering it and asks on the `BA` screen (and says so at the
   sysop's next login) before offering the new one. Until our theme
   exists, a board whose art is ENiGMA½'s stock theme's isn't offered by
-  default.
+  default. *Built (2026-11-27, fork `cce59595`):* the yes is kept with the
+  art's hash (AT database version 6); changed art isn't offered, and the
+  sysop is told once, in the log and by private message, and on the `BA`
+  screen and in `oputil atproto board`; "splash" agrees to the new art.
+  Stock art is known by the hashes of upstream's `art/`
+  (`core/atproto/stock_art.json`, from `misc/stock_art_hashes.js`, to run
+  again after each upstream merge). A yes from before keeps the art
+  offered now, unless stock. The board serves only the agreed file.
+  **Working on the public hub:** test2 upgraded, its earlier yes kept for
+  its own logo, which the hub still shows; the board refuses stock art
+  asked for by hash. Still to do: the framework's own stock theme.
 - **The login screen itself, by default.** The fork takes the art its login
   menu shows, from whatever theme the board uses, so nobody has to choose.
   Files are named by their content, so a new theme or new art is offered
