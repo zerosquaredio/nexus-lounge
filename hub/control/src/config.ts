@@ -26,7 +26,10 @@ export interface HubConfig {
     //  emblems: like splashes, each BBS's emblem for the map, from the hub's
     //  art. font: the PSF font art is drawn with; "" for the web terminal's
     //  own. boardPieces: how many pieces of the art each BBS publishes the
-    //  hub takes (assets spec §6.3)
+    //  hub takes (assets spec §6.3). models: the 3D models BBSes publish
+    //  (board_models.ts, build_3d_slice.md), from BBSes in boardArt only and
+    //  only when enabled: the largest file taken, how many from each BBS,
+    //  and how many bytes of them all together
     assets: {
         library: string;
         splashes: Record<string, string>;
@@ -34,6 +37,7 @@ export interface HubConfig {
         boardArt: string[];
         font: string;
         boardPieces: number;
+        models: { enabled: boolean; maxBytes: number; perBoard: number; totalBytes: number };
     };
     //  the control plane's own HTTP listener: frp's hooks, Caddy's
     //  certificate check, and handle verification (through the edge).
@@ -246,7 +250,16 @@ export const Defaults: HubConfig = {
     edge: { tls: 'internal', bindAddr: '127.0.0.1', httpPort: 7081, httpsPort: 7443 },
     contact: { abuse: '' },
     policy: { operator: '', minimumAge: 16, termsFile: '', privacyFile: '' },
-    assets: { library: '', splashes: {}, emblems: {}, boardArt: [], font: '', boardPieces: 50 },
+    assets: {
+        library: '',
+        splashes: {},
+        emblems: {},
+        boardArt: [],
+        font: '',
+        boardPieces: 50,
+        //  provisional numbers (trials.md §2)
+        models: { enabled: false, maxBytes: 8 * 1024 * 1024, perBoard: 5, totalBytes: 200 * 1024 * 1024 },
+    },
     registration: {
         open: true,
         approval: true,
@@ -284,7 +297,14 @@ export function makeConfig(overrides: Partial<Record<keyof HubConfig, unknown>> 
         edge: { ...Defaults.edge, ...(overrides.edge as object) },
         contact: { ...Defaults.contact, ...(overrides.contact as object) },
         policy: { ...Defaults.policy, ...(overrides.policy as object) },
-        assets: { ...Defaults.assets, ...(overrides.assets as object) },
+        assets: {
+            ...Defaults.assets,
+            ...(overrides.assets as object),
+            models: {
+                ...Defaults.assets.models,
+                ...((overrides.assets as { models?: object } | undefined)?.models ?? {}),
+            },
+        },
         registration: { ...Defaults.registration, ...(overrides.registration as object) },
     };
     if (!DomainRe.test(config.domain)) {
@@ -408,6 +428,22 @@ export function makeConfig(overrides: Partial<Record<keyof HubConfig, unknown>> 
     const pieces = config.assets.boardPieces;
     if (!Number.isInteger(pieces) || pieces < 0 || pieces > 1000) {
         throw new HubError('config', 'assets.boardPieces is a whole number from 0 to 1000');
+    }
+    const models = config.assets.models;
+    if ('boolean' !== typeof models.enabled) {
+        throw new HubError('config', 'assets.models.enabled is true or false');
+    }
+    if (!Number.isInteger(models.maxBytes) || models.maxBytes < 1024 || models.maxBytes > 64 * 1024 * 1024) {
+        throw new HubError('config', 'assets.models.maxBytes is a whole number of bytes, 1 KB to 64 MB');
+    }
+    if (!Number.isInteger(models.perBoard) || models.perBoard < 0 || models.perBoard > 100) {
+        throw new HubError('config', 'assets.models.perBoard is a whole number from 0 to 100');
+    }
+    if (!Number.isInteger(models.totalBytes) || models.totalBytes < models.maxBytes || models.totalBytes > 10 * 1024 ** 3) {
+        throw new HubError(
+            'config',
+            'assets.models.totalBytes is a whole number of bytes, at least maxBytes and at most 10 GB'
+        );
     }
     if (('' === config.tunnel.tlsCertFile) !== ('' === config.tunnel.tlsKeyFile)) {
         throw new HubError('config', 'tunnel.tlsCertFile and tunnel.tlsKeyFile go together: both or neither');

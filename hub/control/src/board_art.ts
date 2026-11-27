@@ -189,6 +189,7 @@ export class BoardArt {
         const collection = `${this.deps.config.directory.nsidPrefix}.asset.item`;
         const ratings = this.deps.config.directory.ratings;
         const cap = this.deps.config.assets.boardPieces;
+        const listMax = cap + this.deps.config.assets.models.perBoard + 100;
         for (const bbs of this.deps.list().filter(b => !only || only.includes(b.name))) {
             if (!this.allowed(bbs)) {
                 //  no longer taken from: what was taken goes (see prune())
@@ -202,7 +203,9 @@ export class BoardArt {
             }
             let records: { rkey: string; cid: string; value: unknown }[];
             try {
-                records = await at.listRecords(bbs.bbsDid, collection, 100);
+                //  the collection holds its models too: read far enough for
+                //  all it may publish of both
+                records = await at.listRecords(bbs.bbsDid, collection, listMax);
             } catch (e) {
                 this.log(`board art: can't read ${bbs.name}'s art: ${(e as Error).message}`);
                 continue;
@@ -238,8 +241,11 @@ export class BoardArt {
                 }
             }
             this.pieces.set(bbs.name, ids);
-            //  a piece whose record is gone is withdrawn (assets spec §6.5)
-            this.dropKept(key => key.startsWith(`piece:${bbs.name}:`) && !published.has(key));
+            //  a piece whose record is gone is withdrawn (assets spec §6.5);
+            //  not when the listing was cut short, where it may be further on
+            if (records.length < listMax) {
+                this.dropKept(key => key.startsWith(`piece:${bbs.name}:`) && !published.has(key));
+            }
         }
         this.save(join(this.dir, 'pieces.json'), Object.fromEntries(this.pieces));
         this.prune();

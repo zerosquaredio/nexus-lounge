@@ -15,6 +15,7 @@ import { AssetBlocks } from './asset_blocks.ts';
 import { Pictures } from './pictures.ts';
 import { AssetLibrary } from './assets.ts';
 import { BoardArt } from './board_art.ts';
+import { BoardModels } from './board_models.ts';
 import { atClient } from './atproto.ts';
 import { Directory } from './directory.ts';
 import { followStream } from './jetstream.ts';
@@ -177,6 +178,35 @@ if (config.assets.boardArt.length) {
         log(`board art: off: ${(e as Error).message}`);
     }
 }
+//  the 3D models they publish (build_3d_slice.md): only when turned on, and
+//  from the same BBSes as their art
+let boardModels: BoardModels | null = null;
+if (config.assets.models.enabled && config.assets.boardArt.length) {
+    try {
+        boardModels = new BoardModels(
+            {
+                config,
+                list: () => registry.list(),
+                at: atClient(fetchPublicJson, config.directory.relay),
+                linked: bbs => !!directory?.forBbs(bbs),
+                blocked,
+                refused: did => assetBlocks.refuses(did),
+                log,
+            },
+            join(dirname(config.database), 'board-models')
+        );
+        const read = () => void boardModels?.refresh().catch(e => log(`board models: ${(e as Error).message}`));
+        setTimeout(read, 30_000).unref();
+        setInterval(read, 60 * 60_000).unref();
+        const artOnly = artChanged;
+        artChanged = did => {
+            artOnly(did);
+            boardModels?.changed(did);
+        };
+    } catch (e) {
+        log(`board models: off: ${(e as Error).message}`);
+    }
+}
 for (const [bbs, piece] of Object.entries(config.assets.splashes)) {
     if (!art?.find(piece)) {
         log(`assets: no art named ${piece} for ${bbs}'s splash; its pages go without`);
@@ -207,6 +237,7 @@ const site = createSite({
     chat,
     art,
     boardArt,
+    boardModels,
     pictures,
     tunnels: () => tunnels,
     log,

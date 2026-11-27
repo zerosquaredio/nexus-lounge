@@ -38,6 +38,7 @@ wrong guess is found before more is built on it.
 | 1 | Rules the checker gained from its security reviews, which refuse some valid models | One scene only; at most 1,000 nodes, 8 morph targets and 16 attributes a primitive, 64 channels an animation; animation values as plain numbers only (some optimizing tools write packed integers); no buffer views sharing bytes; vertex data no more than twice what the file holds | Of those same models, how many does each rule refuse? Loosen the ones that cost most and can be loosened safely | Claude |
 | 2 | The `light` budget | 30,000 triangles, 32 draw calls, 4 MB of textures at up to 1024 pixels, 64 bones, 16 animations of up to 60 seconds | The viewer page reports its frame rate and load time. Models at half the budget, at it, and at twice it, on a desktop, a mid-range phone and an old phone | Claude for the numbers on a desktop; a person for the phones |
 | 2 | Material effects (clearcoat, sheen, transmission, volume, iridescence, specular): allowed, no limit on how many | All six, any number at once. The checker names those each model uses (`effects`) | The frame rate of models using none, one, two and three of them (the sample collection has 21, 17 and 7 of each), above all transmission, which draws the scene a second time. Is a model with them still `light`? Perhaps a limit of one or two a model, or transmission counted against the budget | Claude for a desktop; a person for the phones |
+| 2 | The `light` budget on a desktop | As above | **Tried 2026-11-26 (results below)** | Claude |
 | 2 | The 8 MB file cap | 8 MB | How long does a phone on mobile data take to fetch it? Would 4 MB do? | A person |
 | 2 | How the viewer handles | Turn, zoom, a button for each animation, a fixed light | Does it feel right? Anything missing that every model needs? | A person |
 | 3 | Models from each board, and in all | 5; 200 MB | The hub's disk and memory with a few boards publishing | Claude |
@@ -77,6 +78,26 @@ refusal, the slowest check 64 ms.
 - **Total texture pixels** (a rule from the first review) refuses 16 even
   with the per-side limit lifted; it should be set together with the
   texture side.
+
+### What the stage 2 desktop trial showed (2026-11-26)
+
+The 47 Khronos sample models that pass `light`, each published by a
+stand-in board to a scratch hub, opened on its page in headless Chrome
+on a desktop PC, **Load 3D** pressed.
+
+- **All 47 loaded,** with no breach of the page's policy and nothing
+  asked of any other address. Loading took 16 to 486 ms from the hub on
+  the same machine (the larger files: 1 to 3.9 MB, 120 to 300 ms).
+- **Frame rate:** every animated model ran at the browser's cap (240 a
+  second). The viewer draws a still model only when it moves, so it gives
+  no figure for those until turned: the phone trial should turn each.
+  A desktop is not where the budget will bind; phones are.
+- **Material effects cost more than the checker counts:** for models
+  using transmission, three.js draws more triangles than the model has
+  (the broken window 1,974 for 987; the sunglasses 23,848 for 13,396;
+  the iridescent Suzanne 19,680 for 11,808), and more draw calls. *For
+  the effects trial:* count a transmissive mesh's triangles twice against
+  the budget, or limit how many effects a model uses.
 
 ## 3. Later designs (nothing built yet)
 

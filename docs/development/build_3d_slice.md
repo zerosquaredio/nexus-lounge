@@ -83,9 +83,11 @@ named.
 (8 MB), `perBoard` (5 models), `totalBytes` (200 MB). Only boards in
 `assets.boardArt`, as for art.
 
-**What pages are told about a model** (`PublicItem`): what art has, with
-`model: { url, bytes, triangles, animations: [names] }` and no `ansi`;
-`image` and `thumb` from the preview.
+**What pages are told about a model** (`ModelItem` in `board_models.ts`,
+a type of its own rather than art's `PublicItem`, which every piece of
+ANSI art fills): name, description, credit, licence and rating as art
+has; `page`, its address; `image`, the preview; and `model: { url,
+bytes, triangles, animations: [names], effects: [names] }`.
 
 ## 4. The checker
 
@@ -166,7 +168,7 @@ tracks side by side, each in files of its own:
 elsewhere, beside Khronos's validator; how many of them need a compressed
 format.
 
-**Stage 2: on the hub, on a scratch hub.** In order, by one agent (they
+**Stage 2: on the hub, on a scratch hub. Built 2026-11-26.** In order, by one agent (they
 share files): **F.** the hub's record reader and library take models
 (`assets.ts`, `board_art.ts`: read every version; items without ANSI;
 large files served from disk, not held in memory; quotas; withdrawal,
@@ -177,6 +179,15 @@ report of frame rate and load time.
 *Trials after stage 2:* the `light` budget and the file cap, on a
 desktop and on phones; how the viewer handles. The limits are changed
 here, before boards publish anything.
+
+*As built:* `board_models.ts` reads boards' records beside their art (on
+the stream's word and hourly), keeps each model and its preview cleaned
+in `board-models/` beside the database and serves them from disk;
+`model_files.ts` serves the viewer's scripts by a fixed list, with
+ETags; the gallery lists models by their preview; `/art/<12 digits>` is
+a model's page, with the policy of §5 and nothing loaded until **Load
+3D**. `hubctl assets` lists models, so `hubctl asset block` takes their
+short hashes.
 
 **Stage 3: end to end.** **H.** a board publishes a model from its own
 account, the hub takes it, the page plays its animation in a real

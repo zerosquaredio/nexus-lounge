@@ -1743,3 +1743,45 @@ export function checkGlb(bytes: Buffer, budget: ModelBudget = LightBudget): Chec
         throw new HubError('asset', 'a model the hub could not read');
     }
 }
+
+//  A model's preview picture (build spec decision 6): a PNG, as its own
+//  bytes say, no larger than |maxBytes| or |maxSide| pixels a side, cleaned
+//  as a model's own pictures are and held to it again once cleaned.
+export interface CheckedPreview {
+    cleaned: Buffer;
+    sha256: string; //  of cleaned, in hex
+    width: number;
+    height: number;
+}
+
+export function checkPreviewPng(bytes: Buffer, maxSide: number, maxBytes: number): CheckedPreview {
+    try {
+        if (bytes.length > maxBytes) {
+            refuse(`a preview picture of ${bytes.length} bytes, over the limit of ${maxBytes}`);
+        }
+        if (bytes.length < 8 || !bytes.subarray(0, 8).equals(PngSignature)) {
+            refuse('a preview picture that is not a PNG');
+        }
+        const admit: Admit = (width, height) => {
+            if (Math.max(width, height) > maxSide) {
+                refuse(`a preview picture of ${width} by ${height} pixels, over the limit of ${maxSide} a side`);
+            }
+        };
+        const first = cleanPng(bytes, admit, { left: MaxProfiles });
+        const second = cleanPng(first.cleaned, admit, { left: MaxProfiles });
+        if (!second.cleaned.equals(first.cleaned)) {
+            refuse('a preview picture that does not hold once rewritten');
+        }
+        return {
+            cleaned: first.cleaned,
+            sha256: createHash('sha256').update(first.cleaned).digest('hex'),
+            width: first.width,
+            height: first.height,
+        };
+    } catch (err) {
+        if (err instanceof HubError) {
+            throw err;
+        }
+        throw new HubError('asset', 'a preview picture the hub could not read');
+    }
+}

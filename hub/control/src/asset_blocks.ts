@@ -35,7 +35,12 @@ export interface ArtOnHub {
 
 //  The art in the hub's own library (assets.library) and what it took from
 //  BBSes (board-art/), as their files on disk say. Either may be missing.
-export function artOnHub(dirs: { library: string; boardArt: string; pictures?: string }): ArtOnHub[] {
+export function artOnHub(dirs: {
+    library: string;
+    boardArt: string;
+    pictures?: string;
+    boardModels?: string;
+}): ArtOnHub[] {
     const read = (path: string): unknown => {
         try {
             return JSON.parse(readFileSync(path, 'utf8'));
@@ -72,6 +77,21 @@ export function artOnHub(dirs: { library: string; boardArt: string; pictures?: s
             id: item.id,
             files: filesOf(item),
         });
+    }
+    //  the 3D models BBSes publish (board_models.ts): the model as served,
+    //  its preview, and the model as the BBS published it
+    const models = (dirs.boardModels ? read(join(dirs.boardModels, 'models.json')) : null) as
+        | { bbs: string; name: string; id: string; preview: string; raw: string }[]
+        | null;
+    for (const m of Array.isArray(models) ? models : []) {
+        if (isSha256(String(m?.id))) {
+            out.push({
+                owner: `${m.bbs}'s model`,
+                name: String(m.name),
+                id: m.id,
+                files: [m.id, m.preview, m.raw].filter((hash, i, all) => isSha256(String(hash)) && all.indexOf(hash) === i),
+            });
+        }
     }
     //  people's Bluesky pictures (pictures.ts): by DID
     const pictures = (dirs.pictures ? read(join(dirs.pictures, 'index.json')) : null) as Record<

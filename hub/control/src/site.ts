@@ -32,7 +32,9 @@
 //  POST /api/bbs/report   a member reports someone (JSON body)
 //    (the door's calls: bearer, ?bbs=name and ?did= or ?user= for the member)
 //  GET  /art              the art the hub offers (assets.ts), and /art.json for the chat
+//  GET  /art/<id>         a 3D model's page, by the first 12 digits of its id (board_models.ts)
 //  GET  /assets/<sha256>  one of its files, named by its hash
+//  GET  /web/..., /vendor/three/...  the model page's scripts (model_files.ts)
 //  GET  /fonts/vga-8x16.woff  the IBM VGA font, for art drawn as characters
 //  POST /view             choose a view: the hub's colours, fonts and how art is drawn
 //  GET  /bbs              your BBSes, and registering a new one
@@ -41,7 +43,7 @@
 //  POST /bbs/remove
 //  POST /signout
 
-import { readFileSync } from 'node:fs';
+import { createReadStream, readFileSync, statSync } from 'node:fs';
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from 'node:http';
 import type { Duplex } from 'node:stream';
 import { BbsChatPath, ChatPath, type Chat } from './chat.ts';
@@ -61,7 +63,18 @@ import { MapPagePath, spacePageBody, SpaceScript, SpaceScriptPath } from './spac
 import type { HubConfig } from './config.ts';
 import { HubError } from './errors.ts';
 import { AbuseKinds, AbuseReports, MaxContact, MaxDetails } from './abuse.ts';
-import { artJson, ArtJsonPath, artPageBody, ArtPath, type BoardPieces, creditLine } from './art_page.ts';
+import {
+    artJson,
+    ArtJsonPath,
+    artPageBody,
+    ArtPath,
+    type BoardModelGroup,
+    type BoardPieces,
+    creditLine,
+    modelPageBody,
+} from './art_page.ts';
+import type { BoardModels } from './board_models.ts';
+import { modelPagePolicy, viewerFile } from './model_files.ts';
 import { artHtml, ArtStyle } from './art_html.ts';
 import { type View, viewById, viewCss, ViewCookie, ViewPath, viewPicker, Views } from './views.ts';
 import type { AssetLibrary, PublicItem } from './assets.ts';
@@ -120,6 +133,8 @@ export interface SiteDeps {
     art?: AssetLibrary | null;
     //  BBSes' own splash screens (board_art.ts), if any are taken
     boardArt?: BoardArt | null;
+    //  the 3D models BBSes publish (board_models.ts), if any are taken
+    boardModels?: BoardModels | null;
     //  people's Bluesky pictures, for the map (pictures.ts)
     pictures?: Pictures | null;
     //  what the control plane last heard from the tunnel server, for
@@ -230,6 +245,7 @@ export function createSite(deps: SiteDeps): Site {
     const { config, registry, signin } = deps;
     const art = deps.art ?? null;
     const boardArt = deps.boardArt ?? null;
+    const boardModels = deps.boardModels ?? null;
     const log = deps.log ?? (() => {});
     const now = deps.now ?? Date.now;
     const secure = config.site.publicUrl.startsWith('https://');
@@ -408,6 +424,26 @@ export function createSite(deps: SiteDeps): Site {
                 items: boardArt.piecesFor(bbs),
             }))
             .filter(b => b.items.length);
+    }
+
+    //  The 3D models BBSes publish, by BBS, for the gallery
+    function boardModelGroups(): BoardModelGroup[] {
+        if (!boardModels) {
+            return [];
+        }
+        //  (it shows only the models of BBSes it still takes from)
+        const items = boardModels.items();
+        return [...new Set(items.map(item => item.bbs))].map(name => ({
+            bbs: name,
+            title: bbsTitle(name),
+            items: items.filter(item => item.bbs === name),
+        }));
+    }
+
+    //  A BBS's name as its listing gives it, or as it's registered
+    function bbsTitle(name: string): string {
+        const bbs = registry.list().find(b => b.name === name);
+        return (bbs && deps.directory?.forBbs(bbs)?.listing.name) || name;
     }
 
     //  Its emblem, for the map, likewise (assets.emblems)
@@ -1904,8 +1940,48 @@ ${footer()}`,
         }
 
         const fromBoards = ArtPath === path || ArtJsonPath === path ? boardPieces() : [];
-        if ((art || fromBoards.length) && ArtPath === path) {
-            return send(res, 200, page(art?.name ?? 'Art', artPageBody(art, fromBoards), who ?? undefined));
+        const models = ArtPath === path ? boardModelGroups() : [];
+        if ((art || fromBoards.length || models.length) && ArtPath === path) {
+            return send(res, 200, page(art?.name ?? 'Art', artPageBody(art, fromBoards, models), who ?? undefined));
+        }
+
+        //  a model's page: its picture, and the viewer when asked for
+        const modelPage = /^\/art\/([0-9a-f]{12})$/.exec(path);
+        if (boardModels && modelPage) {
+            const item = boardModels.byShortId(modelPage[1]!);
+            if (!item) {
+                return send(res, 404, page('Not found', '<p>No model here.</p>'));
+            }
+            return send(
+                res,
+                200,
+                page(item.name, modelPageBody(item, bbsTitle(item.bbs), 'text' === viewOf(req).art), who ?? undefined),
+                { 'Content-Security-Policy': modelPagePolicy(config.site.publicUrl) }
+            );
+        }
+
+        //  the model page's scripts: the hub's own and its copy of three.js
+        if (boardModels && (path.startsWith('/web/') || path.startsWith('/vendor/three/'))) {
+            const script = viewerFile(path);
+            if (!script) {
+                return send(res, 404, page('Not found', '<p>Nothing here.</p>'));
+            }
+            const headers = {
+                'Cache-Control': 'no-cache',
+                ETag: script.etag,
+                'X-Content-Type-Options': 'nosniff',
+                'Cross-Origin-Resource-Policy': 'same-origin',
+            };
+            if (req.headers['if-none-match'] === script.etag) {
+                res.writeHead(304, headers);
+                return void res.end();
+            }
+            res.writeHead(200, {
+                ...headers,
+                'Content-Type': 'text/javascript; charset=utf-8',
+                'Content-Length': String(script.body.length),
+            });
+            return void res.end('HEAD' === req.method ? undefined : script.body);
         }
 
         if ((art || fromBoards.length) && ArtJsonPath === path) {
@@ -1919,6 +1995,32 @@ ${footer()}`,
         //  a file is named by its hash, so it never changes: kept for a year,
         //  and never run as a page
         const asset = /^\/assets\/([0-9a-f]{64})$/.exec(path);
+        //  a model and its picture: from disk, never held in memory
+        const onDisk = asset && !art?.file(asset[1]!) && !boardArt?.file(asset[1]!) ? boardModels?.file(asset[1]!) : null;
+        if (onDisk) {
+            let size: number;
+            try {
+                size = statSync(onDisk.path).size;
+            } catch {
+                return send(res, 404, page('Not found', '<p>Nothing here.</p>'));
+            }
+            res.writeHead(200, {
+                'Content-Type': onDisk.type,
+                'Content-Length': String(size),
+                //  a day, not art's year: a model taken down should not
+                //  linger long in caches between the hub and people
+                'Cache-Control': 'public, max-age=86400',
+                'X-Content-Type-Options': 'nosniff',
+                'Content-Security-Policy': "default-src 'none'; sandbox",
+                'Cross-Origin-Resource-Policy': 'same-site',
+            });
+            if ('HEAD' === req.method) {
+                return void res.end();
+            }
+            const stream = createReadStream(onDisk.path);
+            stream.on('error', () => res.destroy());
+            return void stream.pipe(res);
+        }
         if ((art || boardArt) && asset) {
             const file = art?.file(asset[1]!) ?? boardArt?.file(asset[1]!) ?? null;
             if (!file) {

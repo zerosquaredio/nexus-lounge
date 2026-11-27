@@ -28,18 +28,11 @@ export const ViewerPolicy =
     "default-src 'none'; script-src 'self'; connect-src 'self'; img-src 'self' blob:; style-src 'self' 'unsafe-inline'";
 export const StrictStylesPolicy = ViewerPolicy.replace(" 'unsafe-inline'", '');
 
-//  the viewer's own scripts, in web/
-export const ViewerScripts = ['model_viewer.js', 'model_file.js'];
-
-//  the copy of three.js, by the paths the viewer and its files import
-export const VendoredScripts = [
-    'build/three.module.js',
-    'build/three.core.js',
-    'examples/jsm/loaders/GLTFLoader.js',
-    'examples/jsm/controls/OrbitControls.js',
-    'examples/jsm/utils/BufferGeometryUtils.js',
-    'examples/jsm/utils/SkeletonUtils.js',
-];
+//  the viewer's own scripts, in web/, and the copy of three.js, by the
+//  paths the viewer and its files import: the hub's own lists, which it
+//  serves by (model_files.ts)
+export { VendoredScripts, ViewerScripts } from '../src/model_files.ts';
+import { VendoredScripts, ViewerScripts } from '../src/model_files.ts';
 
 const Types = {
     html: 'text/html; charset=utf-8',
