@@ -12,3 +12,9 @@
 *.woff binary
 *.woff2 binary
 *.psf binary
+
+# Models and pictures are bytes too.
+*.glb binary
+*.png binary
+*.jpg binary
+*.jpeg binary

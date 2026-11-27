@@ -33,13 +33,50 @@ wrong guess is found before more is built on it.
 | Stage | What | Now | How to try it | Who |
 |---|---|---|---|---|
 | 0 | Do Bluesky's hosts take model files? | **Tried 2026-11-26: yes.** From test2's own account, files of 440 bytes, 1 MB and 8 MB were accepted as `model/gltf-binary`, in about 1 to 2 seconds each | Settled for `bsky.social`; other hosts unknown | Claude |
-| 1 | The checker against real models | Our own rules (§4 of the build spec) | Run it over a set of freely licensed models from elsewhere, beside Khronos's validator: what does it refuse that is fine, or pass that isn't? | Claude |
+| 1 | The checker against real models | Our own rules (§4 of the build spec) | Run it over a set of freely licensed models from elsewhere, beside Khronos's validator: what does it refuse that is fine, or pass that isn't? **Tried 2026-11-26, results below** | Claude |
 | 1 | No compressed formats | Refused if required | Of those same models, how many need one, and how much larger are the rest uncompressed? | Claude |
+| 1 | Rules the checker gained from its security reviews, which refuse some valid models | One scene only; at most 1,000 nodes, 8 morph targets and 16 attributes a primitive, 64 channels an animation; animation values as plain numbers only (some optimizing tools write packed integers); no buffer views sharing bytes; vertex data no more than twice what the file holds | Of those same models, how many does each rule refuse? Loosen the ones that cost most and can be loosened safely | Claude |
 | 2 | The `light` budget | 30,000 triangles, 32 draw calls, 4 MB of textures at up to 1024 pixels, 64 bones, 16 animations of up to 60 seconds | The viewer page reports its frame rate and load time. Models at half the budget, at it, and at twice it, on a desktop, a mid-range phone and an old phone | Claude for the numbers on a desktop; a person for the phones |
+| 2 | Material effects (clearcoat, sheen, transmission, volume, iridescence, specular): allowed, no limit on how many | All six, any number at once. The checker names those each model uses (`effects`) | The frame rate of models using none, one, two and three of them (the sample collection has 21, 17 and 7 of each), above all transmission, which draws the scene a second time. Is a model with them still `light`? Perhaps a limit of one or two a model, or transmission counted against the budget | Claude for a desktop; a person for the phones |
 | 2 | The 8 MB file cap | 8 MB | How long does a phone on mobile data take to fetch it? Would 4 MB do? | A person |
 | 2 | How the viewer handles | Turn, zoom, a button for each animation, a fixed light | Does it feel right? Anything missing that every model needs? | A person |
 | 3 | Models from each board, and in all | 5; 200 MB | The hub's disk and memory with a few boards publishing | Claude |
 | 3 | Stripping textures' metadata without re-encoding | PNG and JPEG, metadata blocks removed | Feed it pictures with location data and with data hidden after the image's end: what survives? | Claude |
+
+### What the first trial showed (2026-11-26)
+
+The checker, after two security reviews, over the 109 models of 9 MB or
+less in Khronos's glTF sample collection (feature tests and showpieces,
+so richer than a typical small model). No crash, nothing but a plain
+refusal, the slowest check 64 ms.
+
+- **44 of 109 pass the `light` budget as it stands.** With the size
+  limits lifted and only the rules applied, 79 do.
+- **The texture limit refuses most:** 34 models have a texture over 1024
+  pixels a side. Of the 97 that could be measured, the largest texture is
+  2048 in 37, 1024 in 19, 512 or less in 25. *To decide in stage 2, on
+  real devices:* whether `light` should allow 2048 (and whether the hub
+  should then offer a smaller version itself).
+- **Triangles:** half the models have under 4,300, three quarters under
+  19,000, and 76 of 97 are within 30,000. The limit looks about right.
+- **Extensions a model requires:** 11 refused. None needs a compressed
+  format. Five need `KHR_lights_punctual` (lights inside the model, which
+  the viewer page's fixed light replaces), the rest newer material
+  effects (clearcoat, sheen, transmission, volume, iridescence, specular)
+  that three.js draws. *Decided 2026-11-26:* the material ones are
+  allowed (their textures held in range like a material's own), and
+  what they cost to draw is a stage 2 trial. With them, 47 of 109 pass
+  `light` (from 44), and 101 pass with every size and count limit
+  lifted (97 before, counted the same way). 45 models use at least one effect, 7
+  of them three.
+- **The rules added by the security reviews cost little:** two models
+  have an animation with more than 64 samplers; none has several scenes,
+  shared buffer views, packed animation values or too many morph targets.
+  One animates something the checker doesn't know (a colour, by a newer
+  extension).
+- **Total texture pixels** (a rule from the first review) refuses 16 even
+  with the per-side limit lifted; it should be set together with the
+  texture side.
 
 ## 3. Later designs (nothing built yet)
 

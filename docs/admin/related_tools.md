@@ -34,3 +34,4 @@ Dockerfile).
 | [frp](https://github.com/fatedier/frp) | The hub's tunnels (frps on the hub, frpc next to each board) |
 | [Caddy](https://caddyserver.com/) | The hub's edge: HTTPS with certificates made on demand |
 | [freeq](https://github.com/freeq-irc/freeq) | The hub's chat server, which knows people by DID |
+| [three.js](https://threejs.org/) | Draws 3D models in the browser for the hub's model viewer. Licence MIT. Version 0.187.0, the npm package `three`, copied into the repo (`hub/control/vendor/three`, with its licence and each file's checksum) and served from the hub's own address, never a CDN |

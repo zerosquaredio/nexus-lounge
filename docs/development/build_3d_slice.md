@@ -37,8 +37,8 @@ data, and are to be revisited once real models have been tried (§9).
 |---|---|---|
 | 1 | **The viewer.** The hub's first third-party script: its pages run only its own scripts, from its own address, with no build step | A pinned release of three.js (the module build, with its glTF loader and orbit controls), copied into the repo with its licence (MIT), served by the hub at its own address. No CDN, no bundler. Recorded in `related_tools.md` |
 | 2 | **How models are checked.** The spec says "the glTF validator", which is a large outside dependency | The hub's own checker in TypeScript (§4), as it has for PNG and ANSI. Khronos's validator is used in tests only, to confirm the checker agrees on the fixtures |
-| 3 | **Extensions allowed** | None of the compressed formats (meshopt, Draco, KTX2), which each need a decoder running in the page. Allowed: `KHR_materials_unlit`, `KHR_materials_emissive_strength`, `KHR_texture_transform`, `KHR_mesh_quantization`. A model that *requires* anything else is refused; other optional ones are ignored |
-| 4 | **Size and budget for `light`** (the framework's world doc names the classes but gives no numbers) | 8 MB a file; 30,000 triangles; 32 draw calls; 4 MB of textures, none over 1024 pixels a side; 64 bones; 16 animations of up to 60 seconds. Tuned with use |
+| 3 | **Extensions allowed** | None of the compressed formats (meshopt, Draco, KTX2), which each need a decoder running in the page. Allowed: `KHR_materials_unlit`, `KHR_materials_emissive_strength`, `KHR_texture_transform`, `KHR_mesh_quantization`; and, *added 2026-11-26*, the material effects three.js draws: clearcoat, sheen, transmission, volume, iridescence, specular (`KHR_materials_*`), their textures checked like a material's own. A model that *requires* anything else is refused; other optional ones are ignored. What the effects cost to draw is a trial (trials.md §2); a limit on how many one model uses may follow |
+| 4 | **Size and budget for `light`** (the framework's world doc names the classes but gives no numbers) | 8 MB a file; 30,000 triangles; 32 draw calls; 4 MB of textures, none over 1024 pixels a side; 64 bones; 16 animations of up to 60 seconds. Tuned with use. *Added by the security reviews (2026-11-26), so that what the checker counts is what a viewer draws and holds:* one scene; 1,000 nodes; 8 morph targets and 16 attributes a primitive; 64 channels an animation |
 | 5 | **Textures inside a model** can carry hidden data (location, a camera's details), which the spec says to strip | PNG and JPEG only. The hub rewrites the file without metadata blocks and anything after the image's end, and serves that rewritten model, as it serves cleaned ANSI. No re-encoding of the pixels in this slice |
 | 6 | **A preview picture.** Every asset needs an image for where scripts are off and for the gallery; the hub can't draw 3D itself | The sysop gives one: a PNG beside the model. The hub requires it |
 | 7 | **The record's shape,** where the spec and the code disagree | Keep what the code does and correct the spec: the record is keyed by the SHA-256 of its first file, and each version carries its `file` (hash, size, type) with its `blob` beside it. A model item has two versions: the model, then its preview image |
@@ -107,6 +107,14 @@ byte comes from outside.
   among nodes.
 - **Extensions:** `extensionsRequired` only from decision 3's list.
 - **Images:** PNG or JPEG by their own bytes, sizes within the budget.
+- **What a viewer would hold, not just what the file says** (found by
+  running hostile files through the viewer's own loader): a scene lists
+  each root node once, and there is one scene; buffer views share no
+  bytes; a stride only on vertex data, with every element whole; animation
+  times rise, and values are plain numbers; morph targets, attributes,
+  channels and nodes are capped; the vertex data all the accessors
+  describe is no more than twice what the file holds; no object key named
+  `__proto__`, `constructor` or `prototype`.
 - **Budget, measured by the hub** (a record's own figures are ignored):
   triangles (from each primitive's indices or positions), draw calls
   (primitives), bones (joints), texture bytes and sizes, animation count
