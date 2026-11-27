@@ -1,6 +1,6 @@
 # Trials: Numbers and Choices to Try Out and Revisit
 
-Last updated: 2026-11-26
+Last updated: 2026-11-27
 
 Limits and choices made without real data. Each is one setting or one
 constant, so changing it is small. This is the one list of them: specs
@@ -155,15 +155,49 @@ the window where the browser gives full screen only to video, as an
 iPhone's Safari does), to be tried on the phone. The phone has room to spare at this size; the budget trial
 needs models nearer the limits.
 
+## 2a. The first live object
+
+The slice's limits ([build_live_object_slice.md](build_live_object_slice.md)
+§2, decision 6) are defaults in the hub's config, to be revisited with
+real programs.
+
+### Stage 0 trials (2026-11-27)
+
+- **Fuel metering works.** A prototype of the rewriter (decision 1) added
+  a fuel counter to hand-written modules and to real AssemblyScript
+  output. The same step gave the same fuel on every run (a loop to 1,000:
+  13,008 both times; to 2,000: 26,008), and rewriting the same module
+  twice gave the same bytes. A loop past its fuel, and an endless one,
+  stopped within 30 ms with 50 million fuel; deep recursion stopped on
+  the stack; memory couldn't grow past the module's own maximum. An
+  endless loop with no metering was stopped by the worker's time limit
+  at 2 s, as the backstop. SIMD and a `start` function were refused.
+- **What it costs:** a tight loop ran about 2.3 times slower metered
+  (1.4 ms against 0.6 ms for a million rounds), which is the usual price
+  of counting in the module itself. A weather step needs a few thousand
+  fuel, against a limit of 50 million.
+- **AssemblyScript** (0.28.20) builds programs the hub can take, with
+  three flags: `--use abort=` (else it imports `env.abort`, which the
+  host doesn't give), `--maximumMemory 16` (else it declares no memory
+  limit, which the hub refuses), and `--exportStart _initialize`, since
+  it sets up its memory in a `start` function. **Changed:** the hub
+  takes an exported `_initialize`, which it calls once, metered like a
+  step, after loading the module; a `start` section is still refused.
+- **Open-Meteo:** a reply for one place's current weather is 564 bytes,
+  a place found by name 423, each in under a second. Its current weather
+  changes every 15 minutes (`interval: 900`), so the 10-minute minimum
+  never misses a change. A name it doesn't know gives no `results`; a
+  bad coordinate gives status 400 with `{"error":true,"reason":…}`. Both
+  are kept as test fixtures.
+
 ## 3. Later designs (nothing built yet)
 
 | What | Suggested | Spec |
 |---|---|---|
-| Fuel and memory for programs; how much each place keeps free | To be measured on the first programs | [compute.md](compute.md) §2, §8 |
+| Fuel and memory for programs; how much each place keeps free | To be measured on the first programs; the first slice's defaults are in §2a | [compute.md](compute.md) §2, §8 |
 | State updates an object may send | 4 a second | compute §5.2, §8 |
 | Live events a place may make | To be found: when do bells turn into noise? | compute §11.3 |
 | Awards: what is worth one, and can the counting be gamed | To be tried with a few givers we know | compute §9.2 |
-| How coarse a weather feed's place and readings must be | A town; rain or not, temperature to a few degrees | compute §10.4 |
 | Settings as sentences: do the presets cover what people want | Four presets | [settings_ui.md](settings_ui.md) §3 |
 | How many pieces of a board's art, and models, before a quota in bytes is needed | Counts for now | [assets.md](assets.md) §6.3 |
 

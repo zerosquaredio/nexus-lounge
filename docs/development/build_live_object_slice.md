@@ -71,7 +71,7 @@ source, and the manifest (compute §2.2) in the record:
     "input": { "name": "string(100)?", "latitude": "number(-90,90)?", "longitude": "number(-180,180)?" },
     "values": "weather",
     "trust": "shared",
-    "source": { "language": "AssemblyScript", "compiler": "assemblyscript@<pinned>", "build": "asc weather.ts -O3 --runtime stub" }
+    "source": { "language": "AssemblyScript", "compiler": "assemblyscript@0.28.20", "build": "asc weather.ts -O3 --runtime stub --use abort= --maximumMemory 16 --exportStart _initialize" }
   },
   "versions": [
     { "form": "program", "file": { "sha256": "…", "size": 9123, "mediaType": "application/wasm" }, "blob": { "…": "…" } },
@@ -124,11 +124,14 @@ UTF-8 in the program's memory, given as pointer and length):
 | `keep(ptr, len)` | Its working state for the next step, at most 4 KB, never shown to anyone |
 | `log(ptr, len)` | A line for its owner (kept in memory, the last 20) |
 
-The program exports `memory` and `step()`. Nothing else is imported: a
-module that imports anything else, has no memory limit or one over the
-manifest's, uses threads or shared memory, or doesn't validate, is
-refused. A `start` function is refused too, so nothing runs outside a
-step.
+The program exports `memory` and `step()`, and may export
+`_initialize()`, which the hub calls once after loading it, metered like
+a step (AssemblyScript sets up its memory there, built with
+`--exportStart _initialize`; stage 0, trials.md §2a). Nothing else is
+imported: a module that imports anything else, has no memory limit or
+one over the manifest's, uses threads, shared memory or SIMD, or doesn't
+validate, is refused. A `start` section is refused too, so nothing runs
+outside a metered call.
 
 **The hub's config** (`compute`, all off by default): `enabled`,
 `owners`, `programs` (vetted hashes), `fetch` (sites), `perOwner.objects`,
@@ -142,7 +145,7 @@ record }`.
 
 ## 4. Stages
 
-0. **Trials** (no hub changes): the rewriter's approach on a hand-written
+0. **Trials** (no hub changes; **done** 2026-11-27, trials.md §2a): the rewriter's approach on a hand-written
    module (fuel counted the same in two runs, a loop stopped at its
    limit, a deep recursion stopped by the stack, a worker past its time
    replaced); one Open-Meteo request by name and one by coordinates,
