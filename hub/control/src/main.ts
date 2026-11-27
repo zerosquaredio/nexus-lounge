@@ -16,10 +16,12 @@ import { Pictures } from './pictures.ts';
 import { AssetLibrary } from './assets.ts';
 import { BoardArt } from './board_art.ts';
 import { BoardModels } from './board_models.ts';
+import { BoardObjects } from './board_objects.ts';
+import { LiveObjects } from './live_objects.ts';
 import { atClient } from './atproto.ts';
 import { Directory } from './directory.ts';
 import { followStream } from './jetstream.ts';
-import { fetchPublicJson } from './net.ts';
+import { fetchPublicJson, type FetchReply } from './net.ts';
 
 const config = loadConfig(process.argv[2] ?? process.env.HUB_CONFIG);
 const registry = new Registry(config.database, config.registration);
@@ -207,6 +209,46 @@ if (config.assets.models.enabled && config.assets.boardArt.length) {
         log(`board models: off: ${(e as Error).message}`);
     }
 }
+//  live objects BBSes publish, and the hub running their programs (build
+//  spec of the live object slice): only when compute is on
+let liveObjects: LiveObjects | null = null;
+if (config.compute.enabled) {
+    try {
+        const boardObjects = new BoardObjects(
+            {
+                config,
+                list: () => registry.list(),
+                at: atClient(fetchPublicJson, config.directory.relay),
+                linked: bbs => !!directory?.forBbs(bbs),
+                blocked,
+                refused: did => assetBlocks.refuses(did),
+                log,
+            },
+            join(dirname(config.database), 'board-objects')
+        );
+        liveObjects = new LiveObjects(
+            {
+                config,
+                objects: boardObjects,
+                fetch: (url, maxBytes) => fetchPublicJson(url, { reply: true, maxBytes }) as Promise<FetchReply>,
+                log,
+            },
+            join(dirname(config.database), 'board-objects', 'running')
+        );
+        const read = () => void boardObjects.refresh().catch(e => log(`board objects: ${(e as Error).message}`));
+        setTimeout(read, 30_000).unref();
+        setInterval(read, 60 * 60_000).unref();
+        liveObjects.start();
+        const before = artChanged;
+        artChanged = did => {
+            before(did);
+            boardObjects.changed(did);
+        };
+        log(`live objects: on, for ${'registered' === config.compute.owners ? 'every BBS' : config.compute.owners.join(', ') || 'no BBS'}`);
+    } catch (e) {
+        log(`live objects: off: ${(e as Error).message}`);
+    }
+}
 for (const [bbs, piece] of Object.entries(config.assets.splashes)) {
     if (!art?.find(piece)) {
         log(`assets: no art named ${piece} for ${bbs}'s splash; its pages go without`);
@@ -238,6 +280,7 @@ const site = createSite({
     art,
     boardArt,
     boardModels,
+    liveObjects,
     pictures,
     tunnels: () => tunnels,
     log,

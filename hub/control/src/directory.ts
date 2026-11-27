@@ -25,6 +25,8 @@ export function collections(config: HubConfig) {
         status: `${prefix}.leaf.status`,
         //  the art BBSes publish (board_art.ts), followed by the stream too
         asset: `${prefix}.asset.item`,
+        //  live objects (board_objects.ts), followed when compute is on
+        object: `${prefix}.object`,
     };
 }
 

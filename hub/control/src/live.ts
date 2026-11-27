@@ -27,11 +27,13 @@ import type { Duplex } from 'node:stream';
 import type { Chat } from './chat.ts';
 import type { HubConfig } from './config.ts';
 import type { Directory } from './directory.ts';
+import type { ObjectEntity } from './live_objects.ts';
 import type { DoorAccess, Presence } from './presence.ts';
 import type { Profiles } from './profiles.ts';
 import type { Bbs, Registry } from './registry.ts';
 import { WebTermPath } from './webterm.ts';
 import { acceptWebSocket, isUpgrade, type WsPeer } from './websocket.ts';
+export type { ObjectEntity };
 
 export const LivePath = '/space/live';
 export const LiveVersion = 1;
@@ -81,7 +83,7 @@ export interface RoomEntity {
     name: string;
 }
 
-export type Entity = PersonEntity | LeafEntity | RoomEntity;
+export type Entity = PersonEntity | LeafEntity | RoomEntity | ObjectEntity;
 
 export interface PresenceItem {
     id: string;
@@ -130,6 +132,8 @@ export interface LiveSources {
     emblemOf?: (bbs: Bbs) => LeafEntity['emblem'];
     //  someone's Bluesky picture, if the hub has it and they allow it
     pictureOf?: (did: string) => PersonEntity['picture'];
+    //  live objects (live_objects.ts), shown with the leaves they belong to
+    objects?: () => ObjectEntity[];
 }
 
 //  Someone the hub's page says has a board open
@@ -248,9 +252,13 @@ export function buildState(s: LiveSources, visits: Visit[] = []): LiveState {
         groups.push({ id: `group:${room}`, place: room, members: members.sort() });
     }
 
+    //  live objects, of the leaves shown only
+    const shown = new Set(leaves.map(l => l.id));
+    const objects = (s.objects?.() ?? []).filter(o => shown.has(o.owner));
+
     const byId = <T extends { id: string }>(a: T, b: T) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
     return {
-        entities: [...leaves.sort(byId), ...rooms, ...[...people.values()].sort(byId)],
+        entities: [...leaves.sort(byId), ...rooms, ...[...people.values()].sort(byId), ...objects.sort(byId)],
         presence: presence.sort(byId),
         groups,
         links: [],

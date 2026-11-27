@@ -56,6 +56,8 @@ import {
     VgaFontPath,
 } from './chat_page.ts';
 import { Live, LivePath, personId } from './live.ts';
+import { pageOf as liveObjectPage, type LiveObjects } from './live_objects.ts';
+import { objectPageBody } from './object_page.ts';
 import { mapPageBody, mapPane, MapScript, MapScriptPath } from './map_page.ts';
 import { blockText, isPersonId, MaxNote, Moderation } from './moderation.ts';
 import { whoPanel, WhoScript, WhoScriptPath } from './moderation_page.ts';
@@ -135,6 +137,8 @@ export interface SiteDeps {
     boardArt?: BoardArt | null;
     //  the 3D models BBSes publish (board_models.ts), if any are taken
     boardModels?: BoardModels | null;
+    //  live objects BBSes publish, run by the hub (live_objects.ts), if on
+    liveObjects?: LiveObjects | null;
     //  people's Bluesky pictures, for the map (pictures.ts)
     pictures?: Pictures | null;
     //  what the control plane last heard from the tunnel server, for
@@ -246,6 +250,7 @@ export function createSite(deps: SiteDeps): Site {
     const art = deps.art ?? null;
     const boardArt = deps.boardArt ?? null;
     const boardModels = deps.boardModels ?? null;
+    const liveObjects = deps.liveObjects ?? null;
     const log = deps.log ?? (() => {});
     const now = deps.now ?? Date.now;
     const secure = config.site.publicUrl.startsWith('https://');
@@ -284,6 +289,7 @@ export function createSite(deps: SiteDeps): Site {
                       },
                       pictureOf: did =>
                           deps.pictures && profiles?.get(did)?.picture ? deps.pictures.pictureOf(did) : null,
+                      objects: () => liveObjects?.entities() ?? [],
                   },
                   { sessionValid: session => !!signin.session(session) },
                   log,
@@ -295,6 +301,9 @@ export function createSite(deps: SiteDeps): Site {
     }
     if (deps.pictures && live) {
         deps.pictures.onChange = () => live.poke();
+    }
+    if (liveObjects && live) {
+        liveObjects.onChange = () => live.poke();
     }
     const moderation = presence?.moderation ?? null;
     //  reports, and mutes, one person may make in an hour
@@ -1943,6 +1952,41 @@ ${footer()}`,
         const models = ArtPath === path ? boardModelGroups() : [];
         if ((art || fromBoards.length || models.length) && ArtPath === path) {
             return send(res, 200, page(art?.name ?? 'Art', artPageBody(art, fromBoards, models), who ?? undefined));
+        }
+
+        //  a live object's page: what it shows, and its program and source
+        const objectPage = /^\/objects\/([a-z0-9-]{1,63})\/([A-Za-z0-9._:~%-]{1,600})$/.exec(path);
+        if (liveObjects && objectPage) {
+            let rkey = '';
+            try {
+                rkey = decodeURIComponent(objectPage[2]!);
+            } catch {
+                //  not found, below
+            }
+            const objects = liveObjects.deps.objects;
+            const object = objects.objects().find(o => o.bbs === objectPage[1] && o.rkey === rkey);
+            const entity = object && liveObjects.entities().find(e => e.page === liveObjectPage(object));
+            const program = object && objects.programs.get(object.program);
+            if (!object || !entity || !program) {
+                return send(res, 404, page('Not found', '<p>No live object here.</p>'));
+            }
+            return send(
+                res,
+                200,
+                page(
+                    object.title,
+                    objectPageBody({
+                        object,
+                        entity,
+                        program,
+                        source: objects.sourceOf(object.program),
+                        status: liveObjects.status(object),
+                        from: bbsTitle(object.bbs),
+                        hubSites: config.compute.fetch,
+                    }),
+                    who ?? undefined
+                )
+            );
         }
 
         //  a model's page: its picture, and the viewer when asked for

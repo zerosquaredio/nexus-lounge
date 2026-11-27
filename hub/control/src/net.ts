@@ -82,6 +82,15 @@ export interface FetchOptions {
     text?: boolean;
     //  return the body as bytes (a Buffer), whatever its type
     bytes?: boolean;
+    //  return any reply, whatever its status, as { status, body } with the
+    //  body as bytes (for programs, which read a service's own errors);
+    //  redirects are not followed, whatever this says
+    reply?: boolean;
+}
+
+export interface FetchReply {
+    status: number;
+    body: Buffer;
 }
 
 export type JsonFetcher = (url: string, options?: FetchOptions) => Promise<unknown>;
@@ -116,7 +125,7 @@ export const fetchPublicJson: JsonFetcher = (url, options = {}) => {
                 timeout: timeoutMs,
             },
             res => {
-                if (200 !== res.statusCode) {
+                if (200 !== res.statusCode && !options.reply) {
                     res.resume();
                     return reject(new HubError('fetch', `${url}: HTTP ${res.statusCode}`));
                 }
@@ -131,6 +140,9 @@ export const fetchPublicJson: JsonFetcher = (url, options = {}) => {
                     chunks.push(chunk);
                 });
                 res.on('end', () => {
+                    if (options.reply) {
+                        return resolve({ status: res.statusCode ?? 0, body: Buffer.concat(chunks) } satisfies FetchReply);
+                    }
                     if (options.bytes) {
                         return resolve(Buffer.concat(chunks));
                     }

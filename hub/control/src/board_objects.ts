@@ -143,9 +143,11 @@ export interface ProgramRecord {
     licence: { id: string; url?: string };
     credit: { author?: string };
     description: { short: string };
-    //  from its manifest: the sites it reads, and the values it sets
+    //  from its manifest: the sites it reads, the values it sets, and the
+    //  credit its data needs wherever it shows (each a text and a link)
     fetch: string[];
     values: string;
+    dataCredit: { text: string; url: string }[];
 }
 
 //  A record, if it is a program the hub can take: keyed by its module's
@@ -172,6 +174,16 @@ export function programRecordOf(rkey: string, value: unknown): ProgramRecord | n
     if (!ValueTypes.includes(manifest.values as string)) {
         return null;
     }
+    const credits = Array.isArray(manifest.credit) ? manifest.credit.slice(0, 3).map(obj) : [];
+    const dataCredit: { text: string; url: string }[] = [];
+    for (const c of credits) {
+        const text = str(c.text, 80);
+        const link = str(c.url, 512);
+        if (!text || !link || !/^https:\/\/[^\s"'<>]+$/.test(link)) {
+            return null;
+        }
+        dataCredit.push({ text, url: link });
+    }
     const licence = obj(v.licence);
     const url = str(licence.url, 512);
     const author = str(obj(v.credit).author, 80);
@@ -188,6 +200,7 @@ export function programRecordOf(rkey: string, value: unknown): ProgramRecord | n
         description: { short: str(obj(v.description).short, 300) ?? name },
         fetch: [...new Set((fetch as string[]).map(h => h.toLowerCase()))],
         values: manifest.values as string,
+        dataCredit,
     };
 }
 
@@ -203,6 +216,7 @@ export interface KeptProgram {
     description: ProgramRecord['description'];
     fetch: string[];
     values: string;
+    dataCredit: ProgramRecord['dataCredit'];
     source: string; //  its source's hash
     bytes: number; //   of both files
 }
@@ -519,6 +533,7 @@ export class BoardObjects {
             description: record.description,
             fetch: record.fetch,
             values: record.values,
+            dataCredit: record.dataCredit,
             source: record.source.sha256,
             bytes: module.length + source.length,
         });

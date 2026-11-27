@@ -38,7 +38,14 @@ function programRecord(module = wasm, src = source, extra: Record<string, unknow
         licence: { id: 'BSD-2-Clause', url: 'https://opensource.org/license/bsd-2-clause' },
         credit: { author: 'Cyberspace Framework' },
         description: { short: 'The current weather for a place' },
-        manifest: { fetch: ['api.open-meteo.com', 'geocoding-api.open-meteo.com'], values: 'weather' },
+        manifest: {
+            fetch: ['api.open-meteo.com', 'geocoding-api.open-meteo.com'],
+            values: 'weather',
+            credit: [
+                { text: 'Weather data by Open-Meteo.com', url: 'https://open-meteo.com/' },
+                { text: 'Place names from GeoNames', url: 'https://www.geonames.org/' },
+            ],
+        },
         versions: [
             {
                 form: 'program',
@@ -108,6 +115,11 @@ describe('object and program records, as the hub reads them', () => {
         assert.equal(p.source.sha256, sha(source));
         assert.deepEqual(p.fetch, ['api.open-meteo.com', 'geocoding-api.open-meteo.com']);
         assert.equal(p.values, 'weather');
+        assert.deepEqual(p.dataCredit[0], { text: 'Weather data by Open-Meteo.com', url: 'https://open-meteo.com/' });
+        //  a credit with no link, or a link that isn't https, is refused
+        const r = programRecord();
+        assert.equal(programRecordOf(Program, { ...r, manifest: { ...r.manifest, credit: [{ text: 'X' }] } }), null);
+        assert.equal(programRecordOf(Program, { ...r, manifest: { ...r.manifest, credit: [{ text: 'X', url: 'javascript:x' }] } }), null);
     });
 
     it("takes no program without its source, keyed by another hash, or with a manifest it can't hold to", () => {

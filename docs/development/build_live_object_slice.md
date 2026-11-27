@@ -162,7 +162,7 @@ record }`.
    objects from linked boards, as models are read (H25), with the same
    care: withdrawn records dropped, a changed record read again, limits
    per owner; blocking.
-4. **Running and showing:** the scheduler (each object at its interval,
+4. **Running and showing** (**done** 2026-11-27, but for the door's line, which moves to stage 5 with the fork: `live_objects.ts`, `object_types.ts`, `object_page.ts`, the map's badges, 7 tests; a program's manifest gains `credit`, the text and link its data needs wherever it shows, so the hub itself names no service; the hub's guarded fetcher can return a reply of any status, which programs need to read a service's errors, still following no redirects): the scheduler (each object at its interval,
    within the limits, stale after three missed), the `object` entity in
    the live model, the badge on the map, a line in the door, and the
    object's page with its source and credit.

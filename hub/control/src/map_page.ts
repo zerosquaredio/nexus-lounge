@@ -30,13 +30,21 @@ export function mapPane(listHtml: string): string {
 .map line.link { stroke: var(--accent); stroke-opacity: .35; stroke-dasharray: 3 4; }
 .map image.emblem { image-rendering: pixelated; }
 .map .place.off image.emblem { opacity: .5; }
+.map .badge rect { fill: var(--bg); stroke: var(--accent); stroke-width: 1; }
+.map .badge text { font-size: 16px; }
+.map .badge.stale rect { stroke: var(--line); stroke-dasharray: 2 2; }
+.map .badge.stale text { fill: var(--dim); }
+.map .badge:hover rect, .map .badge:focus rect { stroke-width: 2; }
+.space-list .objects { margin: -.4rem 0 .6rem; }
+.space-units { margin: .3rem 0; }
 .space-list h3 { margin: .2rem 0; font-size: 1rem; }
 .space-list h3 button { margin: 0 0 0 .5rem; padding: .1rem .6rem; font-size: .85rem; }
 .space-list p { margin: .2rem 0 .6rem; }
 </style>
 <p class="dim"><span id="map-status" role="status">Connecting…</span></p>
 <svg id="map" class="map" viewBox="0 0 800 520" role="img" aria-label="Map of the common space" hidden></svg>
-<div id="space-list" class="space-list" aria-live="polite">${listHtml}</div>`;
+<div id="space-list" class="space-list" aria-live="polite">${listHtml}</div>
+<p class="space-units dim" id="space-units" hidden><label>Temperatures in <select id="units"><option value="c">°C</option><option value="f">°F</option></select></label></p>`;
 }
 
 export const MapHint = `<p class="hint">Only people who chose to be shown appear here. Open a board from this page and, with being
@@ -76,6 +84,49 @@ export const MapScript = String.raw`(function () {
         return e;
     }
     function clip(text, n) { return text.length > n ? text.slice(0, n - 1) + '…' : text; }
+
+    //  Live objects' values, as words and a symbol: the weather type's WMO
+    //  codes, by the lowest code of each kind
+    var Skies = [
+        [0, 'clear', '☀', '☾'], [1, 'mainly clear', '\u{1F324}', '☾'], [2, 'partly cloudy', '⛅', '☁'],
+        [3, 'overcast', '☁', '☁'], [45, 'fog', '\u{1F32B}', '\u{1F32B}'], [51, 'drizzle', '\u{1F326}', '\u{1F327}'],
+        [61, 'rain', '\u{1F327}', '\u{1F327}'], [71, 'snow', '❄', '❄'], [80, 'showers', '\u{1F326}', '\u{1F327}'],
+        [85, 'snow showers', '\u{1F328}', '\u{1F328}'], [95, 'thunderstorm', '⛈', '⛈']
+    ];
+    function sky(v) {
+        if ('number' !== typeof v.code) { return null; }
+        var found = null;
+        Skies.forEach(function (s) { if (v.code >= s[0]) { found = s; } });
+        return found && { words: found[1], symbol: false === v.isDay ? found[3] : found[2] };
+    }
+    var units = 'c';
+    try { units = 'f' === localStorage.getItem('hub-units') ? 'f' : 'c'; } catch (e) { /* none kept */ }
+    function temperature(v, rounded) {
+        if ('number' !== typeof v.temperature) { return ''; }
+        var t = 'f' === units ? v.temperature * 9 / 5 + 32 : v.temperature;
+        return (rounded ? Math.round(t) : Math.round(t * 10) / 10) + ('f' === units ? '°F' : '°C');
+    }
+    //  An object's values as a sentence, for its badge's title and the list
+    function describe(o) {
+        var v = o.values || {}, parts = [];
+        if ('weather' === o.kind) {
+            var s = sky(v);
+            if (s) { parts.push(s.words); }
+            if (temperature(v)) { parts.push(temperature(v)); }
+        }
+        var text = o.title + (parts.length ? ': ' + parts.join(', ') : ': no reading yet');
+        if (o.stale && o.updatedAt) { text += ' (not updated since ' + new Date(o.updatedAt).toLocaleString() + ')'; }
+        var credit = (o.look && o.look.credit || []).map(function (c) { return c.text; }).join('; ');
+        return credit ? text + '. ' + credit : text;
+    }
+    function badgeText(o) {
+        var v = o.values || {};
+        if ('weather' !== o.kind) { return clip(o.title, 8); }
+        var s = sky(v);
+        return ((s ? s.symbol + ' ' : '') + temperature(v, true)) || '…';
+    }
+    //  an object's page, only one on this hub
+    function pageOf(o) { return /^\/objects\/[a-z0-9-]+\/[A-Za-z0-9._:~%-]+$/.test(o.page) ? o.page : null; }
 
     //  What this page has open, told to the hub
     function tell() {
@@ -127,6 +178,7 @@ export const MapScript = String.raw`(function () {
             if ('room' === e.type) { rooms.push(e); }
             if ('leaf' === e.type) { leaves.push(e); }
         });
+        byId('space-units').hidden = !objectsOf(null).length;
         leaves.sort(function (a, b) { return a.name < b.name ? -1 : a.name > b.name ? 1 : 0; });
         return { rooms: rooms, leaves: leaves };
     }
@@ -137,6 +189,15 @@ export const MapScript = String.raw`(function () {
             if (p.place === placeId && person) { out.push(person); }
         });
         out.sort(function (a, b) { return (b.id === you) - (a.id === you) || (a.label < b.label ? -1 : 1); });
+        return out;
+    }
+    //  the live objects of a place (all of them, for null)
+    function objectsOf(placeId) {
+        var out = [];
+        state.entities.forEach(function (e) {
+            if ('object' === e.type && (null === placeId || e.owner === placeId)) { out.push(e); }
+        });
+        out.sort(function (a, b) { return a.id < b.id ? -1 : 1; });
         return out;
     }
     function nameOf(place) { return 'leaf' === place.type ? place.title || place.name : place.name; }
@@ -227,6 +288,21 @@ export const MapScript = String.raw`(function () {
                 names.appendChild(el('text', { x: c.x, y: c.y + (room ? 72 : 52) + MaxNames * 15, 'text-anchor': 'middle' }, '+' + (people.length - MaxNames) + ' more'));
             }
             g.appendChild(names);
+            //  its live objects: a badge each, along the top of its box
+            objectsOf(place.id).slice(0, 3).forEach(function (o, i) {
+                var page = pageOf(o), bw = 76, bx = c.x + half - bw - i * (bw + 4), by = c.y - 20 - 32;
+                var badge = el(page ? 'a' : 'g', { class: 'badge' + (o.stale ? ' stale' : '') });
+                if (page) {
+                    badge.setAttribute('href', page);
+                    badge.setAttribute('aria-label', describe(o));
+                    badge.addEventListener('click', function (e) { e.stopPropagation(); });
+                    badge.addEventListener('keydown', function (e) { e.stopPropagation(); });
+                }
+                badge.appendChild(el('title', {}, describe(o)));
+                badge.appendChild(el('rect', { x: bx, y: by, width: bw, height: 28, rx: 14 }));
+                badge.appendChild(el('text', { x: bx + bw / 2, y: by + 20, 'text-anchor': 'middle' }, badgeText(o)));
+                g.appendChild(badge);
+            });
             if (canOpen(place)) {
                 g.setAttribute('tabindex', '0');
                 g.setAttribute('role', 'button');
@@ -277,8 +353,26 @@ export const MapScript = String.raw`(function () {
                 line.appendChild(b);
             });
             list.appendChild(line);
+            var objects = objectsOf(place.id);
+            if (objects.length) {
+                var ol = html('p', '', 'objects');
+                objects.forEach(function (o, i) {
+                    if (i) { ol.appendChild(document.createTextNode(' · ')); }
+                    var page = pageOf(o);
+                    var a = html(page ? 'a' : 'span', describe(o), o.stale ? 'dim' : '');
+                    if (page) { a.href = page; }
+                    ol.appendChild(a);
+                });
+                list.appendChild(ol);
+            }
         });
     }
+    byId('units').value = units;
+    byId('units').addEventListener('change', function (e) {
+        units = 'f' === e.target.value ? 'f' : 'c';
+        try { localStorage.setItem('hub-units', units); } catch (err) { /* kept for this page only */ }
+        if (state) { draw(); }
+    });
 
     function connect() {
         retryTimer = null;

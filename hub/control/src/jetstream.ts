@@ -49,6 +49,9 @@ export function streamUrl(directory: Directory, cursor: string | null): string |
     url.searchParams.append('wantedCollections', names.listing);
     url.searchParams.append('wantedCollections', names.status);
     url.searchParams.append('wantedCollections', names.asset);
+    if (directory.config.compute.enabled) {
+        url.searchParams.append('wantedCollections', names.object);
+    }
     if ('hub' === directory.config.directory.scope) {
         const dids = directory.registry
             .list()
@@ -70,11 +73,12 @@ export function streamUrl(directory: Directory, cursor: string | null): string |
     return url.toString();
 }
 
-//  The account whose art an event changes, if it is one
+//  The account whose art, or live objects, an event changes, if it is one
 export function assetChange(directory: Directory, event: JetstreamEvent): string | null {
+    const names = collections(directory.config);
     return 'commit' === event.kind &&
         'string' === typeof event.did &&
-        collections(directory.config).asset === event.commit?.collection
+        (names.asset === event.commit?.collection || names.object === event.commit?.collection)
         ? event.did
         : null;
 }
