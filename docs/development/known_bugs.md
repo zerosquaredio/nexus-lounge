@@ -6,6 +6,28 @@ around them, and where the fix belongs. When one is fixed, move it to
 
 ## Open
 
+### The hub's cleaned ANSI doubles full-width rows in a BBS terminal
+
+*Found 2026-11-27, making the fork's connect screen.* Where the fix
+belongs: **the hub** (`hub/control/src/ansi.ts`, and the chat's drawing).
+
+**What happens.** The hub writes the ANSI it cleans (`writeAnsi`) with a
+line break after every row. A BBS terminal wraps as the 80th column
+fills, so after a full 80-column row the break moves down a second time:
+the art comes out double-spaced, and its top scrolls away. ANSI art
+leaves the break out after a full row. Nothing breaks today, since only
+browsers use what the hub writes (the gallery's pictures, the chat), and
+the chat's drawing relies on the breaks. It shows if someone downloads a
+full-width piece from the gallery (**ANSI**) and opens it in a BBS
+terminal or an ANSI viewer.
+
+**Fix.** Leave out the break after a row as wide as the art, and change
+together what reads it: the chat's drawing (wrap at the art's width, as
+the hub's own parser already does), and the clean-ANSI check (count a
+wrapped row as a row, not as one line over the column limit). The fork's
+connect screen had the same fault and was fixed in the art itself
+(`7386f046`).
+
 ### In Chrome, typing stops working after using enig-term's "Open this link?" dialog
 
 *Found 2026-11-25 (first as "the main menu is slow", then as "no keys after
