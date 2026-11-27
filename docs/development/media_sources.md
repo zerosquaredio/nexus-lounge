@@ -28,6 +28,17 @@ scheme**, a **style** or genre (synthwave's grid and sun), an **idea**.
 The first synthwave screen took its palette from a Pixabay image and
 drew everything itself.
 
+**AI-generated images** (decided 2026-11-27): treated as free to use,
+since in the US a purely AI-generated image gets no copyright, which
+needs a human author. With three cautions: the creator's word is what
+says it is AI-generated (any hand-editing would be theirs); the site's
+own terms still bind whoever downloads it (Pixabay's grant no right to
+relicense, a small risk we accept); and an AI image can resemble
+someone's work or a real person, so look first. Credit the source all
+the same. Our own changes to one (drawn parts, hand finishing) are ours,
+and released under CC BY with the rest. The first: the main menu's
+figure, from BrianPenny's image on Pixabay (7499159).
+
 Never, whatever the licence: **logos and trademarks** (the Khronos and
 Cesium logos inside some sample models, NASA's insignia), and **people's
 faces** without a model release.
