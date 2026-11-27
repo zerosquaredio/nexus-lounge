@@ -1,0 +1,13 @@
+{
+    "name": "cyberspace-program-weather",
+    "version": "0.1.0",
+    "description": "The weather for a place, from Open-Meteo: a live object program for the Cyberspace Framework hub",
+    "private": true,
+    "license": "BSD-2-Clause",
+    "scripts": {
+        "build": "asc weather.ts -O3 --runtime stub --use abort= --maximumMemory 16 --exportStart _initialize -o weather.wasm"
+    },
+    "devDependencies": {
+        "assemblyscript": "0.28.20"
+    }
+}

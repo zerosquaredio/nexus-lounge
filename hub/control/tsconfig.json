@@ -14,5 +14,7 @@
         "noUncheckedIndexedAccess": true,
         "skipLibCheck": true
     },
-    "include": ["src", "test"]
+    "include": ["src", "test"],
+    //  programs kept as fixtures are AssemblyScript, not TypeScript
+    "exclude": ["test/fixtures"]
 }

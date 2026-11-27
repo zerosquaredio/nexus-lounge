@@ -44,7 +44,7 @@ code, so each hub's admin sets their own.
 | 3 | **The program's language** | **AssemblyScript** (TypeScript-like, Apache 2.0), pinned, as a development dependency for building the framework's own programs, never in the hub at run time. Any language that compiles to WebAssembly works for others' programs |
 | 4 | **Who may have objects** (the owner's decision: anyone registered with the hub, within configured limits) | `compute.owners`: `registered` (people and BBSes registered with the hub) or a list. In this slice only **boards** publish objects, as only the fork has a publishing tool; the hub reads people's records the same way once they have one |
 | 5 | **Whose programs the hub runs** | Only **vetted programs, by hash** (`compute.programs`), at first only the framework's weather program. Anyone may still make an object from it; running others' programs waits for the runtime to have been tried and reviewed |
-| 6 | **Limits** | Defaults, each a setting in the hub's config (§3): `compute.perOwner.objects`: 3. `compute.minInterval`: 600 s (an object may ask for slower, never faster). Per step: 50 million fuel, 1 MB of memory (16 pages), 2 s, a 64 KB reply per fetch, 2 fetches. `compute.maxObjects`: 50 in all, under Open-Meteo's 10,000 calls a day (decision 9) |
+| 6 | **Limits** | Defaults, each a setting in the hub's config (§3): `compute.perOwner.objects`: 3. `compute.minInterval`: 600 s (an object may ask for slower, never faster). Per step: 50 million fuel, 1 MB of memory (16 pages), 2 s, a 16 KB reply per fetch (*lowered from 64 KB in stage 2*: Open-Meteo's replies are about 600 bytes, and a program's memory, never freed, must hold the reply several times over), 2 fetches. `compute.maxObjects`: 50 in all, under Open-Meteo's 10,000 calls a day (decision 9) |
 | 7 | **The whitelist** | `compute.fetch`: `api.open-meteo.com` and `geocoding-api.open-meteo.com`, https only, through the hub's existing guarded fetcher (`net.ts`: public addresses only, checked as it connects). The program's manifest must name each site too |
 | 8 | **The badge** | A weather symbol (from the WMO code) and the temperature, °C or °F as each viewer chooses, in the owner's area of the map (a board's box; a person's objects beside them, while they are shown). Its object page credits "Weather data by Open-Meteo.com" with the link, as their licence asks, and GeoNames for a place found by name. Greyed, with "not updated since …", when stale |
 | 9 | **Open-Meteo's terms** | Their free service is for non-commercial use, which the hub is; the data is CC BY 4.0, credited with a link next to it wherever it shows (the badge's page, and its title on the map); 10,000 calls a day from one address, which `compute.maxObjects` keeps under (50 objects at ten minutes is 7,200). The privacy notice gains a line before it's on: the hub sends the places in object records to the services their programs use, and Open-Meteo keeps coordinates in its logs for 90 days |
@@ -60,7 +60,7 @@ source, and the manifest (compute §2.2) in the record:
 {
   "name": "Weather (Open-Meteo)",
   "kind": "program",
-  "licence": { "id": "MIT", "url": "https://opensource.org/license/mit" },
+  "licence": { "id": "BSD-2-Clause", "url": "https://opensource.org/license/bsd-2-clause" },
   "credit": { "author": "Cyberspace Framework" },
   "description": { "short": "The current weather for a place, from Open-Meteo" },
   "manifest": {
@@ -155,7 +155,7 @@ record }`.
    interface. Tests with hostile modules: endless loops, huge memory,
    forbidden imports, a `start` function, malformed bytes, a fetch
    outside the whitelist, values outside the type.
-2. **The weather program** (`programs/weather/`, AssemblyScript): built
+2. **The weather program** (**done** 2026-11-27: `programs/weather/`, AssemblyScript, 20 KB; 8 tests run it against Open-Meteo's real replies and the worst replies a 16 KB limit allows, none making it trap; two builds from a clean copy gave the same hash): built
    reproducibly, its hash recorded; tested against the fixtures, with no
    network.
 3. **Records and the hub's reading** (`board_objects.ts`): programs and

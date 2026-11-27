@@ -105,6 +105,8 @@ export function runStep(
         const worker = new Worker(WorkerFile, {
             workerData: job,
             env: {},
+            //  none of the hub's own Node flags (an inspector, say)
+            execArgv: [],
             stdout: true,
             stderr: true,
             resourceLimits: { maxOldGenerationSizeMb: 64, maxYoungGenerationSizeMb: 16, stackSizeMb: 4 },
