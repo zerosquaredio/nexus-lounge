@@ -99,6 +99,31 @@ on a desktop PC, **Load 3D** pressed.
   the effects trial:* count a transmissive mesh's triangles twice against
   the budget, or limit how many effects a model uses.
 
+### On a phone, larger models on mobile data (2026-11-27)
+
+Four freely licensed Khronos samples published by test2, each opened for
+the first time on an iPhone 15 Pro Max on mobile data (5G, no Wi-Fi):
+
+| Model | File | Triangles drawn | Loaded in | Frames a second |
+|---|---|---|---|---|
+| Fox (animated) | 160 kB | 576 | 589 ms | 60 |
+| Traffic cone | 1.9 MB | 17,224 | 1,751 ms | 60 |
+| Velvet sofa (sheen) | 3.1 MB | 4,196 | 2,872 ms | (not turned) |
+| Glass vases (transmission) | 1.8 MB | 21,672 | 6,799 ms | 60 |
+
+- **Downloading** ran at about 1 MB a second on 5G: an 8 MB model would
+  take some 8 seconds on this connection, 4 MB about 4. On 4G or a weak
+  signal it will be slower: worth trying once on 4G (or LTE) too.
+- **Drawing** is not where this phone struggles: 60 frames a second
+  (Safari's cap) for all, the glass included.
+- **Transmission costs at load, not while drawing:** the glass vases took
+  about 5 seconds longer than the cone, a file of the same size; that is
+  the phone preparing the glass effect's shaders. *For the effects
+  trial:* count transmission against the budget by the time it adds to
+  loading, or tell people before they press Load 3D.
+- Still to try: a mid-range or old phone, which is where the budget
+  will bind.
+
 ### On a phone (2026-11-27)
 
 test2's animated test model (192 triangles, 11 kB) on the public hub,

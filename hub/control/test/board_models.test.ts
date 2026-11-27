@@ -533,6 +533,13 @@ describe("a model's pages", () => {
         assert.equal((await fetch(`${origin}/art/nothing`)).status, 404);
     });
 
+    it('warns that a model with glass takes longer to get ready', () => {
+        const item = models.items()[0]!;
+        assert.doesNotMatch(modelPageBody(item, 'Cool BBS', false), /glass/);
+        const glass = { ...item, model: { ...item.model, effects: ['KHR_materials_transmission'] } };
+        assert.match(modelPageBody(glass, 'Cool BBS', false), /It has glass, which can take a phone a few seconds more/);
+    });
+
     it('shows the description only in a view set to text, with no script and no viewer', () => {
         const body = modelPageBody(models.items()[0]!, 'Cool BBS', true);
         assert.match(body, /Two boxes and a ball/);

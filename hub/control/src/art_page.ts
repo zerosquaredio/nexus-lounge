@@ -116,7 +116,12 @@ ${item.description.long ? `<p class="pre">${esc(item.description.long)}</p>` : '
     }" alt="${esc(item.description.short)}">
 <p id="model-ask"><button type="button" id="model-load" hidden>Load 3D</button> <span class="dim">(${esc(
         kilobytes(item.model.bytes)
-    )}, fetched only when you press it)</span></p>
+    )}, fetched only when you press it${
+        //  glass takes a phone some seconds to prepare (trials.md §2)
+        item.model.effects.includes('KHR_materials_transmission')
+            ? '. It has glass, which can take a phone a few seconds more to get ready'
+            : ''
+    })</span></p>
 <div id="model-viewer" data-model="${esc(item.model.url)}" data-label="${esc(item.name)}"></div>
 <p id="model-stats" class="dim"></p>
 <noscript><p class="dim">Turning the model needs scripts; the picture stands for it.</p></noscript>
