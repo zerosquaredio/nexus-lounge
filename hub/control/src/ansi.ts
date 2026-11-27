@@ -372,7 +372,12 @@ export function writeAnsi(grid: Grid, sauce: Partial<Sauce> = {}): Buffer {
             }
             bytes.push(cell.ch);
         }
-        parts.push(Buffer.from(bytes), Buffer.from('\x1b[0m\r\n', 'latin1'));
+        //  A row as wide as the art (80 columns or more) wraps by itself: a
+        //  terminal moves to the next line as its last column fills, so a
+        //  line break after it would move down a second time. Shorter rows
+        //  end with one, as ANSI art does.
+        const wraps = r.length === width && width >= 80;
+        parts.push(Buffer.from(bytes), Buffer.from(wraps ? '\x1b[0m' : '\x1b[0m\r\n', 'latin1'));
     }
     const art = Buffer.concat(parts);
 
@@ -413,7 +418,8 @@ const CleanSgr = new Set([
 
 //  Whether a file is clean ANSI (assets spec §2): before its end-of-file
 //  mark, nothing but characters, colour codes from the set above, and line
-//  ends, in lines of at most MaxAnsiColumns characters and MaxAnsiRows lines;
+//  ends, in at most MaxAnsiRows rows, a line longer than MaxAnsiColumns
+//  counting as the rows it wraps to (full-width rows carry no line break);
 //  after it, at most SAUCE's comments and record. This is the rule itself,
 //  not "what our writer would write", so art cleaned by any tool, or by any
 //  version of the baker, passes. (The hub's check, assets spec §6.2.)
@@ -443,8 +449,14 @@ export function isCleanAnsi(file: Uint8Array): boolean {
             }
         } else if (0x0d === c) {
             column = 0;
-        } else if (c < 0x20 || 0x7f === c || ++column > MaxAnsiColumns) {
+        } else if (c < 0x20 || 0x7f === c) {
             return false;
+        } else if (++column > MaxAnsiColumns) {
+            //  wrapped to the next row
+            column = 1;
+            if (++rows > MaxAnsiRows) {
+                return false;
+            }
         }
     }
     if (eof < 0) {

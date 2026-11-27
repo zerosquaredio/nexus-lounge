@@ -41,8 +41,8 @@ wrong guess is found before more is built on it.
 | 2 | The `light` budget on a desktop | As above | **Tried 2026-11-26 (results below)** | Claude |
 | 2 | The 8 MB file cap | 8 MB | How long does a phone on mobile data take to fetch it? Would 4 MB do? | A person |
 | 2 | How the viewer handles | Turn, zoom, a button for each animation, a fixed light | Does it feel right? Anything missing that every model needs? | A person |
-| 3 | Models from each board, and in all | 5; 200 MB | The hub's disk and memory with a few boards publishing | Claude |
-| 3 | Stripping textures' metadata without re-encoding | PNG and JPEG, metadata blocks removed | Feed it pictures with location data and with data hidden after the image's end: what survives? | Claude |
+| 3 | Models from each board, and in all | 5; 200 MB | The hub's disk and memory with a few boards publishing. **Tried 2026-11-27, below** | Claude |
+| 3 | Stripping textures' metadata without re-encoding | PNG and JPEG, metadata blocks removed | Feed it pictures with location data and with data hidden after the image's end: what survives? **Tried 2026-11-27: nothing, below** | Claude |
 
 ### What the first trial showed (2026-11-26)
 
@@ -98,6 +98,23 @@ on a desktop PC, **Load 3D** pressed.
   the iridescent Suzanne 19,680 for 11,808), and more draw calls. *For
   the effects trial:* count a transmissive mesh's triangles twice against
   the budget, or limit how many effects a model uses.
+
+### Stage 3 trials (2026-11-27)
+
+- **Textures' metadata.** A JPEG with EXIF (a camera maker and a GPS
+  position), an XMP block, a comment and data after its end, and a PNG
+  with tEXt, iTXt and zTXt chunks, an eXIf chunk and data after its end,
+  each put inside a model and through the checker: both taken, and none
+  of it in the model the hub would serve; the same for a PNG as a model's
+  preview. A valid colour profile is kept on purpose (it changes how the
+  colours look); it can name the device that made it, nothing more.
+  *Settled for now:* the cleaning does what decision 5 asks.
+- **Disk and memory.** The public hub with five models (test2's: the test
+  model and four Khronos samples up to 3.1 MB): 7 MB on disk, 10 files (a
+  model and a preview each); the hub process at 146 MB of memory after
+  three hours, on a server of 3.8 GB, models being served from disk and
+  never held. At the 200 MB limit for all models, under 1% of the
+  server's 25 GB free. *The limits stand;* they can grow with the server.
 
 ### On a phone, larger models on mobile data (2026-11-27)
 

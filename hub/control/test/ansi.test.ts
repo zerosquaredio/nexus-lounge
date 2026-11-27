@@ -15,6 +15,7 @@ import {
     writeAnsi,
 } from '../src/ansi.ts';
 import { readPsf, renderPng, renderThumb } from '../src/ansi_image.ts';
+import { ChatScript } from '../src/chat_page.ts';
 import { AssetLibrary } from '../src/assets.ts';
 import { bake, type BakeOptions, type Library } from '../src/bake.ts';
 import { testFont as makeFont } from './helpers.ts';
@@ -128,11 +129,75 @@ describe('ANSI art', () => {
             '\x1b[38;5;196m',
             '\x1b[6n',
             'a bell\x07',
-            'x'.repeat(161),
         ]) {
             assert.equal(isCleanAnsi(bytes(bad)), false, JSON.stringify(bad));
         }
         assert.equal(isCleanAnsi(Buffer.concat([bytes('Hi'), Buffer.from([0x1a]), bytes('junk')])), false);
+    });
+
+    it('counts a line past the column limit as the rows it wraps to, not as unclean', () => {
+        assert.equal(isCleanAnsi(bytes('x'.repeat(161))), true);
+        //  and those rows count towards the limit of rows
+        assert.equal(isCleanAnsi(bytes('\r\n'.repeat(999) + 'x'.repeat(160))), true);
+        assert.equal(isCleanAnsi(bytes('\r\n'.repeat(999) + 'x'.repeat(161))), false);
+    });
+
+    it('writes full-width rows without a line break, as BBS terminals wrap them', () => {
+        //  an 80-column piece: two full rows, a short one, and a full last one
+        const full = (ch: string) => ch.repeat(80);
+        const art = bytes(`${full('A')}${full('B')}short\r\n${full('C')}`);
+        const grid = parseAnsi(art, { width: 80 });
+        const once = writeAnsi(grid);
+        const body = once.subarray(0, once.indexOf(0x1a)).toString('latin1');
+        //  a break after the short row only
+        assert.equal(body.split('\r\n').length - 1, 1);
+        assert.match(body, /short\x1b\[0m\r\n/);
+        assert.equal(isCleanAnsi(once), true);
+        assert.equal(readSauce(once).sauce?.width, 80);
+        //  read back, it is the same picture, row for row
+        const again = parseAnsi(readSauce(once).body, { width: 80 });
+        assert.deepEqual(again.rows, grid.rows);
+        //  narrower art keeps a break after every row: a terminal wouldn't wrap it
+        const narrow = writeAnsi(parseAnsi(bytes('abc\r\nde'), { width: 80 }));
+        assert.equal(narrow.subarray(0, narrow.indexOf(0x1a)).toString('latin1').split('\r\n').length - 1, 2);
+    });
+
+    it("draws in the chat as a terminal would: wrapping at the art's width, once", () => {
+        //  the chat's own drawing code, run with a stand-in for the page
+        const script = ChatScript;
+        const from = script.indexOf('    function sauceWidth(');
+        const to = script.indexOf('    function fillArt(');
+        assert.ok(from > 0 && to > from);
+        type Node = { text?: string; className?: string; children: Node[] };
+        const make = (): Node & Record<string, unknown> => {
+            const node: Node & Record<string, unknown> = { children: [] };
+            node.appendChild = (child: Node) => node.children.push(child);
+            node.setAttribute = () => {};
+            Object.defineProperty(node, 'textContent', { set: (t: string) => (node.text = t) });
+            return node;
+        };
+        const document = { createElement: make, createTextNode: (t: string) => ({ text: t, children: [] }) };
+        const CP437 = Array.from({ length: 256 }, (_, i) => String.fromCharCode(i));
+        const draw = new Function('document', 'CP437', `${script.slice(from, to)}; return drawAnsi;`)(
+            document,
+            CP437
+        ) as (bytes: Uint8Array, label: string) => Node;
+        const lines = (file: Buffer) =>
+            draw(new Uint8Array(file), 'x')
+                .children.map(n => n.text)
+                .join('')
+                .split('\n');
+        //  what the hub writes now: full rows with no breaks, wrapped at 80
+        const now = writeAnsi(parseAnsi(bytes('A'.repeat(80) + 'B'.repeat(80) + 'end'), { width: 80 }));
+        //  (the short last row ends with a break, as short rows do)
+        assert.deepEqual(lines(now), ['A'.repeat(80), 'B'.repeat(80), 'end', '']);
+        //  what it wrote before: a break straight after each full row, still one line each
+        const before = bytes(`${'A'.repeat(80)}\r\n${'B'.repeat(80)}\r\nend\r\n`);
+        assert.deepEqual(lines(before), ['A'.repeat(80), 'B'.repeat(80), 'end', '']);
+        //  a SAUCE width other than 80 is the one wrapped at
+        const forty = writeAnsi(parseAnsi(bytes('x'.repeat(100)), { width: 40 }));
+        assert.equal(readSauce(forty).sauce?.width, 40);
+        assert.deepEqual(lines(forty).slice(0, 3), ['x'.repeat(40), 'x'.repeat(40), 'x'.repeat(20)]);
     });
 
     it('has a size limit', () => {

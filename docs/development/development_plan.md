@@ -769,10 +769,17 @@ in.
   (CC BY 4.0, Nexus Lounge), shown on any theme without one and offered
   as the splash ahead of the stock matrix: on the stock theme, yes by
   default is now safe. Live on test2's image (which names its own logo in
-  its menu, so it still shows that). Still to do: a main menu (its art
-  holds the menu's options, so it needs its own layout), and more screens
-  as the theme grows; drafts and their sources in `art-drafts/` (not in
-  git) and [media_sources.md](media_sources.md).
+  its menu, so it still shows that). **A main menu** (2026-11-27, fork
+  `c3cc485b`): `art/general/CYBMENU.ANS`, the options in two columns
+  beside a woman in a glowing VR headset (converted from an AI-generated
+  image on Pixabay, credited; see [media_sources.md](media_sources.md)),
+  with the board's name, a rumour and the node number as the stock menu
+  has them; `config hub` names it as a hub board's main menu art
+  (`--stock-menu` keeps the stock one), and the hub hint under it reads
+  "HS who's on  HP show me  AT Bluesky", its commands in yellow. Live on
+  the test board, seen there by the owner. Still to do: more screens as
+  the theme grows (the login screen, the message area), each needing its
+  own layout; drafts and their sources in `art-drafts/` (not in git).
 - **The login screen itself, by default.** The fork takes the art its login
   menu shows, from whatever theme the board uses, so nobody has to choose.
   Files are named by their content, so a new theme or new art is offered

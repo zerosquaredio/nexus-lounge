@@ -202,12 +202,26 @@ export const ChatScript = String.raw`(function () {
     }
     //  The hub's cleaned ANSI holds nothing but characters, colours (SGR) and
     //  line ends (ansi.ts), so this is all it takes to draw it
+    //  The art's width from its SAUCE record, if it has one (character art
+    //  keeps it in TInfo1), else 80
+    function sauceWidth(bytes) {
+        var at = bytes.length - 128;
+        if (at < 0 || 'SAUCE00' !== String.fromCharCode.apply(null, bytes.subarray(at, at + 7))) {
+            return 80;
+        }
+        var width = bytes[at + 96] + 256 * bytes[at + 97];
+        return 1 === bytes[at + 94] && width > 0 && width <= 160 ? width : 80;
+    }
     function drawAnsi(bytes, label) {
         var pre = document.createElement('pre');
         pre.className = 'ansi';
         pre.setAttribute('role', 'img');
         pre.setAttribute('aria-label', label);
         var fg = 7, bg = 0, bold = false, blink = false, run = '';
+        //  rows as wide as the art wrap, as on a terminal: when the next
+        //  character comes, so a line break straight after one still makes
+        //  a single line
+        var width = sauceWidth(bytes), column = 0;
         function flush() {
             if (!run) { return; }
             var span = document.createElement('span');
@@ -237,8 +251,17 @@ export const ChatScript = String.raw`(function () {
             } else if (0x0a === c) {
                 flush();
                 pre.appendChild(document.createTextNode('\n'));
-            } else if (0x0d !== c) {
+                column = 0;
+            } else if (0x0d === c) {
+                column = 0;
+            } else {
+                if (column >= width) {
+                    flush();
+                    pre.appendChild(document.createTextNode('\n'));
+                    column = 0;
+                }
                 run += c ? CP437[c] : ' ';
+                column++;
             }
         }
         flush();
