@@ -21,7 +21,7 @@ by one) or **a person** (how it looks and feels, on real devices).
 | Art from each board | 50 pieces, 64 KB each | `assets.boardPieces`; `ansi.ts` | A board with a real gallery: enough? | A person (a sysop) |
 | How fast moderation takes effect | A block in 30 seconds; a refused account's splash in a minute, its pieces within the hour | `main.ts`, `board_art.ts` | Block something for real: fast enough? | A person |
 | Each board's bandwidth | 1 MB a second each way | `tunnel.bandwidthLimit` | Usage totals (`hubctl usage`) once boards serve art | Claude, from usage |
-| The main menu's hint line | "HS around  HP be shown  AT Bluesky", prompt row 1, column 37 | The fork's `main.in.hjson` | Readable? Right on your own theme? | A person |
+| The main menu's hint line | "HS who's on  HP show me  AT Bluesky", prompt row 1, column 36. **2026-11-27:** the first wording ("HS around  HP be shown") puzzled; this one was chosen instead | The fork's `main.in.hjson` | Readable? Right on your own theme? | A person |
 | Withdrawn art deleted | At the next reading (seconds by the stream, an hour at worst) | `board_art.ts` | Delete a published piece: how long until it's gone from `/art`? | Claude |
 
 ## 2. The first 3D slice

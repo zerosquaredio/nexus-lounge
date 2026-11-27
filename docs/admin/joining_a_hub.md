@@ -356,7 +356,7 @@ board). By hand:
     chat room.
 
   The stock main menu art doesn't name them, so the main menu's prompt
-  gains a hint line, "HS around  HP be shown  AT Bluesky", placed over the
+  gains a hint line, "HS who's on  HP show me  AT Bluesky", placed over the
   prompt by configuration (the theme's art is unchanged); `config hub`
   turns it on with the commands, in menu files from the current fork.
 
