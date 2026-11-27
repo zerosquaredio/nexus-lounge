@@ -28,6 +28,7 @@ change:
 | Two cookies: `hub_session`, and `hub_view` for a year, not passed to BBSes | `sessionCookie()` and `viewCookie()` in `control/src/site.ts`; `ViewCookieRe2` in `generate.ts` (the edge takes it out) |
 | BBSes see the common space and speak for members who confirmed them | `/api/bbs/live` and `/api/bbs/chat/*` in `control/src/site.ts` |
 | Pictures: read every few hours, deleted when off, on removal, or unseen a week; none for labelled profiles | `control/src/pictures.ts` |
+| Live objects: record, last readings and working state kept until withdrawn or no longer run; the places they name sent to the services they read, from the hub's address | `control/src/board_objects.ts`, `control/src/live_objects.ts`; `compute.fetch` |
 | Logs kept 3 months | the server's journal (`MaxRetentionSec=3month`) |
 | Backups kept up to 12 months | the backup pull's retention (14 nightly, 12 monthly) |
 | A removed BBS's name held 90 days | `NameHoldDays` in `control/src/registry.ts` |
