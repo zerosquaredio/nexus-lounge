@@ -354,6 +354,23 @@ on the hub" or "Art copied without permission"; `hubctl abuse report ID`
 then shows its hash. Art a BBS withdraws (stops publishing or offering, or
 replaces) is let go of on its own, files and all.
 
+**3D models** BBSes publish are off until you turn them on, and then come
+only from the BBSes in `assets.boardArt`:
+
+```json
+"assets": { "boardArt": ["coolbbs"], "models": { "enabled": true } }
+```
+
+with `maxBytes` (the largest model file, 8 MB), `perBoard` (5) and
+`totalBytes` (200 MB for all of them) beside `enabled` if you want others.
+The hub checks each model and its preview picture, keeps cleaned copies in
+`board-models/` beside the database, lists them in the gallery by their
+picture, and gives each a page (`/art/` and the first 12 digits of its
+hash) where people can turn it and play its animations. `hubctl assets`
+lists models with the rest, and `asset block`, `asset refuse` and reports
+work on them as on art. Keep them off for BBSes other than your own until
+your terms cover them.
+
 ### The record
 
 Bans and unbans, suspensions and resumptions, blocks and unblocks (of

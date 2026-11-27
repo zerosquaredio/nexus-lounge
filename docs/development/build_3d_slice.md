@@ -189,7 +189,15 @@ a model's page, with the policy of §5 and nothing loaded until **Load
 3D**. `hubctl assets` lists models, so `hubctl asset block` takes their
 short hashes.
 
-**Stage 3: end to end.** **H.** a board publishes a model from its own
+**Stage 3: end to end.** **H, done 2026-11-27:** test2 (on the fork's
+`92d96502`) publishes the project's animated test model from its own
+account; a scratch hub took it from the real network and its page played
+both animations in a real browser, and a fresh one found nothing once the
+record was deleted; then the public hub (`0392458`, `assets.models`
+enabled, test2 the only board in `assets.boardArt`) took it, and a block
+by its short hash took the page and file down within seconds and back on
+unblocking. **I, done:** the terms draft names models, with a sixth
+question for the lawyer. As first planned: **H.** a board publishes a model from its own
 account, the hub takes it, the page plays its animation in a real
 browser, a blocked hash disappears, a deleted record withdraws it; first
 on a scratch hub, then test2 on the public hub with a model of our own
