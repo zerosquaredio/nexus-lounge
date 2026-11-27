@@ -46,6 +46,13 @@
 //
 //  Classes for the page to style: model-viewer-status, model-viewer-canvas,
 //  model-viewer-keys (the hidden help line), model-viewer-buttons.
+//
+//  Below the model: a button for each animation and Pause, if it has any,
+//  then Reset view (as Home does) and Full screen. Full screen is the
+//  browser's own where it lets a page have it; where it doesn't (an
+//  iPhone's Safari gives it only to video), the viewer fills the window
+//  instead, over the page, until the button is pressed again or Escape.
+//  Either way the container's data-expanded is "true" while it lasts.
 
 import {
     AnimationMixer,
@@ -87,6 +94,9 @@ const Messages = {
     lost: 'The 3D view stopped: the device took its graphics memory back. Load the page again to see the model.',
     name: '3D model',
     keys: 'Arrow keys turn the model, plus and minus zoom, Home puts it back.',
+    reset: 'Reset view',
+    expand: 'Full screen',
+    shrink: 'Exit full screen',
 };
 
 //  each viewer's line of key help needs an id of its own in the page
@@ -146,7 +156,10 @@ export function createModelViewer(container, url, options = {}) {
     let keysHelp = null;
     let buttonRow = null;
     let pauseButton = null;
+    let expandButton = null;
     let animationButtons = [];
+    //  while filling the screen: how, and the styles it replaced
+    let expanded = null;
     let renderer = null;
     let scene = null;
     let camera = null;
@@ -288,12 +301,142 @@ export function createModelViewer(container, url, options = {}) {
         showButtons();
     }
 
-    function makeButtons() {
-        if (clips.length === 0) {
+    //  the camera back where it started, the whole model in view
+    function resetView() {
+        if (!controls || !home) {
             return;
         }
+        camera.position.copy(home.position);
+        controls.target.copy(home.target);
+        controls.update();
+        needsDraw = true;
+    }
+
+    //  the styles the viewer sets to fill the screen, and on what
+    function fillStyles() {
+        return [
+            [
+                container,
+                {
+                    position: 'fixed',
+                    inset: '0',
+                    zIndex: '2147483647',
+                    margin: '0',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    boxSizing: 'border-box',
+                    padding:
+                        'env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)',
+                    background: view.getComputedStyle(doc.body).backgroundColor || 'Canvas',
+                },
+            ],
+            [
+                canvas,
+                {
+                    flex: '1 1 0',
+                    minHeight: '0',
+                    maxHeight: 'none',
+                    width: '100%',
+                    height: 'auto',
+                    aspectRatio: 'auto',
+                },
+            ],
+            [doc.documentElement, { overflow: 'hidden' }],
+        ];
+    }
+
+    function setStyles(list) {
+        const before = [];
+        for (const [element, styles] of list) {
+            const kept = {};
+            for (const [name, value] of Object.entries(styles)) {
+                kept[name] = element.style[name];
+                element.style[name] = value;
+            }
+            before.push([element, kept]);
+        }
+        return before;
+    }
+
+    //  fill the screen, or stop filling it
+    function expand(on) {
+        if (on === !!expanded || !canvas) {
+            return;
+        }
+        if (on) {
+            expanded = { native: false, before: setStyles(fillStyles()) };
+            container.dataset.expanded = 'true';
+            if (doc.fullscreenEnabled && typeof container.requestFullscreen === 'function') {
+                expanded.native = true;
+                //  refused (no gesture, a policy): it stays filling the window
+                container.requestFullscreen().catch(() => {
+                    if (expanded) {
+                        expanded.native = false;
+                    }
+                });
+            }
+            doc.addEventListener('keydown', onEscape);
+        } else {
+            const was = expanded;
+            expanded = null;
+            setStyles(was.before);
+            delete container.dataset.expanded;
+            doc.removeEventListener('keydown', onEscape);
+            if (was.native && doc.fullscreenElement === container) {
+                doc.exitFullscreen().catch(() => {});
+            }
+        }
+        if (expandButton) {
+            expandButton.textContent = on ? Messages.shrink : Messages.expand;
+            expandButton.setAttribute('aria-pressed', on ? 'true' : 'false');
+        }
+        //  once the new size has taken, the camera placed again for its
+        //  shape: a view framed for a wide box cuts a model off on a tall one
+        view.requestAnimationFrame(() =>
+            view.requestAnimationFrame(() => {
+                if (controls && root) {
+                    fitToPage();
+                    frameModel();
+                }
+            })
+        );
+        needsDraw = true;
+    }
+
+    //  the browser's full screen ended its own way (Escape, a gesture)
+    function onFullscreenChange() {
+        if (expanded && expanded.native && doc.fullscreenElement !== container) {
+            expand(false);
+        }
+    }
+
+    //  Escape ends filling the window, as it ends the browser's full screen
+    function onEscape(event) {
+        if (event.key === 'Escape' && expanded && !expanded.native) {
+            expand(false);
+        }
+    }
+
+    function makeButtons() {
         buttonRow = doc.createElement('div');
         buttonRow.className = 'model-viewer-buttons';
+        const viewButtons = () => {
+            const reset = doc.createElement('button');
+            reset.type = 'button';
+            reset.textContent = Messages.reset;
+            reset.addEventListener('click', resetView);
+            expandButton = doc.createElement('button');
+            expandButton.type = 'button';
+            expandButton.textContent = Messages.expand;
+            expandButton.setAttribute('aria-pressed', 'false');
+            expandButton.addEventListener('click', () => expand(!expanded));
+            buttonRow.append(reset, expandButton);
+        };
+        if (clips.length === 0) {
+            viewButtons();
+            container.append(buttonRow);
+            return;
+        }
         clips.forEach((clip, index) => {
             const button = doc.createElement('button');
             button.type = 'button';
@@ -312,6 +455,7 @@ export function createModelViewer(container, url, options = {}) {
             showButtons();
         });
         buttonRow.append(pauseButton);
+        viewButtons();
         container.append(buttonRow);
     }
 
@@ -345,10 +489,7 @@ export function createModelViewer(container, url, options = {}) {
                 round.radius /= KeyZoom;
                 break;
             case 'Home':
-                camera.position.copy(home.position);
-                controls.target.copy(home.target);
-                controls.update();
-                needsDraw = true;
+                resetView();
                 event.preventDefault();
                 return;
             default:
@@ -411,6 +552,10 @@ export function createModelViewer(container, url, options = {}) {
 
     //  frees everything the viewer holds, leaving only the status line
     function release() {
+        if (expanded) {
+            expand(false);
+        }
+        doc.removeEventListener('fullscreenchange', onFullscreenChange);
         if (abort) {
             abort.abort();
             abort = null;
@@ -463,6 +608,7 @@ export function createModelViewer(container, url, options = {}) {
             buttonRow = null;
         }
         pauseButton = null;
+        expandButton = null;
         animationButtons = [];
         scene = null;
         camera = null;
@@ -621,7 +767,10 @@ export function createModelViewer(container, url, options = {}) {
             clips = gltf.animations || [];
             if (clips.length > 0) {
                 mixer = new AnimationMixer(root);
-                makeButtons();
+            }
+            makeButtons();
+            doc.addEventListener('fullscreenchange', onFullscreenChange);
+            if (clips.length > 0) {
                 const idle = clips.findIndex(clip => clip.name === 'idle');
                 chooseAnimation(idle === -1 ? 0 : idle, !stillness);
             }

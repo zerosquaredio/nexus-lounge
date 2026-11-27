@@ -99,6 +99,20 @@ on a desktop PC, **Load 3D** pressed.
   the effects trial:* count a transmissive mesh's triangles twice against
   the budget, or limit how many effects a model uses.
 
+### On a phone (2026-11-27)
+
+test2's animated test model (192 triangles, 11 kB) on the public hub,
+on an iPhone 15 Pro Max: loaded in 644 ms, 60 frames a second (Safari's
+own cap). Again on mobile data: 167 ms, 59 frames a second, but most
+likely from the browser's cache (model files are kept a day), so not a
+measure of mobile data: that needs a model the phone hasn't fetched, and
+a larger one. Turning, pinching to zoom, the animation buttons and Pause
+all worked as expected. Missing: full screen and a way to put the view
+back, both added after (**Reset view**, and **Full screen**, which fills
+the window where the browser gives full screen only to video, as an
+iPhone's Safari does), to be tried on the phone. The phone has room to spare at this size; the budget trial
+needs models nearer the limits.
+
 ## 3. Later designs (nothing built yet)
 
 | What | Suggested | Spec |
