@@ -31,7 +31,8 @@ export function mapPane(listHtml: string): string {
 .map image.emblem { image-rendering: pixelated; }
 .map .place.off image.emblem { opacity: .5; }
 .map .badge rect { fill: var(--bg); stroke: var(--accent); stroke-width: 1; }
-.map .badge text { font-size: 16px; }
+.map .badge text { font-size: 16px; dominant-baseline: central; }
+.map .badge .symbol { font-size: 32px; }
 .map .badge.stale rect { stroke: var(--line); stroke-dasharray: 2 2; }
 .map .badge.stale text { fill: var(--dim); }
 .map .badge:hover rect, .map .badge:focus rect { stroke-width: 2; }
@@ -119,11 +120,12 @@ export const MapScript = String.raw`(function () {
         var credit = (o.look && o.look.credit || []).map(function (c) { return c.text; }).join('; ');
         return credit ? text + '. ' + credit : text;
     }
-    function badgeText(o) {
+    //  An object's badge: a symbol, twice the size of its text, and the text
+    function badgeParts(o) {
         var v = o.values || {};
-        if ('weather' !== o.kind) { return clip(o.title, 8); }
+        if ('weather' !== o.kind) { return { symbol: '', text: clip(o.title, 8) }; }
         var s = sky(v);
-        return ((s ? s.symbol + ' ' : '') + temperature(v, true)) || '…';
+        return { symbol: s ? s.symbol : '', text: temperature(v, true) || (s ? '' : '…') };
     }
     //  an object's page, only one on this hub
     function pageOf(o) { return /^\/objects\/[a-z0-9-]+\/[A-Za-z0-9._:~%-]+$/.test(o.page) ? o.page : null; }
@@ -290,7 +292,7 @@ export const MapScript = String.raw`(function () {
             g.appendChild(names);
             //  its live objects: a badge each, along the top of its box
             objectsOf(place.id).slice(0, 3).forEach(function (o, i) {
-                var page = pageOf(o), bw = 76, bx = c.x + half - bw - i * (bw + 4), by = c.y - 20 - 32;
+                var page = pageOf(o), bw = 88, bh = 40, bx = c.x + half - bw - i * (bw + 4), by = c.y - 24 - bh;
                 var badge = el(page ? 'a' : 'g', { class: 'badge' + (o.stale ? ' stale' : '') });
                 if (page) {
                     badge.setAttribute('href', page);
@@ -299,8 +301,11 @@ export const MapScript = String.raw`(function () {
                     badge.addEventListener('keydown', function (e) { e.stopPropagation(); });
                 }
                 badge.appendChild(el('title', {}, describe(o)));
-                badge.appendChild(el('rect', { x: bx, y: by, width: bw, height: 28, rx: 14 }));
-                badge.appendChild(el('text', { x: bx + bw / 2, y: by + 20, 'text-anchor': 'middle' }, badgeText(o)));
+                badge.appendChild(el('rect', { x: bx, y: by, width: bw, height: bh, rx: bh / 2 }));
+                var parts = badgeParts(o), label = el('text', { x: bx + bw / 2, y: by + bh / 2, 'text-anchor': 'middle' });
+                if (parts.symbol) { label.appendChild(el('tspan', { class: 'symbol' }, parts.symbol)); }
+                if (parts.text) { label.appendChild(el('tspan', { dx: parts.symbol ? 4 : 0 }, parts.text)); }
+                badge.appendChild(label);
                 g.appendChild(badge);
             });
             if (canOpen(place)) {
