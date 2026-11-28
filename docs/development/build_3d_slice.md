@@ -1,6 +1,6 @@
 # Build Spec: the First 3D Slice
 
-Status: Decisions accepted (2026-11-26); ready to build. The numbers in
+Status: Built (2026-11-27); working on the public hub for test2. The numbers in
 decision 4 are provisional, to be tried and revisited (§9)
 Last updated: 2026-11-26
 

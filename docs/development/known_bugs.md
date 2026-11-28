@@ -82,25 +82,14 @@ that release and this moves to **Fixed**. The issue text as first drafted:
 > Fix that works for us: call `resetCaret()` in the input's `focus()`, after
 > `textarea.focus()`.
 
-### Connecting a board account again doesn't publish its live objects
-
-*Found 2026-11-27, on test2.* Where the fix belongs: **the fork**
-(`core/atproto/publishing.js`).
-
-**What happens.** A board whose account lacked the live object permission
-connects it again from **BA**; its objects stay unpublished until the board
-restarts or the sysop runs `oputil.js atproto objects`.
-
-**Cause.** The objects are published only by the refresh at startup, after
-the board's art. Connecting the account doesn't run that refresh.
-
-**Workaround.** `./oputil.js atproto objects` on the board, as done for
-test2 (1 new).
-
-**Fix.** Publish the objects (and anything the new permissions allow)
-once an account connects.
-
 ## Fixed
+
+### Connecting a board account again didn't publish its live objects
+
+*Found and fixed 2026-11-27*, fork `a73acd0c`: connecting the board account
+now publishes the board's art and then its live objects, after its listing,
+as the startup refresh does. Not yet on test2 (it runs `c9d9df54`); it goes
+with the next board image.
 
 ### The hub's cleaned ANSI doubled full-width rows in a BBS terminal
 
