@@ -882,7 +882,7 @@ are things far cheaper to settle while every board is ours.
    part).
 4. **The operator's list:** a lawyer's review of the terms, the abuse
    address (`contact.abuse`) and an uptime monitor.
-5. **Record names:** final names, or outside boards on the development
+5. **Record names:** being settled in [record_names.md](record_names.md) (drafted 2026-11-27). Final names, or outside boards on the development
    names with a migration later (development plan §6).
 6. ~~**The board account's permission list,**~~ **Done** (2026-11-26, with
    F21): listing, status, posts, the asset records (`asset.item`,
