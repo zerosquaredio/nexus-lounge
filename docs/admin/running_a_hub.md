@@ -371,6 +371,100 @@ lists models with the rest, and `asset block`, `asset refuse` and reports
 work on them as on art. Keep them off for BBSes other than your own until
 your terms cover them.
 
+### Live objects
+
+A **live object** is something a BBS publishes that the hub keeps up to
+date by running a small program, such as the weather in a town. The program
+is a WebAssembly module the BBS publishes with its source. The object names
+the program and gives it its input, such as a place. The hub shows each
+object as a badge by its BBS on the map, as a line in the BBS door's map,
+and on a page of its own (`/objects/<bbs>/<name>`) with its readings, its
+credits, its program and its source. (See the build spec,
+[build_live_object_slice.md](../development/build_live_object_slice.md),
+and [compute.md](../development/compute.md) for the design.)
+
+They are **off** until you turn them on, and then the hub runs only:
+
+- objects from the BBSes you list;
+- programs you have vetted, by the SHA-256 hash of their module;
+- fetches to sites that both the program's manifest and your `fetch` list
+  allow.
+
+```json
+"compute": {
+  "enabled": true,
+  "owners": ["test2"],
+  "programs": ["a37a816ebddd31c0a301c58a8e2531c3097ef0cd4e8468e3bb4f6a2c6530869e"],
+  "fetch": ["api.open-meteo.com", "geocoding-api.open-meteo.com"]
+}
+```
+
+Restart the hub after changing it (`sudo systemctl restart hub-control`).
+`"owners": "registered"` takes objects from every BBS registered here. Keep
+to your own BBSes until the program runner has had an outside security
+review and your terms cover objects.
+
+**The limits.** Each is a default you can change, beside the settings
+above:
+
+| Setting | Default | What it limits |
+|---|---|---|
+| `minInterval` | 600 | The fewest seconds between an object's updates (60 to 86400). |
+| `maxObjects` | 50 | Objects in all (0 to 10000). |
+| `perOwner.objects` | 3 | Objects from one BBS (0 to 1000). |
+| `perStep.fuel` | 50000000 | Instructions in one step of a program, counted as it runs. |
+| `perStep.memoryPages` | 16 | A program's memory, in 64 KB pages (1 MB). |
+| `perStep.ms` | 2000 | The time one step may take, as a backstop to fuel. |
+| `perStep.fetches` | 2 | The fetches one step may ask for (0 to 8). |
+| `perStep.fetchBytes` | 16384 | The largest reply a program is given. |
+
+For example, `"perOwner": { "objects": 5 }` lets each BBS have five.
+
+**Vetting a program.** When an object names a program you haven't listed,
+the hub doesn't fetch it, and logs once an hour:
+
+```
+board objects: test2's Weather in Berlin runs a program the hub hasn't vetted (<hash>)
+```
+
+To vet it:
+
+1. Read its source: the object's page shows it, and the hash.
+2. If you can, build the source and check that it gives the same hash. The
+   weather program's README in [programs/weather/](../../programs/weather/)
+   shows how; the hub doesn't check this itself yet.
+3. Check the sites its manifest reaches and the terms of their services.
+   Open-Meteo, for example, is free for non-commercial use only, and wants
+   its credit shown next to its data.
+4. Add its hash to `programs`, and the sites you allow to `fetch`, then
+   restart.
+
+Before you allow a new site, think about what the hub's address asks it.
+Every object's input goes to the sites its program reaches, from the hub.
+Name the service in the privacy notice (§8) as Open-Meteo is.
+
+**Watching them.** The hub reads objects within half a minute of starting
+and then every hour, and sooner when a BBS publishes a change. Each runs at
+its own interval. An object's page shows its last reading, when it was
+updated, and its last log lines. One that misses three updates in a row is
+shown as **not updated lately**, in grey on the map, keeping its last
+reading. Fetches and refusals show in the hub's log, under `live objects:`
+and `board objects:`. The hub keeps everything under `board-objects/`
+beside the database: programs' files, the objects it took, and each
+object's last state (`running/state.json`).
+
+**Taking one down.** Programs are moderated as art is:
+
+- `hubctl assets` lists them.
+- `hubctl asset block <hash>` on a program's module (or its source) stops
+  every object that runs it, on every BBS.
+- `hubctl asset refuse <did>` takes no objects or programs from that
+  account.
+- To stop one BBS's objects, take its name out of `owners` and restart.
+- To stop them all, set `enabled` to `false` and restart.
+
+Objects a BBS takes off its list are let go of on their own.
+
 ### The record
 
 Bans and unbans, suspensions and resumptions, blocks and unblocks (of
